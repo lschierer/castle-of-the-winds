@@ -8,6 +8,7 @@ import type { CharacterCreatedDetail } from './character-creation.ts';
 // Side-effect imports so Greenwood bundles the custom elements
 import './landing-page.ts';
 import './character-creation.ts';
+import './game-world.ts';
 
 const logger = getLogger('game:ui');
 
@@ -43,7 +44,8 @@ export class GameApp extends LitElement {
 
     /* Full-height hosts for child components */
     landing-page,
-    character-creation {
+    character-creation,
+    game-world {
       width: 100%;
       height: 100%;
     }
@@ -108,9 +110,9 @@ export class GameApp extends LitElement {
         `;
 
       case 'playing':
-        return html`<div class="fade">
-          Welcome, ${phase.character.name}. Your adventure begins… (game world coming soon)
-        </div>`;
+        return html`
+          <game-world .character=${phase.character}></game-world>
+        `;
     }
   }
 }

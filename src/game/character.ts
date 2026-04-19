@@ -176,23 +176,36 @@ export function computeDerived(stats: CharacterStats, difficulty: Difficulty): D
 // ── Other derived values ──────────────────────────────────────────────────────
 
 /**
- * Max hit points.
- * Constitution is the primary driver; Strength contributes a smaller amount.
- * At average (CON=50, STR=50): HP ≈ 40.
+ * Max hit points — matches Stats.elm hpBonus formula.
+ *   HP = 10 + CON÷10 + STR÷20  (integer division)
+ * At average (CON=50, STR=50): HP = 10 + 5 + 2 = 17.
  */
 export function derivedMaxHitPoints(stats: CharacterStats): number {
-  return Math.max(1, 10 + Math.floor(stats.constitution / 2) + Math.floor(stats.strength / 10));
+  return Math.max(1, 10 + Math.floor(stats.constitution / 10) + Math.floor(stats.strength / 20));
 }
 
 /**
- * Max mana.
- * Both Intelligence and Wisdom feed into this, but Wisdom is derived so we
- * use Intelligence directly here; Wisdom will be applied as a multiplier
- * once the spell system is fleshed out.
- * At average (INT=50): mana ≈ 20.
+ * Max mana (spell points) — matches Stats.elm spBonus formula.
+ *   SP = 5 + INT÷10  (integer division)
+ * At average (INT=50): SP = 5 + 5 = 10.
  */
 export function derivedMaxMana(stats: CharacterStats): number {
-  return Math.max(0, Math.floor(stats.intelligence / 2.5));
+  return Math.max(0, 5 + Math.floor(stats.intelligence / 10));
+}
+
+/**
+ * HP gained per level-up — matches Stats.elm incLevel formula.
+ * Each level adds one copy of the hpBonus.
+ */
+export function hpPerLevel(stats: CharacterStats): number {
+  return Math.floor(stats.constitution / 10) + Math.floor(stats.strength / 20);
+}
+
+/**
+ * SP gained per level-up.
+ */
+export function spPerLevel(stats: CharacterStats): number {
+  return Math.floor(stats.intelligence / 10);
 }
 
 // ── Construction ──────────────────────────────────────────────────────────────
