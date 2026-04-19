@@ -1,0 +1,20 @@
+diff --git a/index.js b/index.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..9bc5e50f30da8c872b9078f5466229e57958000e
+--- /dev/null
++++ b/index.js
+@@ -0,0 +1 @@
++// type-only package; this stub satisfies Node.js module resolution
+diff --git a/package.json b/package.json
+index eda8c7302771afb2cf181ea1574fff448ebfb8f0..038bf221df7b0c5d90ef7bdf96d5a50b7a05c05c 100644
+--- a/package.json
++++ b/package.json
+@@ -31,7 +31,7 @@
+             "url": "https://github.com/eps1lon"
+         }
+     ],
+-    "main": "",
++    "main": "index.js",
+     "types": "index.d.ts",
+     "repository": {
+         "type": "git",

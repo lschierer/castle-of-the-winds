@@ -1,6 +1,35 @@
 [tools]
 jq = "latest"
 just = "latest"
-node = "24"
+node = "24.14.1"
+pnpm = "latest"
 watchexec = "latest"
 yq = "latest"
+
+[tasks.dev]
+run = "pnpm run dev"
+description = "Start Greenwood development server with HMR"
+
+[tasks.build]
+run = "pnpm run build"
+description = "Build the game for production"
+
+[tasks.serve]
+run = "pnpm run serve"
+description = "Serve the production build locally"
+
+[tasks.lint]
+run = "pnpm run lint"
+description = "Run ESLint type-checked linting"
+
+[tasks.typecheck]
+run = "pnpm run typecheck"
+description = "Run TypeScript type checking"
+
+[tasks.deploy-dev]
+run = "pnpm --filter dungeons-crawl-game-infrastructure run deploy:dev"
+description = "Deploy to the development EC2 environment via CDK"
+
+[tasks.deploy-prod]
+run = "pnpm --filter dungeons-crawl-game-infrastructure run deploy:prod"
+description = "Deploy to the production EC2 environment via CDK"

@@ -1,0 +1,21 @@
+{
+  "name": "dungeons-crawl-game-infrastructure",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "deploy:dev": "tsc && cdk deploy DungeonsDevStack --require-approval never",
+    "deploy:prod": "tsc && cdk deploy DungeonsProdStack",
+    "diff:dev": "tsc && cdk diff DungeonsDevStack",
+    "diff:prod": "tsc && cdk diff DungeonsProdStack",
+    "destroy:dev": "cdk destroy DungeonsDevStack"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.160.0",
+    "constructs": "^10.3.0"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.160.0",
+    "typescript": "^5.5.0"
+  }
+}

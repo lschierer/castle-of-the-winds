@@ -1,0 +1,15 @@
+# Logging configuration for Dungeons Crawl
+# Valid levels: trace, debug, info, warn, error, silent
+default: warn
+
+# Per-package level overrides. Keys match the name passed to log.getLogger(name).
+# Packages not listed here use the default level above.
+packages:
+  game:combat: warn
+  game:map: warn
+  game:ui: warn
+  game:items: warn
+  game:spells: warn
+  game:character: warn
+  game:persistence: warn
+  server:log: info

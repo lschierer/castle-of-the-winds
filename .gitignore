@@ -1,1 +1,35 @@
 *.sublime-workspace
+
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build artifacts
+build/
+blib/
+dist/
+.greenwood/
+
+# CDK
+cdk.out/
+infrastructure/cdk.out/
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor
+.DS_Store
+.idea/
+*.swp
+*.swo
+
+# TypeScript
+*.tsbuildinfo
+public
