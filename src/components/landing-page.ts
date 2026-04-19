@@ -3,17 +3,13 @@ import { customElement, state } from 'lit/decorators.js';
 import { parse as parseYaml } from 'yaml';
 import type { Character } from '../game/character.ts';
 import { getLogger } from '../game/logging.ts';
+import { saveCharacter } from '../game/save.ts';
 
 const logger = getLogger('game:ui');
 
-export interface LoadGameDetail {
-  character: Character;
-}
-
 /**
- * Landing page — shown on first load. Dispatches:
- *   - `new-game`  (no detail)
- *   - `load-game` (detail: LoadGameDetail) — after the user picks a save file
+ * Landing page — entry point shown at '/'.
+ * Navigates to /create for new games, or loads a save file and navigates to /game.
  */
 @customElement('landing-page')
 export class LandingPage extends LitElement {
@@ -139,7 +135,7 @@ export class LandingPage extends LitElement {
 
   private onNewGame(): void {
     logger.info('Landing: new game');
-    this.dispatchEvent(new CustomEvent('new-game', { bubbles: true, composed: true }));
+    window.location.href = '/create/';
   }
 
   private onLoadGameClick(): void {
@@ -165,19 +161,14 @@ export class LandingPage extends LitElement {
         return;
       }
 
+      const character = (data as { character: Character }).character;
       logger.info(`Landing: loading save from ${file.name}`);
-      this.dispatchEvent(
-        new CustomEvent<LoadGameDetail>('load-game', {
-          detail: { character: (data as { character: Character }).character },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      saveCharacter(character);
+      window.location.href = '/game/';
     } catch (err) {
       logger.warn('Landing: failed to parse save file', err);
       this.loadError = 'Could not read save file — is it valid YAML?';
     } finally {
-      // Reset so the same file can be re-selected if needed
       input.value = '';
     }
   }

@@ -16,19 +16,20 @@
  */
 
 import { LitElement, html, css, type TemplateResult } from 'lit';
-import { customElement, state, property } from 'lit/decorators.js';
+import { customElement, state } from 'lit/decorators.js';
 import type { Character } from '../game/character.ts';
+import { loadCharacter } from '../game/save.ts';
 import {
   type WorldMap,
   type MapId,
   type Vec2,
   ALL_MAPS,
   VILLAGE_MAP,
-  getTileAt,
   isWalkable,
   buildingAt,
   exitAt,
 } from '../game/world-map.ts';
+import { getTileStyle } from '../game/sprites.ts';
 import { getLogger } from '../game/logging.ts';
 
 const logger = getLogger('game:world');
@@ -73,33 +74,14 @@ export class GameWorld extends LitElement {
 
     .map-grid {
       display: grid;
-      grid-template-columns: repeat(${VP_COLS}, 1ch);
-      line-height: 1.35;
-      font-size: clamp(10px, 1.8vh, 15px);
+      grid-template-columns: repeat(${VP_COLS}, 32px);
+      grid-template-rows: repeat(${VP_ROWS}, 32px);
+      image-rendering: pixelated;
     }
 
     .tile {
-      display: inline-block;
-      width: 1ch;
-      text-align: center;
-    }
-
-    /* Tile colours */
-    .tile-water    { color: #1a3050; }
-    .tile-grass    { color: #2a4a1a; }
-    .tile-path     { color: #5a5030; }
-    .tile-wall     { color: #7a6040; }
-    .tile-door     { color: #c89020; }
-    .tile-tree     { color: #1a4a1a; }
-    .tile-mountain { color: #403c38; }
-    .tile-floor    { color: #3a3028; }
-    .tile-dwall    { color: #504840; }
-    .tile-entrance { color: #a07040; }
-
-    /* Hero */
-    .hero {
-      color: #f0e0a8;
-      font-weight: bold;
+      width: 32px;
+      height: 32px;
     }
 
     /* Location name banner — floats above the map, bottom of map-panel */
@@ -235,7 +217,7 @@ export class GameWorld extends LitElement {
     .narrative-hint:hover { color: #d4a820; }
   `;
 
-  @property({ type: Object }) character!: Character;
+  @state() private character: Character | null = null;
 
   @state() private map: WorldMap = VILLAGE_MAP;
   @state() private pos: Vec2 = { ...VILLAGE_MAP.entryPosition };
@@ -248,6 +230,16 @@ export class GameWorld extends LitElement {
   // Track which farm-entrance tiles have already shown the narrative
   // (so revisiting the ruin doesn't re-trigger).
   private farmNarrativeShown = false;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    const character = loadCharacter();
+    if (!character) {
+      window.location.href = '/';
+      return;
+    }
+    this.character = character;
+  }
 
   override firstUpdated(): void {
     this.shadowRoot?.querySelector<HTMLElement>('.layout')?.focus();
@@ -345,20 +337,23 @@ export class GameWorld extends LitElement {
   // ── Rendering ─────────────────────────────────────────────────────────────
 
   private renderMap(): TemplateResult {
-    const { map, pos } = this;
+    const { map, pos, character: c } = this;
+    if (!c) return html``;
+    const heroGender = c.gender;
     const tiles: TemplateResult[] = [];
 
     for (let row = 0; row < VP_ROWS; row++) {
       for (let col = 0; col < VP_COLS; col++) {
         const mx = pos.x - VP_HALF_X + col;
         const my = pos.y - VP_HALF_Y + row;
-
-        if (mx === pos.x && my === pos.y) {
-          tiles.push(html`<span class="tile hero">@</span>`);
-        } else {
-          const tile = getTileAt(map, mx, my);
-          tiles.push(html`<span class="tile ${tile.cssClass}">${tile.glyph}</span>`);
-        }
+        const isHero = mx === pos.x && my === pos.y;
+        const s = getTileStyle(map, mx, my, isHero, heroGender);
+        tiles.push(html`<div class="tile" style="
+          background-image: ${s.backgroundImage};
+          background-size: ${s.backgroundSize};
+          background-position: ${s.backgroundPosition};
+          background-repeat: ${s.backgroundRepeat};
+        "></div>`);
       }
     }
 
@@ -366,7 +361,8 @@ export class GameWorld extends LitElement {
   }
 
   private renderSidebar(): TemplateResult {
-    const { character: c } = this;
+    const c = this.character;
+    if (!c) return html``;
     const hpPct = Math.round((c.hitPoints / c.maxHitPoints) * 100);
     const hpClass = hpPct <= 20 ? 'crit' : hpPct <= 40 ? 'low' : '';
     const mpPct = c.maxMana > 0 ? Math.round((c.mana / c.maxMana) * 100) : 0;
@@ -446,6 +442,7 @@ export class GameWorld extends LitElement {
   }
 
   override render(): TemplateResult {
+    if (!this.character) return html``;
     return html`
       <div class="layout" tabindex="0" @keydown=${this.onKeyDown}>
         <div class="map-panel">

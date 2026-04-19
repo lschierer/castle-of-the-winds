@@ -26,6 +26,10 @@ description = "Run ESLint type-checked linting"
 run = "pnpm run typecheck"
 description = "Run TypeScript type checking"
 
+[tasks.download-sprites]
+run = "bash scripts/download-sprites.sh"
+description = "Download original Castle of the Winds sprites from castleofthewinds.com into assets/sprites/"
+
 [tasks.deploy-dev]
 run = "pnpm --filter dungeons-crawl-game-infrastructure run deploy:dev"
 description = "Deploy to the development EC2 environment via CDK"

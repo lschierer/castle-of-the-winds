@@ -23,12 +23,9 @@ import {
   createCharacter,
 } from '../game/character.ts';
 import { getLogger } from '../game/logging.ts';
+import { saveCharacter } from '../game/save.ts';
 
 const logger = getLogger('game:ui');
-
-export interface CharacterCreatedDetail {
-  character: Character;
-}
 
 /**
  * Character creation screen — point-buy stat allocation.
@@ -41,9 +38,8 @@ export interface CharacterCreatedDetail {
  *   - Difficulty (Easy / Normal / Hard) affects derived stats; Hard is the original default
  *   - Wisdom, Speed, Charisma are derived (read-only, computed live)
  *
- * Dispatches:
- *   - `character-created` (detail: CharacterCreatedDetail)
- *   - `back` (no detail)
+ * On completion, saves the character to localStorage and navigates to /game.
+ * "Back" navigates to /.
  */
 @customElement('character-creation')
 export class CharacterCreation extends LitElement {
@@ -393,7 +389,7 @@ export class CharacterCreation extends LitElement {
   }
 
   private onBack(): void {
-    this.dispatchEvent(new CustomEvent('back', { bubbles: true, composed: true }));
+    window.location.href = '/';
   }
 
   private onBegin(): void {
@@ -401,13 +397,8 @@ export class CharacterCreation extends LitElement {
     if (!trimmed) return;
     const character = createCharacter(trimmed, this.gender, this.difficulty, this.stats);
     logger.info(`Character created: ${character.name}`);
-    this.dispatchEvent(
-      new CustomEvent<CharacterCreatedDetail>('character-created', {
-        detail: { character },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    saveCharacter(character);
+    window.location.href = '/game/';
   }
 
   private barClass(value: number): string {
