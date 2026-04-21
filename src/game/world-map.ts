@@ -16,8 +16,11 @@
  *
  * Coordinate system: (x=col, y=row), origin (0,0) top-left.
  * Verified: village door positions match building list exactly.
- *   (9,17) Weaponsmith → row 17, col 9 = '!' ✓
- *   (12,21) Temple     → row 21, col 12 = '!' ✓
+ *   (9,18)  Weaponsmith  → row 18, col 9  = '!' (center right face) ✓
+ *   (13,18) General Store→ row 18, col 13 = '!' (center left face)  ✓
+ *   (9,13)  Kael's Sage  → row 13, col 9  = '!' (upper right face)  ✓
+ *   (15,6)  Farm House   → row 6,  col 15 = '!' (center left face)  ✓
+ *   (11,21) Temple       → row 21, col 11 = '!' (center north face) ✓
  *
  * Hero starting position in village: (11,17) per Hero.elm.
  * Hero exits village via 'e' at (11,18) → farm-map (11,31).
@@ -77,23 +80,23 @@ const VILLAGE_ROWS: string[] = [
   '========,,,.,,,,========',  // row 2
   '========,,,.,,,,========',  // row 3
   '========,,,.,,,,========',  // row 4
-  '===,,,,,;...,,,!###=====',  // row 5  → Junk Yard door at (15,5)
-  '===###!;.;,.,,;.###=====',  // row 6  → door at (6,6)
-  '===###..;,,.,;.;###=====',  // row 7
+  '===,,,,,;...,,,,###=====',  // row 5
+  '===###.;.;,.,,;!###=====',  // row 6  → Farm House door at (15,6) center left face
+  '===###!.;,,.,;.;###=====',  // row 7  → Junk Yard door at (6,7) center east face
   '===###,,,,,...;,,,,,,===',  // row 8
   '===,,,,,,,,.,,,,,,,,,===',  // row 9
   '====,,,,,,,.,,,,,,,,,===',  // row 10
   '====,,,,,,,.,,,,,,,,,===',  // row 11
   '====,,,,,,,.,!###,,,,===',  // row 12  → Barg's door at (13,12)
-  '====,,,##.....###,,,,===',  // row 13
-  '====,,,##!,.,,###,,,,===',  // row 14  → Kael's door at (9,14)
+  '====,,,##!....###,,,,===',  // row 13  → Kael's door at (9,13) upper right face
+  '====,,,##,,.,,###,,,,===',  // row 14
   '====,,,,,,,.,,,,,,,,,===',  // row 15
   '====,,,,,,,.,,,,,,,,,===',  // row 16
-  '====,,###!...!###,======',  // row 17  → Weaponsmith (9,17), General Store (13,17)
-  '====,,###..e..###,======',  // row 18  → 'e' exit to farm-map at (11,18)
+  '====,,###.....###,======',  // row 17
+  '====,,###!.e.!###,======',  // row 18  → Weaponsmith (9,18), General Store (13,18), exit (11,18)
   '====,,###,...,###,======',  // row 19
   '====,,,,,,,.,,,,,,======',  // row 20
-  '====,,,,,,,.!,,,,,======',  // row 21  → Temple of Odin door at (12,21)
+  '====,,,,,,,!,,,,,,======',  // row 21  → Temple of Odin door at (11,21) center north face
   '======,,,#####,=========',  // row 22
   '======,,,#####,=========',  // row 23
   '======,,,#####,=========',  // row 24
@@ -230,17 +233,17 @@ export const VILLAGE_MAP: WorldMap = makeMap(
   VILLAGE_ROWS,
   [
     {
-      position: { x: 6, y: 6 },
+      position: { x: 6, y: 7 },
       name: 'Junk Yard',
       description: "We buy things you don't want.",
     },
     {
-      position: { x: 15, y: 5 },
+      position: { x: 15, y: 6 },
       name: 'Farm House',
       description: 'A locked farmhouse. No one answers.',
     },
     {
-      position: { x: 9, y: 14 },
+      position: { x: 9, y: 13 },
       name: "Kael's Scrolls",
       description: "Kael's scholarly scrolls and identification services.",
     },
@@ -250,25 +253,29 @@ export const VILLAGE_MAP: WorldMap = makeMap(
       description: 'Private property. No one answers.',
     },
     {
-      position: { x: 9, y: 17 },
+      position: { x: 9, y: 18 },
       name: 'Weaponsmith',
       description: "If anyone's seen Barg, he still owes me 5 silvers for the daggers!",
     },
     {
-      position: { x: 13, y: 17 },
+      position: { x: 13, y: 18 },
       name: 'General Store',
       description: 'Get ye supplies here, best prices in town!',
     },
     {
-      position: { x: 12, y: 21 },
+      position: { x: 11, y: 21 },
       name: 'Temple of Odin',
       description: 'Wise Old Odin, healer of ailments.',
     },
   ],
   { x: 11, y: 17 }, // Hero.elm: position = (11, 17)
   [
-    // 'e' tile exits back to the farm-map overworld.
-    // Hero re-enters farm-map just inside the village entrance.
+    // North gate — ### at row 0 cols 10–12. Moving north through any gate tile
+    // exits to the farm-map just outside the village entrance.
+    { position: { x: 10, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' },
+    { position: { x: 11, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' },
+    { position: { x: 12, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' },
+    // 'e' tile — secondary exit used when navigating the village interior path.
     {
       position: { x: 11, y: 18 },
       targetMap: 'farm-map',
@@ -301,10 +308,10 @@ export const FARM_MAP: WorldMap = makeMap(
   { x: 11, y: 31 }, // default entry (used when loading a save on the farm-map)
   [
     // Village entrance: '#' cluster at row 32 cols 10-12.
-    // Override walkable so the hero can step onto the '#' tiles to trigger entry.
+    // Spawns the hero just inside the north gate (row 1, on the road column).
     ...clusterExits([10, 11, 12], [32], {
       targetMap: 'village',
-      targetPosition: { x: 11, y: 17 },
+      targetPosition: { x: 11, y: 1 },
       message: 'You enter the village.',
     }),
 

@@ -79,25 +79,28 @@ const VILLAGE_BUILDINGS: BuildingRegion[] = [
   // Junk Yard — ### cols 3–5, rows 6–8 (3×3); door at (6,6) → right-facing
   { originX: 3,  originY: 6,  cols: 3, rows: 3, sprite: `${BITMAPS}/bldhchrt.png` },
 
-  // Farm House — ### cols 16–18, rows 5–7 (3×3); door at (15,5) → left-facing
+  // Farm House — ### cols 16–18, rows 5–7 (3×3); door at (15,6) center left face
   { originX: 16, originY: 5,  cols: 3, rows: 3, sprite: `${BITMAPS}/bldhchlf.png` },
 
-  // Kael's Scrolls (Sage) — ## cols 7–8, rows 13–14 (2×2); bldrdhur = 64×64
+  // Kael's Scrolls (Sage) — ## cols 7–8, rows 13–14 (2×2); bldrdhur = 64×64; door at (9,13) upper right face
   { originX: 7,  originY: 13, cols: 2, rows: 2, sprite: `${BITMAPS}/bldrdhur.png` },
 
   // Barg's House — ### cols 14–16, rows 12–14 (3×3); door at (13,12) → left-facing
   { originX: 14, originY: 12, cols: 3, rows: 3, sprite: `${BITMAPS}/bldhchlf.png` },
 
-  // Weaponsmith — ### cols 6–8, rows 17–19 (3×3); door at (9,17) → right-facing
+  // Weaponsmith — ### cols 6–8, rows 17–19 (3×3); door at (9,18) center right face
   { originX: 6,  originY: 17, cols: 3, rows: 3, sprite: `${BITMAPS}/bldhchrt.png` },
 
-  // General Store — ### cols 14–16, rows 17–19 (3×3); door at (13,17) → left-facing
+  // General Store — ### cols 14–16, rows 17–19 (3×3); door at (13,18) center left face
   { originX: 14, originY: 17, cols: 3, rows: 3, sprite: `${BITMAPS}/bldhchlf.png` },
 
   // Temple of Odin — ##### cols 9–13, rows 22–26 (5×5); screenshot sprite 163×163 px
   // borderPx: 2 crops the ~1.5 px grass/shadow edge captured in the screenshot.
   // Adjust borderPx (±1) if the building appears shifted horizontally or vertically.
   { originX: 9, originY: 22, cols: 5, rows: 5, sprite: `${BITMAPS}/blrto.png`, borderPx: 2 },
+
+  // Village gate — ### cols 10–12, row 0 (3×1); hamgate = 96×32 px
+  { originX: 10, originY: 0, cols: 3, rows: 1, sprite: `${BITMAPS}/hamgate.png` },
 ];
 
 function villageBuilding(x: number, y: number): BuildingRegion | undefined {
