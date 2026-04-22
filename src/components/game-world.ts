@@ -1,28 +1,24 @@
 /**
- * Game world component — ASCII roguelike map view.
+ * Game world component — sprite tile map view + sidebar + overlays.
  *
- * Map hierarchy:
- *   Village (start) → exit 'e' tile → Farm-map (overworld)
- *   Farm-map → south '#' cluster → Village sub-level
- *   Farm-map → right '#' cluster → Farm narrative (no map change)
- *   Farm-map → north '#' tile  → Dungeon-1
- *   Dungeon-1 → bottom '.' tile → Farm-map
- *
- * Movement rule: exits are checked BEFORE tile walkability.
- * This lets '#' entrance tiles in farm-map act as transition triggers
- * even though '#' is normally unwalkable.
- *
- * Controls: Arrow keys, WASD, numpad (1-9 including diagonals).
+ * Controls:
+ *   Arrow keys / WASD / numpad 1-9  — movement (including diagonals)
+ *   Home / End / PageUp / PageDown   — diagonal movement
+ *   I                                — toggle inventory
+ *   P                                — toggle powers/spells panel
+ *   Space / Enter (on narrative)     — dismiss overlay
+ *   Escape                           — close any open overlay
  */
 
 import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { Character } from '../game/character.ts';
-import { loadCharacter } from '../game/save.ts';
+import { loadCharacter, saveCharacter } from '../game/save.ts';
 import {
   type WorldMap,
   type MapId,
   type Vec2,
+  type Building,
   ALL_MAPS,
   VILLAGE_MAP,
   isWalkable,
@@ -30,15 +26,29 @@ import {
   exitAt,
 } from '../game/world-map.ts';
 import { getTileStyle } from '../game/sprites.ts';
+import { spellById, SCHOOL_LABELS } from '../game/spells.ts';
+import { coinsIn, type Item } from '../game/items.ts';
+import {
+  type MonsterInstance,
+  type PlayerStatus,
+  playerMeleeAttack,
+  monsterMeleeAttack,
+  applyDrainAttack,
+  poisonTick,
+  type SpecialAttack,
+} from '../game/combat.ts';
+import { monsterById, monstersForLevel, healthDescription } from '../game/monsters.ts';
+import { ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../game/equipment.ts';
 import { getLogger } from '../game/logging.ts';
 
 const logger = getLogger('game:world');
 
-// Tiles visible around the hero (both must be odd).
 const VP_COLS = 41;
 const VP_ROWS = 21;
 const VP_HALF_X = (VP_COLS - 1) / 2;
 const VP_HALF_Y = (VP_ROWS - 1) / 2;
+
+type Overlay = 'none' | 'inventory' | 'spells' | 'building';
 
 @customElement('game-world')
 export class GameWorld extends LitElement {
@@ -53,7 +63,6 @@ export class GameWorld extends LitElement {
       overflow: hidden;
     }
 
-    /* ── Layout ────────────────────────────────────────── */
     .layout {
       display: flex;
       width: 100%;
@@ -61,7 +70,7 @@ export class GameWorld extends LitElement {
       outline: none;
     }
 
-    /* ── Map viewport ──────────────────────────────────── */
+    /* ── Map ────────────────────────────────────────── */
     .map-panel {
       flex: 1;
       display: flex;
@@ -84,7 +93,6 @@ export class GameWorld extends LitElement {
       height: 32px;
     }
 
-    /* Location name banner — floats above the map, bottom of map-panel */
     .location-banner {
       position: absolute;
       bottom: 0.5rem;
@@ -97,10 +105,10 @@ export class GameWorld extends LitElement {
       pointer-events: none;
     }
 
-    /* ── Sidebar ────────────────────────────────────────── */
+    /* ── Sidebar ────────────────────────────────────── */
     .sidebar {
-      width: 180px;
-      min-width: 180px;
+      width: 190px;
+      min-width: 190px;
       display: flex;
       flex-direction: column;
       gap: 0.6rem;
@@ -153,7 +161,63 @@ export class GameWorld extends LitElement {
       background: linear-gradient(to right, transparent, #3d3020 30%, #3d3020 70%, transparent);
     }
 
-    /* ── Message log ────────────────────────────────────── */
+    /* Keyboard hint buttons in sidebar */
+    .key-hint-row {
+      display: flex;
+      gap: 0.3rem;
+    }
+
+    .key-hint-btn {
+      flex: 1;
+      padding: 0.25rem 0.3rem;
+      background: transparent;
+      border: 1px solid #3d3020;
+      color: #6b5830;
+      font-family: inherit;
+      font-size: 0.65rem;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      text-transform: uppercase;
+      text-align: center;
+      transition: background 0.1s, color 0.1s;
+    }
+
+    .key-hint-btn:hover {
+      background: #2a2010;
+      color: #c8b78e;
+    }
+
+    .key-hint-btn.active {
+      background: #3d3020;
+      border-color: #8b6914;
+      color: #f0e0a8;
+    }
+
+    /* ── Spell list (sidebar section) ──────────────── */
+    .spell-entry {
+      font-size: 0.72rem;
+      color: #a09070;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.1rem 0;
+    }
+
+    .spell-entry-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .spell-cost {
+      font-size: 0.65rem;
+      color: #204870;
+      white-space: nowrap;
+    }
+
+    /* ── Message log ────────────────────────────────── */
     .msg-log {
       flex: 1;
       display: flex;
@@ -173,8 +237,8 @@ export class GameWorld extends LitElement {
 
     .msg.fresh { color: #c8b78e; }
 
-    /* ── Narrative overlay ──────────────────────────────── */
-    .narrative-overlay {
+    /* ── Overlays ───────────────────────────────────── */
+    .overlay {
       position: absolute;
       inset: 0;
       display: flex;
@@ -184,27 +248,48 @@ export class GameWorld extends LitElement {
       z-index: 10;
     }
 
-    .narrative-box {
-      max-width: 500px;
+    .overlay-box {
       width: 88%;
-      padding: 1.75rem 2rem;
+      max-width: 520px;
+      max-height: 80vh;
+      padding: 1.5rem 2rem;
       border: 1px solid #3d3020;
       box-shadow: 0 0 0 4px #0e0c09, 0 0 0 5px #3d3020;
       display: flex;
       flex-direction: column;
-      gap: 1.25rem;
-      max-height: 80vh;
+      gap: 1rem;
       overflow-y: auto;
     }
 
-    .narrative-text {
-      font-size: 0.85rem;
+    /* Inventory screen is wider to fit the 4-column paperdoll */
+    .overlay-box.inv-screen {
+      max-width: 480px;
+      padding: 1rem 1.25rem;
+    }
+
+    .overlay-title {
+      font-size: 0.9rem;
+      color: #d4a820;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin: 0;
+    }
+
+    .overlay-subtitle {
+      font-size: 0.68rem;
+      color: #6b5830;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .overlay-text {
+      font-size: 0.82rem;
       color: #c8b78e;
-      line-height: 1.75;
+      line-height: 1.7;
       white-space: pre-wrap;
     }
 
-    .narrative-hint {
+    .overlay-close {
       font-size: 0.68rem;
       color: #6b5830;
       letter-spacing: 0.12em;
@@ -212,24 +297,247 @@ export class GameWorld extends LitElement {
       text-transform: uppercase;
       cursor: pointer;
       transition: color 0.12s;
+      align-self: flex-end;
     }
 
-    .narrative-hint:hover { color: #d4a820; }
+    .overlay-close:hover { color: #d4a820; }
+
+    /* Building overlay */
+    .building-services {
+      font-size: 0.78rem;
+      color: #a09070;
+      line-height: 1.6;
+    }
+
+    /* ── Inventory overlay ──────────────────────────────── */
+
+    /* Outer wrapper fills the map panel */
+    .inv-screen {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      width: 100%;
+      max-width: 640px;
+      max-height: 90vh;
+      padding: 1rem 1.25rem;
+      border: 1px solid #3d3020;
+      box-shadow: 0 0 0 4px #0e0c09, 0 0 0 5px #3d3020;
+      overflow-y: auto;
+    }
+
+    /*
+     * Equipment grid: 5 cols × 5 rows
+     * Character portrait occupies cols 2-4, rows 2-4 (3×3).
+     * Counterclockwise from lower-left:
+     *   left col   → pack, belt, ring-l, weapon, bracers
+     *   top row    → armor, amulet, cloak, helmet
+     *   right col  → shield, gauntlets, freehand
+     *   bottom row → ring-r, boots, purse  (going right→left when walking CCW)
+     */
+    .equip-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 72px);
+      grid-template-rows: repeat(5, 72px);
+      gap: 4px;
+      align-self: center;
+    }
+
+    .equip-slot {
+      width: 72px;
+      height: 72px;
+      border: 1px solid #2a2010;
+      background: #0e0c09;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      position: relative;
+      cursor: default;
+    }
+
+    .equip-slot:hover {
+      border-color: #5a4828;
+      background: #161209;
+    }
+
+    .equip-slot.filled {
+      border-color: #5a4828;
+      background: #121008;
+    }
+
+    .equip-slot.char-portrait {
+      border: none;
+      background: #0a0806;
+      cursor: default;
+      grid-column: 2 / 5;
+      grid-row: 2 / 5;
+    }
+
+    .equip-slot-icon {
+      width: 32px;
+      height: 32px;
+      image-rendering: pixelated;
+      opacity: 0.35;
+    }
+
+    .equip-slot.filled .equip-slot-icon {
+      opacity: 1;
+    }
+
+    .equip-slot-label {
+      font-size: 0.48rem;
+      color: #4a3a20;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-align: center;
+      line-height: 1.1;
+    }
+
+    .equip-slot.filled .equip-slot-label {
+      color: #8b6930;
+    }
+
+    .equip-slot-name {
+      font-size: 0.52rem;
+      color: #c8b78e;
+      text-align: center;
+      line-height: 1.2;
+      max-width: 68px;
+      overflow: hidden;
+      word-break: break-word;
+    }
+
+    .char-portrait-img {
+      width: 64px;
+      height: 64px;
+      image-rendering: pixelated;
+    }
+
+    /* Container expansion rows */
+    .inv-containers {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .inv-container-block {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .inv-container-label {
+      font-size: 0.62rem;
+      color: #6b5830;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border-bottom: 1px solid #2a2010;
+      padding-bottom: 0.15rem;
+    }
+
+    /* Belt slot row */
+    .belt-slots {
+      display: flex;
+      gap: 4px;
+    }
+
+    .belt-slot {
+      width: 52px;
+      height: 52px;
+      border: 1px solid #2a2010;
+      background: #0e0c09;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+    }
+
+    .belt-slot.filled {
+      border-color: #5a4828;
+    }
+
+    /* Pack item list */
+    .pack-items {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+
+    .inv-item {
+      font-size: 0.78rem;
+      color: #c8b78e;
+      padding: 0.1rem 0.3rem;
+    }
+
+    .inv-empty {
+      font-size: 0.72rem;
+      color: #4a3a20;
+      font-style: italic;
+      padding: 0.1rem 0.3rem;
+    }
+
+    /* Spells overlay */
+    .spell-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 0.5rem 1rem;
+      align-items: baseline;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid #1a1610;
+    }
+
+    .spell-row-name {
+      font-size: 0.85rem;
+      color: #f0e0a8;
+    }
+
+    .spell-row-school {
+      font-size: 0.65rem;
+      color: #6b5830;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .spell-row-cost {
+      font-size: 0.72rem;
+      color: #204870;
+    }
+
+    .spell-row-desc {
+      grid-column: 1 / -1;
+      font-size: 0.72rem;
+      color: #808060;
+      line-height: 1.4;
+      margin-top: -0.1rem;
+    }
   `;
 
   @state() private character: Character | null = null;
-
   @state() private map: WorldMap = VILLAGE_MAP;
   @state() private pos: Vec2 = { ...VILLAGE_MAP.entryPosition };
   @state() private messages: Array<{ text: string; fresh: boolean }> = [
-    { text: 'You stand in the village. Arrow keys or WASD to move.', fresh: true },
+    { text: 'You stand in the village. Arrow keys, WASD, or numpad to move.', fresh: true },
+    { text: 'I = inventory · P = powers/spells · Esc = close panels', fresh: false },
   ];
   @state() private locationName = '';
+  @state() private overlay: Overlay = 'none';
   @state() private narrative: string | null = null;
+  @state() private activeBuilding: Building | null = null;
 
-  // Track which farm-entrance tiles have already shown the narrative
-  // (so revisiting the ruin doesn't re-trigger).
+  /** Live monsters on the current map level. */
+  @state() private monsters: MonsterInstance[] = [];
+  /** Active status effects on the player. */
+  @state() private playerStatus: PlayerStatus = {};
+
+  /** Counter used to generate unique monster instance IDs. */
+  private monsterSeq = 0;
   private farmNarrativeShown = false;
+
+  private toggleOverlay(which: Overlay): void {
+    this.overlay = this.overlay === which ? 'none' : which;
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -245,9 +553,10 @@ export class GameWorld extends LitElement {
     this.shadowRoot?.querySelector<HTMLElement>('.layout')?.focus();
   }
 
-  // ── Keyboard input ────────────────────────────────────────────────────────
+  // ── Input ─────────────────────────────────────────────────────────────────
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
+    // Narrative overlay — any confirm key dismisses it
     if (this.narrative !== null) {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
         e.preventDefault();
@@ -255,6 +564,33 @@ export class GameWorld extends LitElement {
       }
       return;
     }
+
+    // Other overlays
+    if (this.overlay !== 'none') {
+      if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.overlay = 'none';
+        this.activeBuilding = null;
+      }
+      return;
+    }
+
+    // Toggle overlays  (use I for inventory, P for powers/spells)
+    if (e.key === 'i' || e.key === 'I') {
+      e.preventDefault();
+      this.toggleOverlay('inventory');
+      return;
+    }
+    if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      this.toggleOverlay('spells');
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      return;
+    }
+
     const delta = KEY_TO_DELTA[e.key];
     if (delta) {
       e.preventDefault();
@@ -268,8 +604,14 @@ export class GameWorld extends LitElement {
     const nx = this.pos.x + dx;
     const ny = this.pos.y + dy;
 
-    // Exits are checked BEFORE walkability so '#' entrance tiles in farm-map
-    // (which are normally unwalkable) can still trigger map transitions.
+    // Check if a monster occupies the destination → melee attack
+    const targetMonster = this.monsters.find((m) => m.x === nx && m.y === ny);
+    if (targetMonster) {
+      this.playerAttacks(targetMonster);
+      this.runMonsterTurns();
+      return;
+    }
+
     const exit = exitAt(this.map, nx, ny);
     if (exit) {
       this.triggerExit(exit);
@@ -280,31 +622,38 @@ export class GameWorld extends LitElement {
 
     this.pos = { x: nx, y: ny };
 
-    // Building door check (village only)
+    // Special tile messages
+    const ch = this.map.rows[ny]?.[nx];
+    if (ch === 'w') {
+      this.locationName = 'Village Well';
+      this.pushMessage('You pause by the village well. The water looks clean.');
+      this.runMonsterTurns();
+      return;
+    }
+
     const building = buildingAt(this.map, nx, ny);
     if (building) {
+      this.activeBuilding = building;
+      this.overlay = 'building';
       this.locationName = building.name;
-      this.pushMessage(building.description);
-      logger.debug(`At building: ${building.name}`);
+      logger.debug(`Entering building: ${building.name}`);
     } else {
       this.locationName = '';
     }
+
+    this.runMonsterTurns();
   }
 
   private triggerExit(exit: typeof this.map.exits[number]): void {
-    // Narrative-only exit (burnt farm): show overlay but stay on same map.
     if (exit.narrative !== undefined && exit.targetMap === undefined) {
       if (!this.farmNarrativeShown) {
         this.farmNarrativeShown = true;
         this.narrative = exit.narrative;
-        logger.info('Farm narrative triggered');
       } else {
         this.pushMessage('There is nothing more to find in the ruins.');
       }
       return;
     }
-
-    // Map-change exit
     if (exit.targetMap !== undefined && exit.targetPosition !== undefined) {
       if (exit.message) this.pushMessage(exit.message);
       this.enterMap(exit.targetMap, exit.targetPosition);
@@ -312,18 +661,201 @@ export class GameWorld extends LitElement {
   }
 
   private enterMap(id: MapId, position: Vec2): void {
-    const map = ALL_MAPS[id];
-    this.map = map;
+    this.map = ALL_MAPS[id];
     this.pos = { ...position };
     this.locationName = '';
+    this.overlay = 'none';
+    this.activeBuilding = null;
     logger.info(`Entering map: ${id}`);
+    if (id === 'dungeon-1') {
+      this.pushMessage('The air grows cold and damp. The mine yawns before you.');
+      this.spawnDungeonMonsters(1);
+    } else {
+      this.monsters = [];
+    }
+  }
 
-    if (id === 'village') {
-      this.pushMessage('You enter the village.');
-    } else if (id === 'farm-map') {
-      // No extra message — the exit already pushed one.
-    } else if (id === 'dungeon-1') {
-      this.pushMessage('The air grows cold and damp.');
+  // ── Monster spawning ──────────────────────────────────────────────────────
+
+  private spawnDungeonMonsters(level: number): void {
+    const candidates = monstersForLevel(level).slice(0, 6); // limit pool
+    const walkable: Vec2[] = [];
+    const { rows } = this.map;
+    for (let y = 0; y < rows.length; y++) {
+      for (let x = 0; x < rows[y].length; x++) {
+        if (isWalkable(this.map, x, y) && (x !== this.pos.x || y !== this.pos.y)) {
+          walkable.push({ x, y });
+        }
+      }
+    }
+    // Shuffle walkable tiles and pick spawn points away from the player
+    const shuffled = walkable
+      .filter((p) => Math.abs(p.x - this.pos.x) + Math.abs(p.y - this.pos.y) > 8)
+      .sort(() => Math.random() - 0.5);
+
+    const count = Math.min(candidates.length, Math.floor(shuffled.length / 4), 8);
+    const instances: MonsterInstance[] = [];
+    for (let i = 0; i < count; i++) {
+      const spec = candidates[i % candidates.length];
+      const pos = shuffled[i];
+      const instance: MonsterInstance = {
+        specId: spec.id,
+        instanceId: `m${++this.monsterSeq}`,
+        hp: spec.hp,
+        x: pos.x,
+        y: pos.y,
+        alerted: false,
+        status: {},
+      };
+      instances.push(instance);
+    }
+    this.monsters = instances;
+    logger.info(`Spawned ${instances.length} monsters on dungeon level ${level}`);
+  }
+
+  // ── Combat helpers ────────────────────────────────────────────────────────
+
+  /** Sum of AC from all worn equipment. */
+  private get playerAC(): number {
+    const c = this.character;
+    if (!c) return 0;
+    let ac = 0;
+    const catalogFor = (item: Item | null, specs: typeof ALL_EQUIPMENT_SPECS) => {
+      if (!item) return;
+      const spec = specs.find((s) => s.name === item.name);
+      if (spec) ac += Math.max(0, spec.ac + item.enchantment);
+    };
+    catalogFor(c.armor,     ARMOR_SPECS);
+    catalogFor(c.shield,    SHIELD_SPECS);
+    catalogFor(c.helm,      HELMET_SPECS);
+    catalogFor(c.gauntlets, GAUNTLET_SPECS);
+    catalogFor(c.bracers,   BRACER_SPECS);
+    return ac;
+  }
+
+  /** Player attacks a specific monster instance. */
+  private playerAttacks(target: MonsterInstance): void {
+    const c = this.character;
+    if (!c) return;
+    const spec = monsterById(target.specId);
+    if (!spec) return;
+
+    const result = playerMeleeAttack(c, c.weapon, spec, this.playerStatus);
+    this.pushMessage(result.message);
+
+    if (!result.dodged && result.damage > 0) {
+      const newHp = target.hp - result.damage;
+      if (newHp <= 0) {
+        this.pushMessage(`You defeat the ${spec.name}!`);
+        const xp = spec.xp;
+        const newChar = { ...c, experience: c.experience + xp };
+        this.character = newChar;
+        saveCharacter(newChar);
+        this.monsters = this.monsters.filter((m) => m.instanceId !== target.instanceId);
+      } else {
+        const desc = healthDescription(newHp, spec.hp);
+        this.pushMessage(`The ${spec.name} is ${desc}.`);
+        this.monsters = this.monsters.map((m) =>
+          m.instanceId === target.instanceId ? { ...m, hp: newHp } : m,
+        );
+      }
+    }
+  }
+
+  /** Run all monsters' turns after the player acts. */
+  private runMonsterTurns(): void {
+    const c = this.character;
+    if (!c || this.map.id === 'village' || this.map.id === 'farm-map') return;
+
+    let updatedMonsters = [...this.monsters];
+    let updatedChar = { ...c };
+    let updatedStatus = { ...this.playerStatus };
+    let charChanged = false;
+
+    for (let i = 0; i < updatedMonsters.length; i++) {
+      const m = updatedMonsters[i];
+      const spec = monsterById(m.specId);
+      if (!spec || m.hp <= 0) continue;
+
+      const dist = Math.abs(m.x - this.pos.x) + Math.abs(m.y - this.pos.y);
+
+      // Alert if player is within 8 tiles (simplified LOS)
+      const alerted = m.alerted || dist <= 8;
+      if (alerted !== m.alerted) {
+        updatedMonsters[i] = { ...m, alerted };
+      }
+
+      if (!alerted) continue;
+
+      // Adjacent to player → attack
+      if (dist === 1 || (Math.abs(m.x - this.pos.x) <= 1 && Math.abs(m.y - this.pos.y) <= 1 && dist <= 2)) {
+        const result = monsterMeleeAttack(spec, 0, updatedChar, this.playerAC, updatedStatus);
+        this.pushMessage(result.message);
+
+        if (!result.dodged && result.damage > 0) {
+          updatedChar = { ...updatedChar, hitPoints: updatedChar.hitPoints - result.damage };
+          charChanged = true;
+
+          // Check for death
+          if (updatedChar.hitPoints <= 0) {
+            this.pushMessage('*** You have been slain! ***');
+            this.character = updatedChar;
+            saveCharacter(updatedChar);
+            return;
+          }
+
+          // Special attack processing
+          if (result.specialTriggered === 'poison' && !updatedStatus.poisoned) {
+            updatedStatus = { ...updatedStatus, poisoned: true, poisonStrength: 1 };
+          } else if (result.specialTriggered) {
+            const drainResult = applyDrainAttack(result.specialTriggered as SpecialAttack, updatedStatus, updatedChar);
+            updatedStatus = drainResult.status;
+            if (drainResult.message) this.pushMessage(drainResult.message);
+          }
+        }
+        continue;
+      }
+
+      // Move toward player
+      const dx = this.pos.x - m.x;
+      const dy = this.pos.y - m.y;
+      const stepX = dx === 0 ? 0 : dx > 0 ? 1 : -1;
+      const stepY = dy === 0 ? 0 : dy > 0 ? 1 : -1;
+
+      // Try diagonal, then cardinal directions
+      const moves: [number, number][] = [
+        [stepX, stepY],
+        [stepX, 0],
+        [0, stepY],
+      ];
+
+      for (const [mx, my] of moves) {
+        if (mx === 0 && my === 0) continue;
+        const nx = m.x + mx;
+        const ny = m.y + my;
+        const blocked = updatedMonsters.some(
+          (other, j) => j !== i && other.x === nx && other.y === ny,
+        );
+        if (!blocked && isWalkable(this.map, nx, ny)) {
+          updatedMonsters[i] = { ...updatedMonsters[i], x: nx, y: ny };
+          break;
+        }
+      }
+    }
+
+    // Poison tick
+    const poisonDmg = poisonTick(updatedStatus);
+    if (poisonDmg > 0) {
+      this.pushMessage(`Poison burns through you. (−${poisonDmg} HP)`);
+      updatedChar = { ...updatedChar, hitPoints: updatedChar.hitPoints - poisonDmg };
+      charChanged = true;
+    }
+
+    this.monsters = updatedMonsters;
+    this.playerStatus = updatedStatus;
+    if (charChanged) {
+      this.character = updatedChar;
+      saveCharacter(updatedChar);
     }
   }
 
@@ -342,22 +874,324 @@ export class GameWorld extends LitElement {
     const heroGender = c.gender;
     const tiles: TemplateResult[] = [];
 
+    // Build a quick lookup of visible monster positions
+    const monsterAt = new Map<string, MonsterInstance>();
+    for (const m of this.monsters) {
+      monsterAt.set(`${m.x},${m.y}`, m);
+    }
+
     for (let row = 0; row < VP_ROWS; row++) {
       for (let col = 0; col < VP_COLS; col++) {
         const mx = pos.x - VP_HALF_X + col;
         const my = pos.y - VP_HALF_Y + row;
         const isHero = mx === pos.x && my === pos.y;
         const s = getTileStyle(map, mx, my, isHero, heroGender);
-        tiles.push(html`<div class="tile" style="
-          background-image: ${s.backgroundImage};
-          background-size: ${s.backgroundSize};
-          background-position: ${s.backgroundPosition};
-          background-repeat: ${s.backgroundRepeat};
-        "></div>`);
+
+        // Overlay monster icon if one is here
+        const monster = monsterAt.get(`${mx},${my}`);
+        if (monster) {
+          const spec = monsterById(monster.specId);
+          const iconSrc = spec ? `/assets/sprites/icons/${spec.icon}` : '';
+          tiles.push(html`<div class="tile" style="
+            background-image: ${s.backgroundImage};
+            background-size: ${s.backgroundSize};
+            background-position: ${s.backgroundPosition};
+            background-repeat: ${s.backgroundRepeat};
+            position: relative;
+          ">
+            ${iconSrc ? html`<img
+              src="${iconSrc}"
+              alt="${spec?.name ?? ''}"
+              title="${spec?.name ?? ''} — ${healthDescription(monster.hp, spec?.hp ?? 1)}"
+              style="position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;object-fit:contain;"
+            >` : ''}
+          </div>`);
+        } else {
+          tiles.push(html`<div class="tile" style="
+            background-image: ${s.backgroundImage};
+            background-size: ${s.backgroundSize};
+            background-position: ${s.backgroundPosition};
+            background-repeat: ${s.backgroundRepeat};
+          "></div>`);
+        }
       }
     }
-
     return html`<div class="map-grid">${tiles}</div>`;
+  }
+
+  private renderBuildingOverlay(): TemplateResult {
+    const b = this.activeBuilding;
+    if (!b) return html``;
+
+    const BUILDING_SERVICES: Record<string, string> = {
+      'Weaponsmith': 'Buys and sells weapons, armor, helms, shields, bracers, and gauntlets.',
+      'General Store': 'Buys and sells scrolls, potions, spellbooks, cloaks, boots, and containers.',
+      "Kael's Scrolls": 'The sage will identify any unknown item for a fee.',
+      'Junk Yard': 'Buys anything you bring, even "worthless" items, for a flat 25 copper. Will not pay more than 25 cp for any item.',
+      'Temple of Odin': 'Offers healing, restoration of drained attributes, Remove Curse, and Rune of Return — all for a price.',
+      "Barg's House": 'A locked private home. Nobody answers.',
+      'Farm House': 'A locked farmhouse. Nobody answers.',
+    };
+
+    const services = BUILDING_SERVICES[b.name] ?? b.description;
+
+    return html`
+      <div class="overlay" @click=${() => { this.overlay = 'none'; this.activeBuilding = null; }}>
+        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+          <div>
+            <p class="overlay-title">${b.name}</p>
+            <p class="overlay-subtitle">Village · ${b.name}</p>
+          </div>
+          <div class="divider"></div>
+          <p class="building-services">${services}</p>
+          <div class="divider"></div>
+          <span
+            class="overlay-close"
+            @click=${() => { this.overlay = 'none'; this.activeBuilding = null; }}
+          >[ Escape / Space to leave ]</span>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render one equipment slot in the paperdoll grid.
+   * `item` is what's equipped (null = empty).
+   * `label` is the slot name (e.g. "Weapon").
+   * `iconSrc` is the greyed-out placeholder icon path.
+   * `gridArea` is passed directly as a CSS grid-area value.
+   */
+  private renderEquipSlot(
+    item: Item | null,
+    label: string,
+    iconSrc: string,
+    gridArea: string,
+  ): TemplateResult {
+    return html`
+      <div class="equip-slot ${item ? 'filled' : ''}" style="grid-area:${gridArea}">
+        <img class="equip-slot-icon" src="${iconSrc}" alt="${label}">
+        ${item
+          ? html`<span class="equip-slot-name">${item.name}${item.enchantment !== 0 ? ` ${item.enchantment > 0 ? '+' : ''}${item.enchantment}` : ''}</span>`
+          : html`<span class="equip-slot-label">${label}</span>`}
+      </div>
+    `;
+  }
+
+  private renderInventoryOverlay(): TemplateResult {
+    const c = this.character;
+    if (!c) return html``;
+    const IC = '/assets/sprites/icons';
+
+    // Purse coins
+    const purse = c.purse;
+    const cp = purse ? coinsIn(purse, 'copper')   : 0;
+    const sp = purse ? coinsIn(purse, 'silver')  : 0;
+    const gp = purse ? coinsIn(purse, 'gold')    : 0;
+    const pp = purse ? coinsIn(purse, 'platinum') : 0;
+
+    // Pack contents
+    const packItems: Item[] = c.pack?.slots?.flatMap((s) => s.items) ?? [];
+
+    // Belt slots
+    const beltSlots = c.belt?.slots ?? [];
+
+    // Character portrait icon
+    const portraitSrc = `${IC}/${c.gender === 'female' ? 'woman' : 'man'}.png`;
+
+    /*
+     * Paperdoll grid layout (4 cols × 5 rows):
+     *
+     *   Col:  1        2        3        4
+     *   Row1: bracers  armor    amulet   helmet
+     *   Row2: weapon   [char portrait]  shield
+     *   Row3: ring-l   [char portrait]  gauntlets
+     *   Row4: belt     cloak    freeH    ring-r
+     *   Row5: pack     boots    ·        purse
+     *
+     * Named grid areas used below (row / col as CSS grid-area shorthand).
+     */
+
+    return html`
+      <div class="overlay" @click=${() => { this.overlay = 'none'; }}>
+        <div class="overlay-box inv-screen" @click=${(e: Event) => e.stopPropagation()}>
+          <p class="overlay-title">${c.name} — Inventory</p>
+          <div class="divider"></div>
+
+          <!-- Paperdoll equipment grid -->
+          <!--
+            5×5 paperdoll grid.
+            Left col  (top→bottom): bracers, weapon, ring-l, belt, pack
+            Top row   (left→right): armor, amulet, cloak, helmet
+            Right col (top→bottom): shield, gauntlets, freehand
+            Bottom row(right→left going CCW): ring-r, boots, purse
+            Center (cols 2-4, rows 2-4): character portrait
+          -->
+          <div class="equip-grid" style="
+            grid-template-areas:
+              'bracers armor   amulet  cloak   helmet'
+              'weapon  char    char    char    shield'
+              'ring-l  char    char    char    gauntlets'
+              'belt    char    char    char    freeh'
+              'pack    purse   boots   ring-r  x';
+          ">
+            <!-- Left column -->
+            ${this.renderEquipSlot(c.bracers,   'Bracers',   `${IC}/bracers.png`, 'bracers')}
+            ${this.renderEquipSlot(c.weapon,    'Weapon',    `${IC}/sword.png`,   'weapon')}
+            ${this.renderEquipSlot(c.ringLeft,  'Ring',      `${IC}/ring.png`,    'ring-l')}
+            ${this.renderEquipSlot(c.belt,      'Belt',      `${IC}/belt.png`,    'belt')}
+            ${this.renderEquipSlot(c.pack,      'Pack',      `${IC}/pack.png`,    'pack')}
+
+            <!-- Top row (excl. bracers corner) -->
+            ${this.renderEquipSlot(c.armor,     'Armor',     `${IC}/armor.png`,   'armor')}
+            ${this.renderEquipSlot(c.amulet,    'Amulet',    `${IC}/amulet.png`,  'amulet')}
+            ${this.renderEquipSlot(c.cloak,     'Cloak',     `${IC}/cloak.png`,   'cloak')}
+            ${this.renderEquipSlot(c.helm,      'Helmet',    `${IC}/helmet.png`,  'helmet')}
+
+            <!-- Character portrait (3×3 center) -->
+            <div class="equip-slot char-portrait" style="grid-area:char">
+              <img class="char-portrait-img" src="${portraitSrc}" alt="${c.name}">
+            </div>
+
+            <!-- Right column (excl. helmet corner) -->
+            ${this.renderEquipSlot(c.shield,    'Shield',    `${IC}/shield.png`,   'shield')}
+            ${this.renderEquipSlot(c.gauntlets, 'Gauntlets', `${IC}/gauntlet.png`, 'gauntlets')}
+            ${this.renderEquipSlot(c.freeHand,  'Free Hand', `${IC}/wand.png`,     'freeh')}
+
+            <!-- Bottom row (right→left going CCW, excl. pack corner) -->
+            <div class="equip-slot ${purse ? 'filled' : ''}" style="grid-area:purse">
+              <img class="equip-slot-icon" src="${IC}/purse.png" alt="Purse">
+              ${purse ? html`
+                <span class="equip-slot-name" style="font-size:0.45rem">
+                  ${cp > 0 ? `${cp.toLocaleString()}cp ` : ''}${sp > 0 ? `${sp.toLocaleString()}sp ` : ''}${gp > 0 ? `${gp.toLocaleString()}gp ` : ''}${pp > 0 ? `${pp.toLocaleString()}pp` : ''}
+                </span>
+              ` : html`<span class="equip-slot-label">Purse</span>`}
+            </div>
+            ${this.renderEquipSlot(c.boots,     'Boots',     `${IC}/boots.png`,    'boots')}
+            ${this.renderEquipSlot(c.ringRight, 'Ring',      `${IC}/ring.png`,     'ring-r')}
+
+            <!-- Bottom-right corner (unused) -->
+            <div style="grid-area:x; background:#0a0806"></div>
+          </div>
+
+          <!-- Open containers below paperdoll -->
+          <div class="inv-containers">
+            ${beltSlots.length > 0 ? html`
+              <div class="inv-container-block">
+                <div class="inv-container-label">Belt — ${c.belt!.name}</div>
+                <div class="belt-slots">
+                  ${beltSlots.map((slot) => {
+                    const it = slot.items[0] ?? null;
+                    return html`
+                      <div class="belt-slot ${it ? 'filled' : ''}">
+                        ${it
+                          ? html`<span style="font-size:0.5rem;color:#c8b78e;text-align:center;padding:2px">${it.name}</span>`
+                          : html`<span style="font-size:0.5rem;color:#2a2010">—</span>`}
+                      </div>
+                    `;
+                  })}
+                </div>
+              </div>
+            ` : ''}
+
+            ${c.pack ? html`
+              <div class="inv-container-block">
+                <div class="inv-container-label">${c.pack.name}</div>
+                <div class="pack-items">
+                  ${packItems.length === 0
+                    ? html`<div class="inv-empty">Empty</div>`
+                    : packItems.map((it) => html`
+                        <div class="inv-item">
+                          ${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${it.name}${it.enchantment !== 0 ? ` ${it.enchantment > 0 ? '+' : ''}${it.enchantment}` : ''}${it.cursed ? html` <span style="color:#a04040">(cursed)</span>` : ''}
+                        </div>
+                      `)}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <span class="overlay-close" @click=${() => { this.overlay = 'none'; }}>[ I / Esc to close ]</span>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderSpellsOverlay(): TemplateResult {
+    const c = this.character;
+    if (!c) return html``;
+    const known = c.spells ?? [];
+
+    return html`
+      <div class="overlay" @click=${() => { this.overlay = 'none'; }}>
+        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+          <p class="overlay-title">Spells Known</p>
+          <div class="divider"></div>
+
+          ${known.length === 0
+            ? html`<div class="inv-empty">No spells learned.</div>`
+            : known.map((id) => {
+                const sp = spellById(id);
+                if (!sp) return html``;
+                return html`
+                  <div class="spell-row">
+                    <span class="spell-row-name">${sp.name}</span>
+                    <span class="spell-row-school">${SCHOOL_LABELS[sp.school]}</span>
+                    <span class="spell-row-cost">${sp.baseMana} mp</span>
+                    <span class="spell-row-desc">${sp.description}</span>
+                  </div>
+                `;
+              })}
+
+          <span
+            class="overlay-close"
+            @click=${() => { this.overlay = 'none'; }}
+          >[ P / Esc to close ]</span>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderNarrativeOverlay(): TemplateResult {
+    if (this.narrative === null) return html``;
+    return html`
+      <div class="overlay" @click=${() => { this.narrative = null; }}>
+        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+          <p class="overlay-text">${this.narrative}</p>
+          <span class="overlay-close" @click=${() => { this.narrative = null; }}>
+            [ Enter / Space to continue ]
+          </span>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderStatusEffects(): TemplateResult {
+    const s = this.playerStatus;
+    const effects: Array<{ label: string; color: string }> = [];
+    if (s.poisoned)       effects.push({ label: 'Poisoned',       color: '#4a7a20' });
+    if (s.shielded)       effects.push({ label: 'Shielded',       color: '#2060a0' });
+    if (s.levitating)     effects.push({ label: 'Levitating',     color: '#6040c0' });
+    if (s.detectMonsters) effects.push({ label: 'Detect Monsters',color: '#a06020' });
+    if (s.detectObjects)  effects.push({ label: 'Detect Objects', color: '#a06020' });
+    if (s.detectTraps)    effects.push({ label: 'Detect Traps',   color: '#a06020' });
+    if ((s.resistFire ?? 0) > 0)      effects.push({ label: `Resist Fire ×${s.resistFire}`,      color: '#c04020' });
+    if ((s.resistCold ?? 0) > 0)      effects.push({ label: `Resist Cold ×${s.resistCold}`,      color: '#2080c0' });
+    if ((s.resistLightning ?? 0) > 0) effects.push({ label: `Resist Lightning ×${s.resistLightning}`, color: '#c0c020' });
+    if ((s.drainedStr ?? 0) > 0)  effects.push({ label: `STR drained −${s.drainedStr}`, color: '#a04040' });
+    if ((s.drainedDex ?? 0) > 0)  effects.push({ label: `DEX drained −${s.drainedDex}`, color: '#a04040' });
+    if ((s.drainedCon ?? 0) > 0)  effects.push({ label: `CON drained −${s.drainedCon}`, color: '#800000' });
+    if ((s.drainedInt ?? 0) > 0)  effects.push({ label: `INT drained −${s.drainedInt}`, color: '#800000' });
+    if ((s.drainedMana ?? 0) > 0) effects.push({ label: `Mana drained −${s.drainedMana}`, color: '#800060' });
+    if ((s.drainedMaxHp ?? 0) > 0) effects.push({ label: `Max HP drained −${s.drainedMaxHp}`, color: '#800000' });
+    if (effects.length === 0) return html``;
+    return html`
+      <div class="divider"></div>
+      <div class="stat-block">
+        <span class="stat-label">Status</span>
+        ${effects.map((e) => html`
+          <span class="stat-value" style="color:${e.color};font-size:0.68rem">${e.label}</span>
+        `)}
+      </div>
+    `;
   }
 
   private renderSidebar(): TemplateResult {
@@ -371,6 +1205,7 @@ export class GameWorld extends LitElement {
       'farm-map': 'Countryside',
       'dungeon-1': 'Mine — Level 1',
     };
+    const known = c.spells ?? [];
 
     return html`
       <aside class="sidebar">
@@ -411,24 +1246,52 @@ export class GameWorld extends LitElement {
           <span class="stat-value">DEX ${c.stats.dexterity}</span>
         </div>
 
+        <div class="divider"></div>
+
         <div class="stat-block">
-          <span class="stat-label">Derived</span>
-          <span class="stat-value">WIS ${c.derived.wisdom}</span>
-          <span class="stat-value">SPD ${c.derived.speed}</span>
-          <span class="stat-value">CHA ${c.derived.charisma}</span>
+          <span class="stat-label">Purse</span>
+          ${c.purse ? html`
+            ${coinsIn(c.purse, 'copper')   > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'copper').toLocaleString()} cp</span>` : ''}
+            ${coinsIn(c.purse, 'silver')   > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'silver').toLocaleString()} sp</span>` : ''}
+            ${coinsIn(c.purse, 'gold')     > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'gold').toLocaleString()} gp</span>` : ''}
+            ${coinsIn(c.purse, 'platinum') > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'platinum').toLocaleString()} pp</span>` : ''}
+          ` : html`<span class="stat-value" style="color:#4a3a20">No purse</span>`}
         </div>
 
         <div class="divider"></div>
 
         <div class="stat-block">
-          <span class="stat-label">Gold</span>
-          <span class="stat-value">${c.gold} gp</span>
+          <span class="stat-label">Spells (${known.length})</span>
+          ${known.map((id) => {
+            const sp = spellById(id);
+            return sp ? html`
+              <div class="spell-entry">
+                <span class="spell-entry-name">${sp.name}</span>
+                <span class="spell-cost">${sp.baseMana}mp</span>
+              </div>
+            ` : html``;
+          })}
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="key-hint-row">
+          <button
+            class="key-hint-btn ${this.overlay === 'inventory' ? 'active' : ''}"
+            @click=${() => { this.toggleOverlay('inventory'); }}
+          >[I] Inv</button>
+          <button
+            class="key-hint-btn ${this.overlay === 'spells' ? 'active' : ''}"
+            @click=${() => { this.toggleOverlay('spells'); }}
+          >[P] Spells</button>
         </div>
 
         <div class="stat-block">
           <span class="stat-label">Experience</span>
           <span class="stat-value">${c.experience} xp</span>
         </div>
+
+        ${this.renderStatusEffects()}
 
         <div class="divider"></div>
 
@@ -447,27 +1310,20 @@ export class GameWorld extends LitElement {
       <div class="layout" tabindex="0" @keydown=${this.onKeyDown}>
         <div class="map-panel">
           ${this.renderMap()}
+
           ${this.locationName
             ? html`<div class="location-banner">${this.locationName}</div>`
             : ''}
 
-          ${this.narrative !== null ? html`
-            <div
-              class="narrative-overlay"
-              @click=${() => { this.narrative = null; }}
-            >
-              <div
-                class="narrative-box"
-                @click=${(e: Event) => { e.stopPropagation(); }}
-              >
-                <div class="narrative-text">${this.narrative}</div>
-                <div
-                  class="narrative-hint"
-                  @click=${() => { this.narrative = null; }}
-                >[ Enter / Space to continue ]</div>
-              </div>
-            </div>
-          ` : ''}
+          ${this.narrative !== null
+            ? this.renderNarrativeOverlay()
+            : this.overlay === 'building'
+              ? this.renderBuildingOverlay()
+              : this.overlay === 'inventory'
+                ? this.renderInventoryOverlay()
+                : this.overlay === 'spells'
+                  ? this.renderSpellsOverlay()
+                  : ''}
         </div>
         ${this.renderSidebar()}
       </div>
@@ -478,18 +1334,24 @@ export class GameWorld extends LitElement {
 // ── Key map ───────────────────────────────────────────────────────────────────
 
 const KEY_TO_DELTA: Record<string, { dx: number; dy: number }> = {
+  // Cardinal — arrows and WASD
   ArrowUp:    { dx:  0, dy: -1 },
   ArrowDown:  { dx:  0, dy:  1 },
   ArrowLeft:  { dx: -1, dy:  0 },
   ArrowRight: { dx:  1, dy:  0 },
   w: { dx:  0, dy: -1 },
-  s: { dx:  0, dy:  1 },
+  s: { dx:  0, dy:  1 },  // note: 's' for south conflicts with spell toggle when no overlay open
   a: { dx: -1, dy:  0 },
   d: { dx:  1, dy:  0 },
-  // Numpad
+  // Numpad (roguelike standard)
   '7': { dx: -1, dy: -1 }, '8': { dx:  0, dy: -1 }, '9': { dx:  1, dy: -1 },
   '4': { dx: -1, dy:  0 },                            '6': { dx:  1, dy:  0 },
   '1': { dx: -1, dy:  1 }, '2': { dx:  0, dy:  1 }, '3': { dx:  1, dy:  1 },
+  // Home/End/PgUp/PgDn diagonal keys
+  Home:     { dx: -1, dy: -1 },
+  End:      { dx: -1, dy:  1 },
+  PageUp:   { dx:  1, dy: -1 },
+  PageDown: { dx:  1, dy:  1 },
 };
 
 declare global {

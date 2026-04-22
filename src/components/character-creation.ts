@@ -22,24 +22,18 @@ import {
   derivedMaxMana,
   createCharacter,
 } from '../game/character.ts';
+import { STARTING_SPELLS, SCHOOL_LABELS, type Spell } from '../game/spells.ts';
 import { getLogger } from '../game/logging.ts';
 import { saveCharacter } from '../game/save.ts';
 
 const logger = getLogger('game:ui');
 
 /**
- * Character creation screen — point-buy stat allocation.
+ * Character creation screen — two phases:
+ *   1. stat allocation (name, gender, difficulty, point-buy)
+ *   2. starting spell selection (one level-1 spell)
  *
- * Mechanic follows Attributes.elm / CharCreation.elm:
- *   - 4 primary stats (STR, INT, CON, DEX), each starting at 40
- *   - 100 points to distribute in steps of 5
- *   - Stats can be decreased below 40 (down to 10) to reclaim points
- *   - Stats cap at 100
- *   - Difficulty (Easy / Normal / Hard) affects derived stats; Hard is the original default
- *   - Wisdom, Speed, Charisma are derived (read-only, computed live)
- *
- * On completion, saves the character to localStorage and navigates to /game.
- * "Back" navigates to /.
+ * On completion, saves the character to localStorage and navigates to /game/.
  */
 @customElement('character-creation')
 export class CharacterCreation extends LitElement {
@@ -265,7 +259,6 @@ export class CharacterCreation extends LitElement {
       font-variant-numeric: tabular-nums;
     }
 
-    /* bar track */
     .stat-bar-track {
       height: 6px;
       background: #1a1610;
@@ -282,7 +275,6 @@ export class CharacterCreation extends LitElement {
       transition: width 0.1s;
     }
 
-    /* bar colours by value */
     .stat-bar-fill.high   { background: #4a8a4a; }
     .stat-bar-fill.mid    { background: #7a7030; }
     .stat-bar-fill.low    { background: #7a4020; }
@@ -314,6 +306,68 @@ export class CharacterCreation extends LitElement {
     .derived-value {
       font-size: 1rem;
       color: #c8b78e;
+    }
+
+    /* ── Spell selection (phase 2) ────────────────────── */
+    .spell-intro {
+      font-size: 0.82rem;
+      color: #c8b78e;
+      line-height: 1.6;
+    }
+
+    .spell-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .spell-card {
+      padding: 0.65rem 0.85rem;
+      border: 1px solid #3d3020;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+      transition: background 0.12s, border-color 0.12s;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .spell-card:hover {
+      background: #1a1610;
+      border-color: #5a4a2a;
+    }
+
+    .spell-card.selected {
+      background: #2a1e08;
+      border-color: #d4a820;
+    }
+
+    .spell-card-name {
+      font-size: 0.9rem;
+      color: #f0e0a8;
+      font-weight: bold;
+    }
+
+    .spell-card-school {
+      font-size: 0.65rem;
+      color: #6b5830;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .spell-card-desc {
+      font-size: 0.72rem;
+      color: #a09070;
+      line-height: 1.4;
+      margin-top: 0.15rem;
+    }
+
+    .spell-card-cost {
+      font-size: 0.68rem;
+      color: #204870;
+      margin-top: 0.1rem;
     }
 
     /* ── Actions ──────────────────────────────────────── */
@@ -367,18 +421,15 @@ export class CharacterCreation extends LitElement {
     }
   `;
 
+  @state() private phase: 'stats' | 'spell' = 'stats';
   @state() private name = '';
   @state() private gender: Gender = 'male';
-  @state() private difficulty: Difficulty = 'hard'; // original game default
+  @state() private difficulty: Difficulty = 'hard';
   @state() private stats: CharacterStats = makeDefaultStats();
+  @state() private selectedSpell: string = STARTING_SPELLS[0]?.id ?? '';
 
-  private setGender(g: Gender): void {
-    this.gender = g;
-  }
-
-  private setDifficulty(d: Difficulty): void {
-    this.difficulty = d;
-  }
+  private setGender(g: Gender): void { this.gender = g; }
+  private setDifficulty(d: Difficulty): void { this.difficulty = d; }
 
   private onNameInput(e: Event): void {
     this.name = (e.target as HTMLInputElement).value;
@@ -389,14 +440,28 @@ export class CharacterCreation extends LitElement {
   }
 
   private onBack(): void {
-    window.location.href = '/';
+    if (this.phase === 'spell') {
+      this.phase = 'stats';
+    } else {
+      window.location.href = '/';
+    }
+  }
+
+  private onNext(): void {
+    // Phase 1 → Phase 2: spell selection
+    this.phase = 'spell';
   }
 
   private onBegin(): void {
-    const trimmed = this.name.trim();
-    if (!trimmed) return;
-    const character = createCharacter(trimmed, this.gender, this.difficulty, this.stats);
-    logger.info(`Character created: ${character.name}`);
+    if (!this.selectedSpell) return;
+    const character = createCharacter(
+      this.name.trim(),
+      this.gender,
+      this.difficulty,
+      this.stats,
+      this.selectedSpell,
+    );
+    logger.info(`Character created: ${character.name}, starting spell: ${this.selectedSpell}`);
     saveCharacter(character);
     window.location.href = '/game/';
   }
@@ -412,7 +477,6 @@ export class CharacterCreation extends LitElement {
     const value = this.stats[stat];
     const canIncrease = value < STAT_MAX && pool >= POINT_STEP;
     const canDecrease = value > STAT_MIN;
-    const barPct = value; // 0–100 directly maps to %
 
     return html`
       <div class="stat-row" title=${STAT_DESCRIPTIONS[stat]}>
@@ -433,20 +497,34 @@ export class CharacterCreation extends LitElement {
         <div class="stat-bar-track" aria-hidden="true">
           <div
             class="stat-bar-fill ${this.barClass(value)}"
-            style="width: ${barPct}%"
+            style="width: ${value}%"
           ></div>
         </div>
       </div>
     `;
   }
 
-  override render() {
+  private renderSpellCard(spell: Spell): TemplateResult {
+    const selected = spell.id === this.selectedSpell;
+    return html`
+      <button
+        class="spell-card ${selected ? 'selected' : ''}"
+        @click=${() => { this.selectedSpell = spell.id; }}
+      >
+        <span class="spell-card-name">${spell.name}</span>
+        <span class="spell-card-school">${SCHOOL_LABELS[spell.school]}</span>
+        <span class="spell-card-desc">${spell.description}</span>
+        <span class="spell-card-cost">Cost: ${spell.baseMana} mana · ${spell.gameClock}s cast time</span>
+      </button>
+    `;
+  }
+
+  private renderStatsPhase(): TemplateResult {
     const pool = availablePoints(this.stats);
     const hp = derivedMaxHitPoints(this.stats);
     const mana = derivedMaxMana(this.stats);
     const derived = computeDerived(this.stats, this.difficulty);
     const canBegin = this.name.trim().length > 0;
-
     const poolClass = pool === 0 ? 'empty' : pool <= 15 ? 'low' : '';
 
     return html`
@@ -454,7 +532,6 @@ export class CharacterCreation extends LitElement {
         <h2>Create Your Hero</h2>
         <div class="divider"></div>
 
-        <!-- Name -->
         <div class="field">
           <label for="hero-name">Name</label>
           <input
@@ -467,22 +544,16 @@ export class CharacterCreation extends LitElement {
           />
         </div>
 
-        <!-- Gender -->
         <div class="field">
           <label>Gender</label>
           <div class="gender-row">
-            <button
-              class="gender-btn ${this.gender === 'male' ? 'selected' : ''}"
-              @click=${() => { this.setGender('male'); }}
-            >Male</button>
-            <button
-              class="gender-btn ${this.gender === 'female' ? 'selected' : ''}"
-              @click=${() => { this.setGender('female'); }}
-            >Female</button>
+            <button class="gender-btn ${this.gender === 'male' ? 'selected' : ''}"
+              @click=${() => { this.setGender('male'); }}>Male</button>
+            <button class="gender-btn ${this.gender === 'female' ? 'selected' : ''}"
+              @click=${() => { this.setGender('female'); }}>Female</button>
           </div>
         </div>
 
-        <!-- Difficulty -->
         <div class="field">
           <label>Difficulty</label>
           <div class="difficulty-row">
@@ -499,13 +570,11 @@ export class CharacterCreation extends LitElement {
 
         <div class="divider"></div>
 
-        <!-- Attributes -->
         <div>
           <div class="attr-header">
             <span class="panel-label">Attributes</span>
             <span class="pool-display">
-              Points remaining:
-              <span class="pool-value ${poolClass}">${pool}</span>
+              Points remaining: <span class="pool-value ${poolClass}">${pool}</span>
             </span>
           </div>
           <div class="stat-list">
@@ -515,7 +584,6 @@ export class CharacterCreation extends LitElement {
 
         <div class="divider"></div>
 
-        <!-- Derived (read-only, updates live) -->
         <div class="derived-panel">
           <div class="derived-item">
             <span class="derived-label">Hit Points</span>
@@ -540,7 +608,7 @@ export class CharacterCreation extends LitElement {
         </div>
 
         ${!canBegin
-          ? html`<p class="validation-msg">Enter a name to begin your adventure.</p>`
+          ? html`<p class="validation-msg">Enter a name to continue.</p>`
           : ''}
 
         <div class="actions">
@@ -548,11 +616,44 @@ export class CharacterCreation extends LitElement {
           <button
             class="action-btn primary"
             ?disabled=${!canBegin}
+            @click=${this.onNext}
+          >Choose Starting Spell →</button>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderSpellPhase(): TemplateResult {
+    return html`
+      <div class="shell">
+        <h2>Choose Your First Spell</h2>
+        <div class="divider"></div>
+
+        <p class="spell-intro">
+          Every adventurer begins with knowledge of one spell. Choose wisely —
+          your selection reflects your approach to the dangers ahead.
+        </p>
+
+        <div class="spell-list">
+          ${STARTING_SPELLS.map((s) => this.renderSpellCard(s))}
+        </div>
+
+        <div class="actions">
+          <button class="action-btn secondary" @click=${this.onBack}>← Back</button>
+          <button
+            class="action-btn primary"
+            ?disabled=${!this.selectedSpell}
             @click=${this.onBegin}
           >Begin Adventure ⚔</button>
         </div>
       </div>
     `;
+  }
+
+  override render(): TemplateResult {
+    return this.phase === 'stats'
+      ? this.renderStatsPhase()
+      : this.renderSpellPhase();
   }
 }
 

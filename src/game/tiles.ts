@@ -12,9 +12,10 @@
  *   o  dungeon floor
  *   d  dungeon wall
  *   e  dungeon entrance (from village)
+ *   w  decorative well (village)
  */
 
-export type TileChar = '=' | ',' | '.' | '#' | '!' | ';' | '^' | 'o' | 'd' | 'e';
+export type TileChar = '=' | ',' | '.' | '#' | '!' | ';' | '^' | 'o' | 'd' | 'e' | 'w';
 
 export interface TileDef {
   char: TileChar;
@@ -40,6 +41,7 @@ export const TILE_DEFS: Record<TileChar, TileDef> = {
   'o': T('o', 'tile-floor',    true,  '·'),
   'd': T('d', 'tile-dwall',    false, '#'),
   'e': T('e', 'tile-entrance', true,  '○'),
+  'w': T('w', 'tile-well',     true,  'o'),
 };
 
 export function isTileChar(c: string): c is TileChar {

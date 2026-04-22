@@ -24,6 +24,9 @@
  *   https://github.com/mordrax/cotwelm/blob/master/src/CharCreation.elm
  */
 
+import type { Item } from './items.ts';
+import { makeStartingLoadout } from './items.ts';
+
 // ── Creation constants ────────────────────────────────────────────────────────
 
 export const STAT_MIN = 10;
@@ -81,7 +84,48 @@ export interface Character {
   maxHitPoints: number;
   mana: number;
   maxMana: number;
-  gold: number;
+  /** Spell IDs the character has learned. */
+  spells: string[];
+
+  // ── Equipment slots ─────────────────────────────────────────────────────────
+  /** Weapon in the main (right) hand. */
+  weapon: Item | null;
+  /** Off-hand (torch, wand, held item — not a shield). */
+  freeHand: Item | null;
+  /** Worn body armour. */
+  armor: Item | null;
+  /** Worn helmet. */
+  helm: Item | null;
+  /** Worn shield (equipped to body, separate from hands). */
+  shield: Item | null;
+  /** Worn boots. */
+  boots: Item | null;
+  /** Worn cloak. */
+  cloak: Item | null;
+  /** Worn bracers. */
+  bracers: Item | null;
+  /** Worn gauntlets. */
+  gauntlets: Item | null;
+  /** Ring on left hand. */
+  ringLeft: Item | null;
+  /** Ring on right hand. */
+  ringRight: Item | null;
+  /** Worn amulet / necklace. */
+  amulet: Item | null;
+  /**
+   * Worn belt (container with item slots).
+   * Each slot holds a single item; slot count depends on belt type.
+   */
+  belt: Item | null;
+
+  // ── Carried containers ──────────────────────────────────────────────────────
+  /**
+   * Carried purse (container with coin slots).
+   * Coins live inside this item, not as raw numbers on the character.
+   */
+  purse: Item | null;
+  /** Carried pack (container with a weight-limited bulk slot). */
+  pack: Item | null;
 }
 
 // ── Point-buy helpers ─────────────────────────────────────────────────────────
@@ -215,10 +259,12 @@ export function createCharacter(
   gender: Gender,
   difficulty: Difficulty,
   stats: CharacterStats,
+  startingSpell: string,
 ): Character {
   const derived = computeDerived(stats, difficulty);
   const maxHp = derivedMaxHitPoints(stats);
   const maxMana = derivedMaxMana(stats);
+  const loadout = makeStartingLoadout();
   return {
     name: name.trim(),
     gender,
@@ -231,7 +277,22 @@ export function createCharacter(
     maxHitPoints: maxHp,
     mana: maxMana,
     maxMana,
-    gold: 20 + Math.floor(Math.random() * 30),
+    spells: [startingSpell],
+    weapon:    loadout.weapon,
+    freeHand:  null,
+    armor:     null,
+    helm:      null,
+    shield:    null,
+    boots:     null,
+    cloak:     null,
+    bracers:   null,
+    gauntlets: null,
+    ringLeft:  null,
+    ringRight: null,
+    amulet:    null,
+    belt:      null,
+    purse:     loadout.purse,
+    pack:      loadout.pack,
   };
 }
 

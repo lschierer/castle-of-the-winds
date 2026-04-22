@@ -22,8 +22,9 @@
  *   (15,6)  Farm House   → row 6,  col 15 = '!' (center left face)  ✓
  *   (11,21) Temple       → row 21, col 11 = '!' (center north face) ✓
  *
- * Hero starting position in village: (11,17) per Hero.elm.
- * Hero exits village via 'e' at (11,18) → farm-map (11,31).
+ * Hero starting position in village: (11,17) per Hero.elm (one tile north of the well).
+ * Village well at (11,18) — decorative 'w' tile.
+ * Village exits only via north gate (row 0, cols 10–12) → farm-map (11,31).
  */
 
 import { getTile, type TileDef } from './tiles.ts';
@@ -93,7 +94,7 @@ const VILLAGE_ROWS: string[] = [
   '====,,,,,,,.,,,,,,,,,===',  // row 15
   '====,,,,,,,.,,,,,,,,,===',  // row 16
   '====,,###.....###,======',  // row 17
-  '====,,###!.e.!###,======',  // row 18  → Weaponsmith (9,18), General Store (13,18), exit (11,18)
+  '====,,###!.w.!###,======',  // row 18  → Weaponsmith (9,18), General Store (13,18), well (11,18)
   '====,,###,...,###,======',  // row 19
   '====,,,,,,,.,,,,,,======',  // row 20
   '====,,,,,,,!,,,,,,======',  // row 21  → Temple of Odin door at (11,21) center north face
@@ -275,12 +276,6 @@ export const VILLAGE_MAP: WorldMap = makeMap(
     { position: { x: 10, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' },
     { position: { x: 11, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' },
     { position: { x: 12, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' },
-    // 'e' tile — secondary exit used when navigating the village interior path.
-    {
-      position: { x: 11, y: 18 },
-      targetMap: 'farm-map',
-      targetPosition: { x: 11, y: 31 },
-    },
   ],
 );
 

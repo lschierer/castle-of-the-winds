@@ -103,6 +103,33 @@ const VILLAGE_BUILDINGS: BuildingRegion[] = [
   { originX: 10, originY: 0, cols: 3, rows: 1, sprite: `${BITMAPS}/hamgate.png` },
 ];
 
+/**
+ * Diagonal road corner sprite for a ';' tile in the farm-map.
+ * Looks at which two cardinal neighbours have road/path tiles and picks
+ * the matching ROCKRD diagonal (yellow = grass half, gray = road half).
+ */
+function diagonalRoadSprite(map: WorldMap, x: number, y: number): string {
+  const isPath = (tx: number, ty: number): boolean => {
+    const c = mapChar(map, tx, ty);
+    return c === '.' || c === ';';
+  };
+  const rN = isPath(x, y - 1);
+  const rS = isPath(x, y + 1);
+  const rE = isPath(x + 1, y);
+  const rW = isPath(x - 1, y);
+
+  // Road in upper-left (path enters from W or S, exits to N or E... W→N corner)
+  if (rW && rN) return `${BITMAPS}/URROCKRD.png`;
+  // Road in lower-right (S→E corner)
+  if (rS && rE) return `${BITMAPS}/LLROCKRD.png`;
+  // Road in upper-right (N→E corner)
+  if (rN && rE) return `${BITMAPS}/LRROCKRD.png`;
+  // Road in lower-left (S→W corner)
+  if (rS && rW) return `${BITMAPS}/ULROCKRD.png`;
+  // Fallback — just use road so the path doesn't vanish
+  return `${BITMAPS}/road.png`;
+}
+
 function villageBuilding(x: number, y: number): BuildingRegion | undefined {
   return VILLAGE_BUILDINGS.find(
     (b) =>
@@ -264,7 +291,12 @@ export function getTileStyle(
       break;
 
     case '=':
-      style = singleLayer(`${BITMAPS}/WATER.png`, TILE32, REPEAT_TILE);
+      // Village boundary tiles are impassable void, not water.
+      if (map.id === 'village') {
+        style = singleLayer(`${BITMAPS}/blank.png`, TILE32, REPEAT_TILE);
+      } else {
+        style = singleLayer(`${BITMAPS}/WATER.png`, TILE32, REPEAT_TILE);
+      }
       break;
 
     case 'o':
@@ -277,7 +309,13 @@ export function getTileStyle(
 
     // ── Village features (icon over grass) ───────────────────────────────────
     case ';':
-      style = twoLayer(`${ICONS}/gardentr.png`, GRASS, TILE32, TILE32, REPEAT_NO, REPEAT_TILE);
+      // Village: farmland tiles near the farmhouses.
+      // Farm-map: diagonal path corners — context-sensitive ROCKRD tile.
+      if (map.id === 'village') {
+        style = singleLayer(`${BITMAPS}/FARMLAND.png`, TILE32, REPEAT_TILE);
+      } else {
+        style = singleLayer(diagonalRoadSprite(map, x, y), TILE32, REPEAT_NO);
+      }
       break;
 
     case '!':
@@ -293,8 +331,13 @@ export function getTileStyle(
       break;
 
     case 'e':
-      // Village exit back to farm-map — looks like a staircase / archway
+      // Dungeon entrance/exit staircase
       style = twoLayer(`${ICONS}/stairsup.png`, GRASS, TILE32, TILE32, REPEAT_NO, REPEAT_TILE);
+      break;
+
+    case 'w':
+      // Decorative village well — well icon over grass
+      style = twoLayer(`${ICONS}/well.png`, GRASS, TILE32, TILE32, REPEAT_NO, REPEAT_TILE);
       break;
 
     // ── Village building walls ('#') ─────────────────────────────────────────

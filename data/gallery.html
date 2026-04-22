@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sprite Gallery — Castle of the Winds Shrine</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 4px;
+    padding: 0.5rem;
+  }
+  .sprite-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 5px 3px 4px;
+    background: var(--win-silver-dk);
+    border-color: var(--win-border-dk) var(--win-border-lt) var(--win-border-lt) var(--win-border-dk);
+    border-style: solid;
+    border-width: 1px;
+    cursor: default;
+    position: relative;
+  }
+  .sprite-cell:hover {
+    background: rgba(0,0,128,0.3);
+    border-color: var(--win-border-lt) var(--win-border-dk) var(--win-border-dk) var(--win-border-lt);
+    z-index: 2;
+  }
+  .sprite-cell img {
+    width: 32px;
+    height: 32px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  .sprite-name {
+    font-family: var(--font-ui);
+    font-size: 0.5rem;
+    color: var(--win-text-dim);
+    text-align: center;
+    word-break: break-all;
+    line-height: 1.2;
+    max-width: 66px;
+  }
+  .sprite-cell:hover .sprite-name { color: var(--win-text); }
+
+  /* Tooltip on hover */
+  .sprite-cell:hover::after {
+    content: attr(data-name);
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--win-titlebar);
+    color: white;
+    font-family: var(--font-ui);
+    font-size: 0.6rem;
+    padding: 2px 6px;
+    white-space: nowrap;
+    z-index: 100;
+    pointer-events: none;
+  }
+
+  .filter-bar {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding: 0.5rem;
+    background: var(--win-silver);
+    border-bottom: 2px solid var(--win-border-dk);
+  }
+  .filter-btn {
+    font-family: var(--font-ui);
+    font-size: 0.65rem;
+    padding: 3px 9px;
+    background: var(--win-silver-dk);
+    color: var(--win-text);
+    border-color: var(--win-border-lt) var(--win-border-dk) var(--win-border-dk) var(--win-border-lt);
+    border-style: solid;
+    border-width: 2px;
+    cursor: pointer;
+  }
+  .filter-btn:hover, .filter-btn.active {
+    background: var(--win-titlebar);
+    color: white;
+    border-color: var(--win-border-dk) var(--win-border-lt) var(--win-border-lt) var(--win-border-dk);
+  }
+
+  .bitmap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+    padding: 0.5rem;
+  }
+  .bitmap-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 4px;
+    background: var(--win-silver-dk);
+    border-color: var(--win-border-dk) var(--win-border-lt) var(--win-border-lt) var(--win-border-dk);
+    border-style: solid;
+    border-width: 1px;
+  }
+  .bitmap-cell img {
+    max-width: 100%;
+    image-rendering: pixelated;
+  }
+  .bitmap-name {
+    font-family: var(--font-ui);
+    font-size: 0.5rem;
+    color: var(--win-text-dim);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="desktop">
+  <div id="taskbar" class="taskbar"></div>
+
+  <div class="window" style="margin-top:1.5rem;">
+    <div class="window-titlebar">
+      <span class="window-title">🖼️ Sprite Gallery — Castle of the Winds Original Assets</span>
+      <div class="window-controls">
+        <div class="window-btn">_</div><div class="window-btn">□</div><div class="window-btn">✕</div>
+      </div>
+    </div>
+    <div class="window-menubar">
+      <a href="index.html" class="menu-item">← Home</a>
+      <span class="menu-item">Icons</span>
+      <span class="menu-item">Cursors</span>
+      <span class="menu-item">Bitmaps</span>
+    </div>
+
+    <div class="window-body">
+      <div class="textbox" style="margin-bottom:0.8rem;">
+        <p>All original 32×32 icon sprites from <code>CASTLE1.EXE</code>, extracted as PNG files. These are the actual Windows 3.1 <code>.ICO</code> resources created by artist <strong>Paul Canniff</strong> — every monster, item, spell effect, terrain tile, and UI element in the game. Displayed at 2× scale (64×64 pixels). Hover for the original filename.</p>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar" id="filterBar">
+      <button class="filter-btn active" onclick="filterSprites('all', this)">All (295)</button>
+      <button class="filter-btn" onclick="filterSprites('monster', this)">Monsters</button>
+      <button class="filter-btn" onclick="filterSprites('item', this)">Items</button>
+      <button class="filter-btn" onclick="filterSprites('spell', this)">Spells</button>
+      <button class="filter-btn" onclick="filterSprites('terrain', this)">Terrain</button>
+      <button class="filter-btn" onclick="filterSprites('ui', this)">UI / Other</button>
+    </div>
+
+    <div class="gallery-grid" id="iconGallery"></div>
+
+    <div class="window-body" style="margin-top:0.5rem;">
+      <div class="section-label">Item Cursors (Drag-and-Drop)</div>
+      <div class="textbox" style="margin-bottom:0.5rem;">
+        <p>When you drag an item onto your paper doll, the cursor changes to show the item you're carrying. These 32×32 cursor graphics are what you see attached to your mouse pointer during inventory management — one of the earliest implementations of this interface paradigm in a PC RPG.</p>
+      </div>
+    </div>
+    <div class="gallery-grid" id="cursorGallery"></div>
+
+    <div class="window-body" style="margin-top:0.5rem;">
+      <div class="section-label">Multi-tile Bitmaps (Town &amp; Spell Effects)</div>
+      <div class="textbox" style="margin-bottom:0.5rem;">
+        <p>Larger bitmaps embedded directly in the executable. These include town building graphics (multiple tiles wide), ball spell animations (Cold Ball, Fireball, Ball Lightning), and overworld terrain pieces. Unlike the icon sprites, these are stored as raw Windows BMP resources rather than ICO format.</p>
+      </div>
+    </div>
+    <div class="bitmap-grid" id="bitmapGallery"></div>
+
+    <div class="statusbar">
+      <div class="status-panel">gallery.html</div>
+      <div class="status-panel" id="galleryCount">295 icon sprites · 34 cursors · 131 bitmaps</div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <span>castleofthewinds.com — Fan shrine. Not affiliated with Rick Saada or Epic MegaGames.</span>
+    <span>Original artwork © Paul Canniff / SaadaSoft 1989–1993.</span>
+  </footer>
+</div>
+
+<script src="nav.js"></script>
+<script>
+// ── Sprite categorization ──────────────────────────────────────────────────
+const CATEGORIES = {
+  monster: [
+    'ant','BAT','bat','bandit','bearman','bear','bdragon','BRBDEVIL','bullman',
+    'carrion','cbear','dog','ETTIN','FIGIANTK','figiant','FRGIANTK','frgiant',
+    'GELCUBE','GHOST','goblin','goblinf','gdragon','HGIANTK','hgiant','HNNDDEVIL',
+    'humanoid','ICEDEVIL','lizard','man','MANTICOR','necroman','ogre','PITDEVIL',
+    'prisoner','rat','ratman','rdragon','RSNAKE','SCORPION','SGIANTK','SHADE',
+    'shadow','skeleton','SLIME','snake','SPECTRE','spider','SURTUR','THIEF',
+    'TROLL','VAMPIRE','warroir','warrior','wdragon','wight','wolf','wolfman',
+    'woman','wraith','wwolf','zombie','WIZARD','oportcul','portcull'
+  ],
+  spell: [
+    'acid','COLDBALL','COLDBLTD','COLDBLTL','COLDBLTR','COLDBLTU',
+    'DDBCOLD','DDBELEC','DDBFIRE','DDBPOIS',
+    'ELECBLTD','ELECBLTL','ELECBLTR','ELECBLTU',
+    'FIREBLTD','FIREBLTL','FIREBLTR','FIREBLTD','FIREBLTU','HDBCOLD','HDBELEC','HDBFIRE','HDBPOIS',
+    'ICEBALL','LGHTBALL','fireball',
+    'MAGCBLTD','MAGCBLTL','MAGCBLTL','MAGCBLTD',
+    'MAGCBLTR','MAGCBLTU',
+    'MSPIKESD','MSPIKESI','MSPIKESR','MSPIKESU',
+    'VDBCOLD','VDBELEC','VDBFIRE','VDBPOIS',
+    'arrowd','arrowl','arrowr','arrowu','arrow',
+    'lightng1','lightng2','lightng3',
+    'teleport','whirl1','whirl2','gas','fire','fire2','fire3',
+    'scorch','BOULDER','dart','glyph','PENTAGRAM','PENTARGM',
+  ],
+  item: [
+    'amulet','amu_burd','amu_cold','amu_fire','amu_king','amu_lght','amu_life',
+    'armor','armor_c','armor_e2','armor_r',
+    'BAG','bag','BAXE','baxe_c2','baxe_e','belt','belt_brk','beltquiv','beltutil',
+    'blade','BOOK_unk','BOOts_c','BOOtslev','BOOtsspd','boots','boots_b',
+    'Bracer_c','Bracer_e','bracers','bracer_r',
+    'casket','CHEST','chest','Cloak_c','Cloak_e','cloak','cloak_r','club','club_c','club_e',
+    'copper','flail','flail_c','flail_e','food','gadget',
+    'gaunt_c','gaunt_p','gaunt_r','gaunt_sl','gauntlet',
+    'gold','Hammer_c','hammer','hammer_e',
+    'helm_b','helmet','helmet_c','helmet_e','helmet_s','helmet_v',
+    'LARMOR','LARMORL','larmor_c','larmor_e',
+    'LHELMET','lhelm_c','lhelm_e',
+    'lshield','lshld_c','lshld_e',
+    'MACE','mace_c','mace_e','message',
+    'mstar','mstar_c','mstar_e',
+    'pack','pack_b','pack_e','pile','platinum','potion',
+    'pot_ccw','pot_clw','pot_csw','pot_det','pot_gain','pot_loss','pot_watr',
+    'purse','ring','ring_c3','ring_e2','runes',
+    'scroll','shield','shield_2','shield_b','shield_c','silver',
+    'spear','spear_c','spear_e','staff',
+    'staffCCW','staffCSW','staffHEL','staffIDE','staffWOR','staff_C','staffded',
+    'sword','sword_b','sword_c3','sword_e3',
+    'wand','wand_cb','wand_cba','wand_fb','wand_fba','wand_lb','wand_lba','wand_lt',
+    'wanddead','wanddetc',
+  ],
+  terrain: [
+    'altar','bdoor3','BED','bed','bstatue','castle2','cdoor','column',
+    'deadfall','downzm','easy','fire','fountain','garden','gardentr',
+    'gate_E','gate_N','gate_S','gate_W',
+    'hard','istatue','medium','mine',
+    'mstatue','odoor','pit','pool','rubble','sign','stairsdn','stairsup',
+    'statue','TABLE2','table2','tomb','tomb_brk','trapdoor','veryhard',
+    'wagon','wagonbrn','wall_NE','wall_NEI','wall_NW','wall_NWI',
+    'wall_SE','wall_SEI','wall_SW','wall_SWI',
+    'wdgateel','wdgateeu','wdgaten','wdwallne','wdwallnw','wdwallse','wdwallsw',
+    'web','well','wellpois','wstatue','throne',
+    'AIRELEM','EARTHELE','FIREELEM','WATERELE','dustele','iceele','magmaele',
+  ],
+};
+
+// Icons pulled from img/icons/ directory
+const ALL_ICONS = [
+  "AIRELEM","BAG","BAT","BAXE","BED","BOOK_unk","BOOts_c","BOOtslev","BOOtsspd",
+  "BOULDER","BRBDEVIL","Bracer_c","Bracer_e","CHEST","COLDBLTD","COLDBLTL","COLDBLTR","COLDBLTU",
+  "Cloak_c","Cloak_e","EARTHELE","ELECBLTD","ELECBLTL","ELECBLTR","ELECBLTU","ETTIN",
+  "FIGIANTK","FIREBLTD","FIREBLTL","FIREBLTR","FIREBLTD","FIREELEM","FRGIANTK",
+  "GELCUBE","GHOST","HGIANTK","HNNDDEVIL","Hammer_c","ICEBALL","ICEDEVIL",
+  "LARMOR","LHELMET","MACE","MAGCBLTD","MAGCBLTL","MAGCBLTR","MAGCBLTU","MANTICOR",
+  "MSPIKESD","MSPIKESI","MSPIKESR","MSPIKESU","PENTARGM","PITDEVIL","RSNAKE","SCORPION",
+  "SGIANTK","SHADE","SLIME","SPECTRE","STRAW1","SURTUR","TABLE2","THIEF","TROLL",
+  "VAMPIRE","WATERELE","WIZARD","acid","altar","amu_burd","amu_cold","amu_fire",
+  "amu_king","amu_lght","amu_life","amulet","ant","armor","armor_c","armor_e2","armor_r",
+  "arrowad","arrow","arrowd","arrowl","arrowr","arrowu","bandit","baxe_c2","baxe_e",
+  "bdoor3","bdragon","bear","bearman","belt","belt_brk","beltquiv","beltutil",
+  "blade","boots","boots_b","bracer_r","bracers","bstatue","bullman","carrion","casket",
+  "castle2","cbear","cdoor","cloak","cloak_r","club","club_c","club_e","column","copper",
+  "dart","deadfall","dog","dustele","easy","figiant","fire","fire2","fire3","fireball",
+  "flail","flail_c","flail_e","food","force","fountain","frgiant","gadget","garden",
+  "gardentr","gas","gate_E","gate_N","gate_S","gate_W","gaunt_c","gaunt_p","gaunt_r",
+  "gaunt_sl","gauntlet","gdragon","glyph","goblin","goblinf","gold","hammer","hammer_e",
+  "hard","helm_b","helmet","helmet_c","helmet_e","helmet_s","helmet_v","hgiant","humanoid",
+  "iceele","istatue","larmor_c","larmor_e","lhelm_c","lhelm_e","lightng1","lightng2",
+  "lightng3","lizard","lshield","lshld_c","lshld_e","mace_c","mace_e","magmaele","man",
+  "medium","message","mine","mstar","mstar_c","mstar_e","mstatue","necroman","odoor","ogre",
+  "oportcul","pack","pack_b","pack_e","pile","pit","platinum","pool","portcull","pot_ccw",
+  "pot_clw","pot_csw","pot_det","pot_gain","pot_loss","pot_watr","potion","prisoner",
+  "purse","rat","ratman","rdragon","ring","ring_c3","ring_e2","rubble","runes","scorch",
+  "scroll","sgiant","shadow","shield","shield_2","shield_b","shield_c","sign","silver",
+  "skeleton","snake","spear","spear_c","spear_e","spider","staff","staffCCW","staffCSW",
+  "staffHEL","staffIDE","staffWOR","staff_C","staffded","stairsdn","stairsup","statue",
+  "sword","sword_b","sword_c3","sword_e3","teleport","thief","throne","tomb","tomb_brk",
+  "trapdoor","veryhard","wagon","wagonbrn","wall_NE","wall_NEI","wall_NW","wall_NWI",
+  "wall_SE","wall_SEI","wall_SW","wall_SWI","wand","wand_cb","wand_cba","wand_fb",
+  "wand_fba","wand_lb","wand_lba","wand_lt","wanddead","wanddetc","warrior","wdgateel",
+  "wdgateeu","wdgaten","wdragon","wdwallne","wdwallnw","wdwallse","wdwallsw","web","well",
+  "wellpois","whirl1","whirl2","wight","wolf","wolfman","woman","wraith","wstatue","wwolf",
+  "zombie","LGHTBALL","VDBCOLD","VDBELEC","VDBFIRE","VDBPOIS","HDBCOLD","HDBELEC",
+  "HDBFIRE","HDBPOIS","DDBCOLD","DDBELEC","DDBFIRE","DDBPOIS"
+];
+
+const CURSORS = [
+  "BOOK","amulet","armor","bag","baxe","belt","boots","bracers","chest","cloak",
+  "club","flail","food","gauntlet","hammer","helmet","mace","pack","potion","purse",
+  "ring","scroll","shield","spear","staff","sword","wand"
+];
+
+const BITMAPS = [
+  "COLDBALL","LGHTBALL","fireball","DDBCOLD","DDBELEC","DDBFIRE","DDBPOIS",
+  "HDBCOLD","HDBELEC","HDBFIRE","HDBPOIS","VDBCOLD","VDBELEC","VDBFIRE","VDBPOIS",
+  "HSBOT","HSSIDE","HSTOP",
+  "bank","bank2","bldbrnlf","bldbrnrt","bldhchlf","bldhchrt","bldrdhur",
+  "citywiz","firepitl","hamgate",
+  "BtGrasMn","BtMounPk","FARMLAND","LFMounPk","LLROCKFL","LLROCKLF","LLROCKRD",
+  "LRROCKFL","LRROCKLF","LRROCKRD","PEAKne","PEAKnw","PEAKse","PEAKsw",
+  "RTMounPk","ULROCKFL","ULROCKLF","ULROCKRD","URROCKFL","URROCKLF","URROCKRD",
+  "WATER","Westcren","altarzm","columnzm","doorzm","downzm","eastcren","floor",
+  "fountzm","grass","2x3_2","2x3_3","2x3_4","3x2_1",
+  "ST3x4A","ST3x4B","ST3x4C","ST3x4D","ST3x4E","ST3x4F","ST3x4G","ST3x4I","ST3x4J","ST3x5H",
+  "blank","road","road_downleft","road_downright","road_upright"
+];
+
+function getCategory(name) {
+  const n = name.toLowerCase();
+  for (const [cat, list] of Object.entries(CATEGORIES)) {
+    if (list.some(x => x.toLowerCase() === n)) return cat;
+  }
+  return 'ui';
+}
+
+let currentFilter = 'all';
+
+function filterSprites(cat, btn) {
+  currentFilter = cat;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderIcons();
+}
+
+function renderIcons() {
+  const grid = document.getElementById('iconGallery');
+  grid.innerHTML = '';
+  let count = 0;
+  ALL_ICONS.forEach(name => {
+    if (currentFilter !== 'all' && getCategory(name) !== currentFilter) return;
+    const cell = document.createElement('div');
+    cell.className = 'sprite-cell';
+    cell.setAttribute('data-name', name + '.png');
+    cell.innerHTML = `
+      <img src="img/icons/${name}.png" alt="${name}" onerror="this.parentElement.style.display='none'">
+      <div class="sprite-name">${name}</div>
+    `;
+    grid.appendChild(cell);
+    count++;
+  });
+  document.getElementById('galleryCount').textContent =
+    `${count} icons shown · 34 cursors · 131 bitmaps`;
+}
+
+function renderCursors() {
+  const grid = document.getElementById('cursorGallery');
+  CURSORS.forEach(name => {
+    const cell = document.createElement('div');
+    cell.className = 'sprite-cell';
+    cell.setAttribute('data-name', name + '.png');
+    cell.innerHTML = `
+      <img src="img/cursors/${name}.png" alt="${name}" onerror="this.parentElement.style.display='none'">
+      <div class="sprite-name">${name}</div>
+    `;
+    grid.appendChild(cell);
+  });
+}
+
+function renderBitmaps() {
+  const grid = document.getElementById('bitmapGallery');
+  BITMAPS.forEach(name => {
+    const cell = document.createElement('div');
+    cell.className = 'bitmap-cell';
+    cell.innerHTML = `
+      <img src="img/bitmaps/${name}.png" alt="${name}" onerror="this.parentElement.style.display='none'" style="max-height:80px;">
+      <div class="bitmap-name">${name}</div>
+    `;
+    grid.appendChild(cell);
+  });
+}
+
+renderIcons();
+renderCursors();
+renderBitmaps();
+</script>
+</body>
+</html>
