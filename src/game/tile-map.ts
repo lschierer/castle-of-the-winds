@@ -1,0 +1,130 @@
+/**
+ * Typed tile map system.
+ *
+ * Each tile is a structured object instead of a single ASCII character.
+ * This eliminates context-dependent character interpretation and provides
+ * a natural place for per-tile state (items, monsters) in the future.
+ */
+
+// ── Core types ────────────────────────────────────────────────────────────────
+
+export type Terrain =
+  | 'grass'
+  | 'road'
+  | 'farmland'
+  | 'mountain'
+  | 'floor'    // dungeon floor
+  | 'void';    // impassable empty space
+
+export type Feature =
+  | 'wall'           // generic building wall / dungeon wall
+  | 'door'           // building entrance
+  | 'well'
+  | 'stairs-up'
+  | 'sign'
+  | 'gate'           // village gate (multi-tile)
+  | 'mine-entrance'
+  | 'diagonal-road'  // ROCKRD corner piece on farm-map
+  | 'burnt-ruin';    // charred farm remains
+
+/** Direction hint for features that need orientation (diagonal roads, walls). */
+export type Direction = 'N' | 'S' | 'E' | 'W' | 'NE' | 'NW' | 'SE' | 'SW';
+
+export type MapId = 'village' | 'farm-map' | 'dungeon-1';
+
+export interface Vec2 {
+  x: number;
+  y: number;
+}
+
+export interface Building {
+  position: Vec2;
+  name: string;
+  description: string;
+}
+
+export interface MapExit {
+  position: Vec2;
+  targetMap?: MapId;
+  targetPosition?: Vec2;
+  narrative?: string;
+  message?: string;
+}
+
+import type { Item } from './items.ts';
+
+/**
+ * A single map cell. All rendering and gameplay info is explicit.
+ */
+export interface Tile {
+  terrain: Terrain;
+  walkable: boolean;
+  feature?: Feature;
+  direction?: Direction;
+  buildingId?: string;
+  exit?: MapExit;
+  building?: Building;
+  /** Items lying on the ground at this tile. */
+  items: Item[];
+}
+
+/**
+ * A complete map level. Replaces the old WorldMap with its ASCII rows.
+ */
+export interface TileMap {
+  id: MapId;
+  width: number;
+  height: number;
+  /** Row-major grid: tiles[y][x]. */
+  tiles: Tile[][];
+  /** Where the hero spawns when first entering this map. */
+  entryPosition: Vec2;
+}
+
+// ── Accessors ─────────────────────────────────────────────────────────────────
+
+const VOID_TILE: Tile = { terrain: 'void', walkable: false, items: [] };
+
+export function getTileAt(map: TileMap, x: number, y: number): Tile {
+  if (y < 0 || y >= map.height) return VOID_TILE;
+  const row = map.tiles[y];
+  if (!row || x < 0 || x >= map.width) return VOID_TILE;
+  return row[x] ?? VOID_TILE;
+}
+
+export function isWalkable(map: TileMap, x: number, y: number): boolean {
+  return getTileAt(map, x, y).walkable;
+}
+
+export function exitAt(map: TileMap, x: number, y: number): MapExit | undefined {
+  return getTileAt(map, x, y).exit;
+}
+
+export function buildingAt(map: TileMap, x: number, y: number): Building | undefined {
+  return getTileAt(map, x, y).building;
+}
+
+// ── Ground item operations ────────────────────────────────────────────────────
+
+/** Drop an item onto a tile. */
+export function dropItem(map: TileMap, x: number, y: number, item: Item): void {
+  const tile = getTileAt(map, x, y);
+  if (tile === VOID_TILE) return;
+  tile.items.push(item);
+}
+
+/** Pick up an item from a tile by id. Returns the item, or undefined. */
+export function pickupItem(map: TileMap, x: number, y: number, itemId: string): Item | undefined {
+  const tile = getTileAt(map, x, y);
+  const idx = tile.items.findIndex((i) => i.id === itemId);
+  if (idx === -1) return undefined;
+  return tile.items.splice(idx, 1)[0];
+}
+
+/** Pick up all items from a tile. Returns the items array (now empty on tile). */
+export function pickupAllItems(map: TileMap, x: number, y: number): Item[] {
+  const tile = getTileAt(map, x, y);
+  const items = [...tile.items];
+  tile.items.length = 0;
+  return items;
+}

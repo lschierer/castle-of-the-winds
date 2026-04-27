@@ -16,7 +16,15 @@ The goal is to redevelop this as a single unified game available via a web exper
 * Documentation about decisions made should be in the docs directory, in Markdown format. 
 * Documentation necessary to understand & run the project should be in the docs directory, in Markdown format. 
 * The end result should deploy to an EC2 instance via CDK. CDK specific files should be in the infrastructure directory, but should be activated with a `mise run deploy-dev` and `mise run deploy-prod` target from the project root.
-* Use the resources at https://castleofthewinds.com/ and in [the existing elm attempt](https://github.com/mordrax/cotwelm) to understand the game mechanics and to obtain information on 
+* Use the the many internet resources including but not limited to 
+
+  *  https://castleofthewinds.com/ 
+  * [the existing elm attempt](https://github.com/mordrax/cotwelm) 
+  * [Dopefish Revisits Castle of the Winds](https://dopefishblog.com/2022/09/08/dopefish-revisits-castle-of-the-winds/)
+  * [Strategy Wiki Castle of the Winds](https://strategywiki.org/wiki/Castle_of_the_Winds)
+
+  to understand the game mechanics and to obtain information on 
+
   * items 
   * spells
   * bestiary (enemies)

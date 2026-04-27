@@ -560,3 +560,84 @@ export function equipItem(item: Item): { item: Item; stuck: boolean } {
   const identified = identifyItem(item);
   return { item: identified, stuck: identified.cursed };
 }
+
+// ── Item transfer operations ──────────────────────────────────────────────────
+
+/**
+ * Add an item to a container slot. Coins merge into existing stacks.
+ * Returns true if the item was added, false if it didn't fit.
+ */
+export function addToSlot(slot: ContainerSlot, item: Item): boolean {
+  // Coins merge into existing stack
+  if (item.kind === 'coin' && item.coinKind) {
+    const existing = slot.items.find((i) => i.coinKind === item.coinKind);
+    if (existing) {
+      existing.quantity += item.quantity;
+      return true;
+    }
+  }
+  if (!canAddToSlot(slot, item)) return false;
+  slot.items.push(item);
+  return true;
+}
+
+/**
+ * Remove an item from a container slot by id.
+ * Returns the removed item, or undefined if not found.
+ */
+export function removeFromSlot(slot: ContainerSlot, itemId: string): Item | undefined {
+  const idx = slot.items.findIndex((i) => i.id === itemId);
+  if (idx === -1) return undefined;
+  return slot.items.splice(idx, 1)[0];
+}
+
+/**
+ * Add coins to a purse. Creates the stack if needed.
+ */
+export function addCoins(purse: Item, kind: CoinKind, amount: number): void {
+  if (!purse.slots) return;
+  const slot = purse.slots.find((s) => s.coinKind === kind);
+  if (!slot) return;
+  const existing = slot.items.find((i) => i.coinKind === kind);
+  if (existing) {
+    existing.quantity += amount;
+  } else {
+    slot.items.push(makeCoinStack(kind, amount));
+  }
+}
+
+/**
+ * Remove coins from a purse. Returns actual amount removed (may be less than requested).
+ */
+export function removeCoins(purse: Item, kind: CoinKind, amount: number): number {
+  const stack = purseCoins(purse, kind);
+  if (!stack) return 0;
+  const removed = Math.min(stack.quantity, amount);
+  stack.quantity -= removed;
+  return removed;
+}
+
+/**
+ * Try to add an item to the first available slot in a container (pack or belt).
+ * Returns true if placed, false if no slot had room.
+ */
+export function addToContainer(container: Item, item: Item): boolean {
+  if (!container.slots) return false;
+  for (const slot of container.slots) {
+    if (addToSlot(slot, item)) return true;
+  }
+  return false;
+}
+
+/**
+ * Find and remove an item by id from any slot in a container.
+ * Returns the removed item, or undefined.
+ */
+export function removeFromContainer(container: Item, itemId: string): Item | undefined {
+  if (!container.slots) return undefined;
+  for (const slot of container.slots) {
+    const item = removeFromSlot(slot, itemId);
+    if (item) return item;
+  }
+  return undefined;
+}

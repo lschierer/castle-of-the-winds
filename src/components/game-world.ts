@@ -15,19 +15,22 @@ import { customElement, state } from 'lit/decorators.js';
 import type { Character } from '../game/character.ts';
 import { loadCharacter, saveCharacter } from '../game/save.ts';
 import {
-  type WorldMap,
+  type TileMap,
   type MapId,
   type Vec2,
   type Building,
+  type MapExit,
   ALL_MAPS,
   VILLAGE_MAP,
   isWalkable,
   buildingAt,
   exitAt,
+  getTileAt,
+  dropItem,
 } from '../game/world-map.ts';
 import { getTileStyle } from '../game/sprites.ts';
 import { spellById, SCHOOL_LABELS } from '../game/spells.ts';
-import { coinsIn, type Item } from '../game/items.ts';
+import { coinsIn, type Item, addToContainer, removeFromContainer, removeFromSlot, equipItem, displayName } from '../game/items.ts';
 import {
   type MonsterInstance,
   type PlayerStatus,
@@ -37,7 +40,7 @@ import {
   poisonTick,
   type SpecialAttack,
 } from '../game/combat.ts';
-import { monsterById, monstersForLevel, healthDescription } from '../game/monsters.ts';
+import { monsterById, monstersForLevel, healthDescription, rollMonsterLoot } from '../game/monsters.ts';
 import { ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../game/equipment.ts';
 import { getLogger } from '../game/logging.ts';
 
@@ -302,6 +305,48 @@ export class GameWorld extends LitElement {
 
     .overlay-close:hover { color: #d4a820; }
 
+    /* ── Item action menu ──────────────────────────── */
+    .action-menu-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.5);
+    }
+    .action-menu {
+      background: #1a1508;
+      border: 1px solid #5a4a2a;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      min-width: 160px;
+    }
+    .action-menu-title {
+      color: #d4a820;
+      font-size: 0.8rem;
+      text-align: center;
+      padding-bottom: 0.3rem;
+      border-bottom: 1px solid #3d3020;
+    }
+    .action-menu-btn {
+      background: transparent;
+      border: 1px solid #3d3020;
+      color: #c8b78e;
+      font-family: inherit;
+      font-size: 0.75rem;
+      padding: 0.35rem 0.5rem;
+      cursor: pointer;
+      text-align: left;
+    }
+    .action-menu-btn:hover {
+      background: #3d3020;
+      color: #f0e0a8;
+      border-color: #8b6914;
+    }
+
     /* Building overlay */
     .building-services {
       font-size: 0.78rem;
@@ -515,7 +560,7 @@ export class GameWorld extends LitElement {
   `;
 
   @state() private character: Character | null = null;
-  @state() private map: WorldMap = VILLAGE_MAP;
+  @state() private map: TileMap = VILLAGE_MAP;
   @state() private pos: Vec2 = { ...VILLAGE_MAP.entryPosition };
   @state() private messages: Array<{ text: string; fresh: boolean }> = [
     { text: 'You stand in the village. Arrow keys, WASD, or numpad to move.', fresh: true },
@@ -530,6 +575,9 @@ export class GameWorld extends LitElement {
   @state() private monsters: MonsterInstance[] = [];
   /** Active status effects on the player. */
   @state() private playerStatus: PlayerStatus = {};
+
+  /** Item action menu: which item is selected and where it came from. */
+  @state() private actionItem: { item: Item; source: 'equip' | 'pack' | 'belt' | 'ground'; slotName?: string } | null = null;
 
   /** Counter used to generate unique monster instance IDs. */
   private monsterSeq = 0;
@@ -556,6 +604,12 @@ export class GameWorld extends LitElement {
   // ── Input ─────────────────────────────────────────────────────────────────
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
+    // Prevent backspace from acting as browser "back" navigation
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      return;
+    }
+
     // Narrative overlay — any confirm key dismisses it
     if (this.narrative !== null) {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
@@ -588,6 +642,12 @@ export class GameWorld extends LitElement {
     }
     if (e.key === 'Escape') {
       e.preventDefault();
+      this.actionItem = null;
+      return;
+    }
+    if (e.key === 'g' || e.key === 'G') {
+      e.preventDefault();
+      this.pickupGround();
       return;
     }
 
@@ -623,8 +683,18 @@ export class GameWorld extends LitElement {
     this.pos = { x: nx, y: ny };
 
     // Special tile messages
-    const ch = this.map.rows[ny]?.[nx];
-    if (ch === 'w') {
+    const tile = getTileAt(this.map, nx, ny);
+
+    // Notify about ground items
+    if (tile.items.length > 0) {
+      if (tile.items.length === 1) {
+        this.pushMessage(`You see ${displayName(tile.items[0]!)} on the ground. (G to pick up)`);
+      } else {
+        this.pushMessage(`You see ${tile.items.length} items on the ground. (G to pick up)`);
+      }
+    }
+
+    if (tile.feature === 'well') {
       this.locationName = 'Village Well';
       this.pushMessage('You pause by the village well. The water looks clean.');
       this.runMonsterTurns();
@@ -644,7 +714,7 @@ export class GameWorld extends LitElement {
     this.runMonsterTurns();
   }
 
-  private triggerExit(exit: typeof this.map.exits[number]): void {
+  private triggerExit(exit: MapExit): void {
     if (exit.narrative !== undefined && exit.targetMap === undefined) {
       if (!this.farmNarrativeShown) {
         this.farmNarrativeShown = true;
@@ -752,6 +822,14 @@ export class GameWorld extends LitElement {
         this.character = newChar;
         saveCharacter(newChar);
         this.monsters = this.monsters.filter((m) => m.instanceId !== target.instanceId);
+        // Drop loot on the monster's tile
+        const loot = rollMonsterLoot(spec, 1); // TODO: use actual dungeon level
+        for (const item of loot) {
+          dropItem(this.map, target.x, target.y, item);
+        }
+        if (loot.length > 0) {
+          this.pushMessage(`The ${spec.name} drops ${loot.length === 1 ? displayName(loot[0]!) : `${loot.length} items`}.`);
+        }
       } else {
         const desc = healthDescription(newHp, spec.hp);
         this.pushMessage(`The ${spec.name} is ${desc}.`);
@@ -893,6 +971,7 @@ export class GameWorld extends LitElement {
           const spec = monsterById(monster.specId);
           const iconSrc = spec ? `/assets/sprites/icons/${spec.icon}` : '';
           tiles.push(html`<div class="tile" style="
+            background-color: ${s.backgroundColor ?? 'transparent'};
             background-image: ${s.backgroundImage};
             background-size: ${s.backgroundSize};
             background-position: ${s.backgroundPosition};
@@ -908,6 +987,7 @@ export class GameWorld extends LitElement {
           </div>`);
         } else {
           tiles.push(html`<div class="tile" style="
+            background-color: ${s.backgroundColor ?? 'transparent'};
             background-image: ${s.backgroundImage};
             background-size: ${s.backgroundSize};
             background-position: ${s.backgroundPosition};
@@ -966,15 +1046,190 @@ export class GameWorld extends LitElement {
     label: string,
     iconSrc: string,
     gridArea: string,
+    slotName?: string,
   ): TemplateResult {
+    const onClick = item ? (e: Event) => {
+      e.stopPropagation();
+      this.actionItem = { item, source: 'equip', slotName: slotName ?? gridArea };
+    } : undefined;
     return html`
-      <div class="equip-slot ${item ? 'filled' : ''}" style="grid-area:${gridArea}">
+      <div class="equip-slot ${item ? 'filled' : ''}" style="grid-area:${gridArea};${item ? 'cursor:pointer' : ''}" @click=${onClick}>
         <img class="equip-slot-icon" src="${iconSrc}" alt="${label}">
         ${item
-          ? html`<span class="equip-slot-name">${item.name}${item.enchantment !== 0 ? ` ${item.enchantment > 0 ? '+' : ''}${item.enchantment}` : ''}</span>`
+          ? html`<span class="equip-slot-name">${displayName(item)}</span>`
           : html`<span class="equip-slot-label">${label}</span>`}
       </div>
     `;
+  }
+
+  // ── Item action handlers ───────────────────────────────────────────────────
+
+  private readonly EQUIP_SLOT_MAP: Record<string, keyof Character> = {
+    weapon: 'weapon', armor: 'armor', helm: 'helm', shield: 'shield',
+    boots: 'boots', cloak: 'cloak', bracers: 'bracers', gauntlets: 'gauntlets',
+    'ring-l': 'ringLeft', 'ring-r': 'ringRight', amulet: 'amulet',
+    belt: 'belt', freeh: 'freeHand',
+  };
+
+  private readonly KIND_TO_SLOT: Record<string, string> = {
+    weapon: 'weapon', armor: 'armor', helm: 'helm', shield: 'shield',
+    boots: 'boots', cloak: 'cloak', bracers: 'bracers', gauntlets: 'gauntlets',
+    ring: 'ring-l', amulet: 'amulet', belt: 'belt',
+  };
+
+  private doUnequip(): void {
+    const a = this.actionItem;
+    const c = this.character;
+    if (!a || !c || a.source !== 'equip' || !a.slotName) return;
+    if (a.item.cursed && a.item.identified) {
+      this.pushMessage(`The ${a.item.name} is cursed and cannot be removed!`);
+      this.actionItem = null;
+      return;
+    }
+    const charKey = this.EQUIP_SLOT_MAP[a.slotName];
+    if (!charKey) return;
+    (c as Record<string, unknown>)[charKey] = null;
+    if (c.pack && addToContainer(c.pack, a.item)) {
+      this.pushMessage(`Unequipped ${displayName(a.item)} → pack.`);
+    } else {
+      dropItem(this.map, this.pos.x, this.pos.y, a.item);
+      this.pushMessage(`Unequipped ${displayName(a.item)} → ground (pack full).`);
+    }
+    this.actionItem = null;
+    saveCharacter(c);
+    this.requestUpdate();
+  }
+
+  private doEquipFromPack(item: Item): void {
+    const c = this.character;
+    if (!c || !c.pack) return;
+    const slotName = this.KIND_TO_SLOT[item.kind];
+    if (!slotName) {
+      this.pushMessage(`Cannot equip ${displayName(item)}.`);
+      this.actionItem = null;
+      return;
+    }
+    const charKey = this.EQUIP_SLOT_MAP[slotName];
+    if (!charKey) return;
+    // Remove from pack
+    const removed = removeFromContainer(c.pack, item.id);
+    if (!removed) return;
+    // If slot occupied, swap to pack
+    const current = (c as Record<string, unknown>)[charKey] as Item | null;
+    if (current) {
+      if (!addToContainer(c.pack, current)) {
+        dropItem(this.map, this.pos.x, this.pos.y, current);
+        this.pushMessage(`${displayName(current)} dropped (pack full).`);
+      }
+    }
+    // Equip (identifies the item)
+    const result = equipItem(removed);
+    (c as Record<string, unknown>)[charKey] = result.item;
+    if (result.stuck) {
+      this.pushMessage(`You equip the ${displayName(result.item)}… it's cursed!`);
+    } else {
+      this.pushMessage(`Equipped ${displayName(result.item)}.`);
+    }
+    this.actionItem = null;
+    saveCharacter(c);
+    this.requestUpdate();
+  }
+
+  private doDrop(): void {
+    const a = this.actionItem;
+    const c = this.character;
+    if (!a || !c) return;
+    if (a.source === 'equip' && a.slotName) {
+      if (a.item.cursed && a.item.identified) {
+        this.pushMessage(`The ${displayName(a.item)} is cursed and cannot be removed!`);
+        this.actionItem = null;
+        return;
+      }
+      const charKey = this.EQUIP_SLOT_MAP[a.slotName];
+      if (charKey) (c as Record<string, unknown>)[charKey] = null;
+    } else if (a.source === 'pack' && c.pack) {
+      removeFromContainer(c.pack, a.item.id);
+    } else if (a.source === 'belt' && c.belt) {
+      removeFromContainer(c.belt, a.item.id);
+    }
+    dropItem(this.map, this.pos.x, this.pos.y, a.item);
+    this.pushMessage(`Dropped ${displayName(a.item)}.`);
+    this.actionItem = null;
+    saveCharacter(c);
+    this.requestUpdate();
+  }
+
+  private renderActionMenu(): TemplateResult {
+    const a = this.actionItem;
+    if (!a) return html``;
+    const actions: Array<{ label: string; handler: () => void }> = [];
+
+    if (a.source === 'equip') {
+      actions.push({ label: 'Unequip', handler: () => { this.doUnequip(); } });
+      actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
+    } else if (a.source === 'pack' || a.source === 'belt') {
+      if (a.item.kind in this.KIND_TO_SLOT) {
+        actions.push({ label: 'Equip', handler: () => { this.doEquipFromPack(a.item); } });
+      }
+      actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
+    } else if (a.source === 'ground') {
+      actions.push({ label: 'Pick up', handler: () => { this.doPickup(a.item); } });
+    }
+
+    return html`
+      <div class="action-menu-backdrop" @click=${() => { this.actionItem = null; }}>
+        <div class="action-menu" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="action-menu-title">${displayName(a.item)}</div>
+          ${actions.map((act) => html`
+            <button class="action-menu-btn" @click=${act.handler}>${act.label}</button>
+          `)}
+          <button class="action-menu-btn" @click=${() => { this.actionItem = null; }}>Cancel</button>
+        </div>
+      </div>
+    `;
+  }
+
+  private doPickup(item: Item): void {
+    const c = this.character;
+    if (!c) return;
+    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+    const idx = tile.items.findIndex((i) => i.id === item.id);
+    if (idx === -1) return;
+    tile.items.splice(idx, 1);
+    if (c.pack && addToContainer(c.pack, item)) {
+      this.pushMessage(`Picked up ${displayName(item)}.`);
+    } else {
+      // No room — put it back
+      tile.items.push(item);
+      this.pushMessage(`Pack is full — cannot pick up ${displayName(item)}.`);
+    }
+    this.actionItem = null;
+    saveCharacter(c);
+    this.requestUpdate();
+  }
+
+  private pickupGround(): void {
+    const c = this.character;
+    if (!c) return;
+    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+    if (tile.items.length === 0) {
+      this.pushMessage('Nothing here to pick up.');
+      return;
+    }
+    // Pick up all items that fit in the pack
+    const remaining: Item[] = [];
+    for (const item of tile.items) {
+      if (c.pack && addToContainer(c.pack, item)) {
+        this.pushMessage(`Picked up ${displayName(item)}.`);
+      } else {
+        remaining.push(item);
+        this.pushMessage(`Pack full — cannot pick up ${displayName(item)}.`);
+      }
+    }
+    tile.items.length = 0;
+    tile.items.push(...remaining);
+    saveCharacter(c);
+    this.requestUpdate();
   }
 
   private renderInventoryOverlay(): TemplateResult {
@@ -1100,8 +1355,8 @@ export class GameWorld extends LitElement {
                   ${packItems.length === 0
                     ? html`<div class="inv-empty">Empty</div>`
                     : packItems.map((it) => html`
-                        <div class="inv-item">
-                          ${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${it.name}${it.enchantment !== 0 ? ` ${it.enchantment > 0 ? '+' : ''}${it.enchantment}` : ''}${it.cursed ? html` <span style="color:#a04040">(cursed)</span>` : ''}
+                        <div class="inv-item" style="cursor:pointer" @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'pack' }; }}>
+                          ${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:#a04040">(cursed)</span>` : ''}
                         </div>
                       `)}
                 </div>
@@ -1109,7 +1364,8 @@ export class GameWorld extends LitElement {
             ` : ''}
           </div>
 
-          <span class="overlay-close" @click=${() => { this.overlay = 'none'; }}>[ I / Esc to close ]</span>
+          <span class="overlay-close" @click=${() => { this.overlay = 'none'; this.actionItem = null; }}>[ I / Esc to close ]</span>
+          ${this.renderActionMenu()}
         </div>
       </div>
     `;

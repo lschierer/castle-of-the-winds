@@ -26,6 +26,7 @@
 
 import type { Item } from './items.ts';
 import { makeStartingLoadout } from './items.ts';
+import { ALL_EQUIPMENT_SPECS, specForItem } from './equipment.ts';
 
 // ── Creation constants ────────────────────────────────────────────────────────
 
@@ -294,6 +295,39 @@ export function createCharacter(
     purse:     loadout.purse,
     pack:      loadout.pack,
   };
+}
+
+// ── Equipment stat bonuses ────────────────────────────────────────────────────
+
+const EQUIPMENT_SLOTS: readonly (keyof Character)[] = [
+  'weapon', 'armor', 'helm', 'shield', 'boots', 'cloak',
+  'bracers', 'gauntlets', 'ringLeft', 'ringRight', 'amulet',
+];
+
+/**
+ * Compute effective stats including bonuses from all equipped gear.
+ * Only identified items contribute their bonuses (you don't know what
+ * an unidentified item does until you identify it — but equipping
+ * identifies it, so in practice all worn items are identified).
+ */
+export function effectiveStats(character: Character): CharacterStats {
+  const base = { ...character.stats };
+  for (const slot of EQUIPMENT_SLOTS) {
+    const item = character[slot] as Item | null;
+    if (!item) continue;
+    const spec = specForItem(item, ALL_EQUIPMENT_SPECS);
+    if (!spec?.statBonus) continue;
+    for (const [stat, bonus] of Object.entries(spec.statBonus)) {
+      if (stat in base) {
+        base[stat as StatName] += bonus as number;
+      }
+    }
+  }
+  // Clamp to valid range
+  for (const s of STAT_NAMES) {
+    base[s] = Math.max(0, Math.min(STAT_MAX, base[s]));
+  }
+  return base;
 }
 
 // ── Metadata ──────────────────────────────────────────────────────────────────
