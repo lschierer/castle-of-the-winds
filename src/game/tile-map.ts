@@ -21,6 +21,7 @@ export type Feature =
   | 'door'           // building entrance
   | 'well'
   | 'stairs-up'
+  | 'stairs-down'
   | 'sign'
   | 'gate'           // village gate (multi-tile)
   | 'mine-entrance'
@@ -30,7 +31,7 @@ export type Feature =
 /** Direction hint for features that need orientation (diagonal roads, walls). */
 export type Direction = 'N' | 'S' | 'E' | 'W' | 'NE' | 'NW' | 'SE' | 'SW';
 
-export type MapId = 'village' | 'farm-map' | 'dungeon-1';
+export type MapId = 'village' | 'farm-map' | 'dungeon-1' | `dungeon-${number}`;
 
 export interface Vec2 {
   x: number;

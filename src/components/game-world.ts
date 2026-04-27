@@ -13,7 +13,7 @@
 import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { Character } from '../game/character.ts';
-import { loadCharacter, saveCharacter } from '../game/save.ts';
+import { loadCharacter, saveCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
 import {
   type TileMap,
   type MapId,
@@ -40,8 +40,9 @@ import {
   poisonTick,
   type SpecialAttack,
 } from '../game/combat.ts';
-import { monsterById, monstersForLevel, healthDescription, rollMonsterLoot } from '../game/monsters.ts';
+import { monsterById, healthDescription, rollMonsterLoot } from '../game/monsters.ts';
 import { castSpell, spellTargetKind, type SpellTarget } from '../game/spell-engine.ts';
+import { generateFloor, type DungeonFloor } from '../game/dungeon-gen.ts';
 import { ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../game/equipment.ts';
 import { getLogger } from '../game/logging.ts';
 
@@ -587,12 +588,75 @@ export class GameWorld extends LitElement {
   private monsterSeq = 0;
   private farmNarrativeShown = false;
 
+  /** Generated dungeon floors, keyed by level number. */
+  private dungeonFloors = new Map<number, DungeonFloor>();
+  /** Current dungeon level (0 = not in dungeon). */
+  private currentDungeonLevel = 0;
+  /** Total floors in the mine dungeon. */
+  private readonly MINE_FLOORS = 4;
+
   private toggleOverlay(which: Overlay): void {
     this.overlay = this.overlay === which ? 'none' : which;
   }
 
+  private buildGameState(): GameState | null {
+    if (!this.character) return null;
+    // Save current floor's monsters back
+    if (this.currentDungeonLevel > 0) {
+      const floor = this.dungeonFloors.get(this.currentDungeonLevel);
+      if (floor) floor.monsters = this.monsters;
+    }
+    return {
+      character: this.character,
+      mapId: this.map.id,
+      pos: { ...this.pos },
+      currentDungeonLevel: this.currentDungeonLevel,
+      playerStatus: { ...this.playerStatus },
+      monsters: this.monsters,
+      dungeonFloors: Array.from(this.dungeonFloors.entries()).map(([level, floor]) => ({ level, floor })),
+      farmNarrativeShown: this.farmNarrativeShown,
+      savedAt: new Date().toISOString(),
+    };
+  }
+
+  private autoSave(): void {
+    const state = this.buildGameState();
+    if (state) saveGameState(state);
+  }
+
+  private manualSave(): void {
+    const state = this.buildGameState();
+    if (!state) return;
+    saveGameState(state);
+    downloadSave(state);
+    this.pushMessage('Game saved.');
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
+    // Try loading full game state first, fall back to character-only
+    const state = loadGameState();
+    if (state) {
+      this.character = state.character;
+      this.pos = state.pos;
+      this.currentDungeonLevel = state.currentDungeonLevel;
+      this.playerStatus = state.playerStatus;
+      this.monsters = state.monsters;
+      this.farmNarrativeShown = state.farmNarrativeShown;
+      // Restore dungeon floors
+      for (const { level, floor } of state.dungeonFloors) {
+        this.dungeonFloors.set(level, floor);
+      }
+      // Restore the correct map
+      if (state.currentDungeonLevel > 0) {
+        const floor = this.dungeonFloors.get(state.currentDungeonLevel);
+        if (floor) this.map = floor.map;
+      } else {
+        const staticMap = ALL_MAPS[state.mapId as keyof typeof ALL_MAPS];
+        if (staticMap) this.map = staticMap;
+      }
+      return;
+    }
     const character = loadCharacter();
     if (!character) {
       window.location.href = '/';
@@ -644,6 +708,11 @@ export class GameWorld extends LitElement {
       this.toggleOverlay('spells');
       return;
     }
+    if ((e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      this.manualSave();
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       this.actionItem = null;
@@ -665,6 +734,16 @@ export class GameWorld extends LitElement {
     if (e.key === 'g' || e.key === 'G') {
       e.preventDefault();
       this.pickupGround();
+      return;
+    }
+    if (e.key === '>' || e.key === '.') {
+      e.preventDefault();
+      this.useStairs('down');
+      return;
+    }
+    if (e.key === '<' || e.key === ',') {
+      e.preventDefault();
+      this.useStairs('up');
       return;
     }
 
@@ -718,6 +797,14 @@ export class GameWorld extends LitElement {
       return;
     }
 
+    // Notify about stairs (but don't auto-trigger — use < or > keys)
+    if (tile.feature === 'stairs-down') {
+      this.pushMessage('You see stairs leading down. (> to descend)');
+    }
+    if (tile.feature === 'stairs-up') {
+      this.pushMessage('You see stairs leading up. (< to ascend)');
+    }
+
     const building = buildingAt(this.map, nx, ny);
     if (building) {
       this.activeBuilding = building;
@@ -748,56 +835,87 @@ export class GameWorld extends LitElement {
   }
 
   private enterMap(id: MapId, position: Vec2): void {
-    this.map = ALL_MAPS[id];
-    this.pos = { ...position };
+    if (id.startsWith('dungeon-')) {
+      const level = parseInt(id.split('-')[1] ?? '1', 10);
+      this.enterDungeonFloor(level, position);
+      return;
+    }
+    const staticMap = ALL_MAPS[id as keyof typeof ALL_MAPS];
+    if (staticMap) {
+      this.map = staticMap;
+      this.pos = { ...position };
+      this.monsters = [];
+      this.currentDungeonLevel = 0;
+    }
     this.locationName = '';
     this.overlay = 'none';
     this.activeBuilding = null;
     logger.info(`Entering map: ${id}`);
-    if (id === 'dungeon-1') {
-      this.pushMessage('The air grows cold and damp. The mine yawns before you.');
-      this.spawnDungeonMonsters(1);
+  }
+
+  private enterDungeonFloor(level: number, position?: Vec2): void {
+    let floor = this.dungeonFloors.get(level);
+    if (!floor) {
+      floor = generateFloor({ dungeonLevel: level, totalFloors: this.MINE_FLOORS });
+      this.dungeonFloors.set(level, floor);
+      logger.info(`Generated dungeon floor ${level}: ${floor.map.width}×${floor.map.height}`);
+    }
+    this.map = floor.map;
+    this.pos = position ? { ...position } : { ...floor.stairsUp };
+    this.monsters = floor.monsters;
+    this.currentDungeonLevel = level;
+    this.locationName = `Mine — Floor ${level}`;
+    this.overlay = 'none';
+    this.activeBuilding = null;
+    this.pushMessage(`You are on floor ${level} of the mine.`);
+  }
+
+  private useStairs(direction: 'up' | 'down'): void {
+    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+    if (direction === 'down') {
+      if (tile.feature !== 'stairs-down') {
+        this.pushMessage('There are no stairs going down here.');
+        return;
+      }
+      this.descendStairs();
     } else {
-      this.monsters = [];
+      if (tile.feature !== 'stairs-up') {
+        this.pushMessage('There are no stairs going up here.');
+        return;
+      }
+      this.ascendStairs();
     }
   }
 
-  // ── Monster spawning ──────────────────────────────────────────────────────
-
-  private spawnDungeonMonsters(level: number): void {
-    const candidates = monstersForLevel(level).slice(0, 6); // limit pool
-    const walkable: Vec2[] = [];
-    const { rows } = this.map;
-    for (let y = 0; y < rows.length; y++) {
-      for (let x = 0; x < rows[y].length; x++) {
-        if (isWalkable(this.map, x, y) && (x !== this.pos.x || y !== this.pos.y)) {
-          walkable.push({ x, y });
-        }
-      }
+  private descendStairs(): void {
+    const nextLevel = this.currentDungeonLevel + 1;
+    if (nextLevel > this.MINE_FLOORS) {
+      this.pushMessage('There is no way deeper.');
+      return;
     }
-    // Shuffle walkable tiles and pick spawn points away from the player
-    const shuffled = walkable
-      .filter((p) => Math.abs(p.x - this.pos.x) + Math.abs(p.y - this.pos.y) > 8)
-      .sort(() => Math.random() - 0.5);
+    // Save current floor's monster state
+    const currentFloor = this.dungeonFloors.get(this.currentDungeonLevel);
+    if (currentFloor) currentFloor.monsters = this.monsters;
 
-    const count = Math.min(candidates.length, Math.floor(shuffled.length / 4), 8);
-    const instances: MonsterInstance[] = [];
-    for (let i = 0; i < count; i++) {
-      const spec = candidates[i % candidates.length];
-      const pos = shuffled[i];
-      const instance: MonsterInstance = {
-        specId: spec.id,
-        instanceId: `m${++this.monsterSeq}`,
-        hp: spec.hp,
-        x: pos.x,
-        y: pos.y,
-        alerted: false,
-        status: {},
-      };
-      instances.push(instance);
+    this.pushMessage('You descend deeper into the mine…');
+    this.enterDungeonFloor(nextLevel);
+  }
+
+  private ascendStairs(): void {
+    // Save current floor's monster state
+    const currentFloor = this.dungeonFloors.get(this.currentDungeonLevel);
+    if (currentFloor) currentFloor.monsters = this.monsters;
+
+    if (this.currentDungeonLevel <= 1) {
+      // Exit to surface
+      this.pushMessage('You emerge from the mine into daylight.');
+      this.enterMap('farm-map', { x: 24, y: 2 });
+      return;
     }
-    this.monsters = instances;
-    logger.info(`Spawned ${instances.length} monsters on dungeon level ${level}`);
+    const prevLevel = this.currentDungeonLevel - 1;
+    this.pushMessage('You ascend the stairs…');
+    const prevFloor = this.dungeonFloors.get(prevLevel);
+    this.enterDungeonFloor(prevLevel, prevFloor?.stairsDown);
   }
 
   // ── Combat helpers ────────────────────────────────────────────────────────
@@ -837,7 +955,7 @@ export class GameWorld extends LitElement {
         const xp = spec.xp;
         const newChar = { ...c, experience: c.experience + xp };
         this.character = newChar;
-        saveCharacter(newChar);
+        this.autoSave();
         this.monsters = this.monsters.filter((m) => m.instanceId !== target.instanceId);
         // Drop loot on the monster's tile
         const loot = rollMonsterLoot(spec, 1); // TODO: use actual dungeon level
@@ -895,7 +1013,7 @@ export class GameWorld extends LitElement {
           if (updatedChar.hitPoints <= 0) {
             this.pushMessage('*** You have been slain! ***');
             this.character = updatedChar;
-            saveCharacter(updatedChar);
+            this.autoSave();
             return;
           }
 
@@ -950,7 +1068,7 @@ export class GameWorld extends LitElement {
     this.playerStatus = updatedStatus;
     if (charChanged) {
       this.character = updatedChar;
-      saveCharacter(updatedChar);
+      this.autoSave();
     }
   }
 
@@ -1113,7 +1231,7 @@ export class GameWorld extends LitElement {
       this.pushMessage(`Unequipped ${displayName(a.item)} → ground (pack full).`);
     }
     this.actionItem = null;
-    saveCharacter(c);
+    this.autoSave();
     this.requestUpdate();
   }
 
@@ -1148,7 +1266,7 @@ export class GameWorld extends LitElement {
       this.pushMessage(`Equipped ${displayName(result.item)}.`);
     }
     this.actionItem = null;
-    saveCharacter(c);
+    this.autoSave();
     this.requestUpdate();
   }
 
@@ -1172,7 +1290,7 @@ export class GameWorld extends LitElement {
     dropItem(this.map, this.pos.x, this.pos.y, a.item);
     this.pushMessage(`Dropped ${displayName(a.item)}.`);
     this.actionItem = null;
-    saveCharacter(c);
+    this.autoSave();
     this.requestUpdate();
   }
 
@@ -1226,7 +1344,7 @@ export class GameWorld extends LitElement {
       this.pushMessage(`Pack is full — cannot pick up ${displayName(item)}.`);
     }
     this.actionItem = null;
-    saveCharacter(c);
+    this.autoSave();
     this.requestUpdate();
   }
 
@@ -1303,7 +1421,7 @@ export class GameWorld extends LitElement {
       this.playerStatus = { ...this.playerStatus, ...result.statusChanges };
     }
 
-    saveCharacter(this.character);
+    this.autoSave();
     this.runMonsterTurns();
   }
 
@@ -1327,7 +1445,7 @@ export class GameWorld extends LitElement {
     }
     tile.items.length = 0;
     tile.items.push(...remaining);
-    saveCharacter(c);
+    this.autoSave();
     this.requestUpdate();
   }
 
@@ -1554,11 +1672,11 @@ export class GameWorld extends LitElement {
     const hpPct = Math.round((c.hitPoints / c.maxHitPoints) * 100);
     const hpClass = hpPct <= 20 ? 'crit' : hpPct <= 40 ? 'low' : '';
     const mpPct = c.maxMana > 0 ? Math.round((c.mana / c.maxMana) * 100) : 0;
-    const mapLabel: Record<MapId, string> = {
+    const mapLabels: Record<string, string> = {
       village: 'Village',
       'farm-map': 'Countryside',
-      'dungeon-1': 'Mine — Level 1',
     };
+    const mapLabel = mapLabels[this.map.id] ?? (this.currentDungeonLevel > 0 ? `Mine — Floor ${this.currentDungeonLevel}` : this.map.id);
     const known = c.spells ?? [];
 
     return html`
@@ -1569,7 +1687,7 @@ export class GameWorld extends LitElement {
         </div>
 
         <div class="stat-block">
-          <span class="stat-label">${mapLabel[this.map.id]}</span>
+          <span class="stat-label">${mapLabel}</span>
         </div>
 
         <div class="divider"></div>

@@ -199,6 +199,10 @@ export function getTileStyle(
         style = addLayer(`${ICONS}/stairsup.png`, style);
         break;
 
+      case 'stairs-down':
+        style = addLayer(`${ICONS}/stairsdn.png`, style);
+        break;
+
       case 'sign':
         style = addLayer(`${ICONS}/sign.png`, style);
         break;
