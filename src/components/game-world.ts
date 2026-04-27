@@ -1165,8 +1165,13 @@ export class GameWorld extends LitElement {
     const actions: Array<{ label: string; handler: () => void }> = [];
 
     if (a.source === 'equip') {
-      actions.push({ label: 'Unequip', handler: () => { this.doUnequip(); } });
-      actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
+      if (a.item.slots) {
+        // Container (pack, belt, purse) — no unequip, just drop
+        actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
+      } else {
+        actions.push({ label: 'Unequip', handler: () => { this.doUnequip(); } });
+        actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
+      }
     } else if (a.source === 'pack' || a.source === 'belt') {
       if (a.item.kind in this.KIND_TO_SLOT) {
         actions.push({ label: 'Equip', handler: () => { this.doEquipFromPack(a.item); } });
@@ -1337,9 +1342,9 @@ export class GameWorld extends LitElement {
                   ${beltSlots.map((slot) => {
                     const it = slot.items[0] ?? null;
                     return html`
-                      <div class="belt-slot ${it ? 'filled' : ''}">
+                      <div class="belt-slot ${it ? 'filled' : ''}" style="${it ? 'cursor:pointer' : ''}" @click=${it ? (e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'belt' }; } : undefined}>
                         ${it
-                          ? html`<span style="font-size:0.5rem;color:#c8b78e;text-align:center;padding:2px">${it.name}</span>`
+                          ? html`<span style="font-size:0.5rem;color:#c8b78e;text-align:center;padding:2px">${displayName(it)}</span>`
                           : html`<span style="font-size:0.5rem;color:#2a2010">—</span>`}
                       </div>
                     `;
