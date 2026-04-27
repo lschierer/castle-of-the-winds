@@ -41,6 +41,7 @@ import {
   type SpecialAttack,
 } from '../game/combat.ts';
 import { monsterById, monstersForLevel, healthDescription, rollMonsterLoot } from '../game/monsters.ts';
+import { castSpell, spellTargetKind, type SpellTarget } from '../game/spell-engine.ts';
 import { ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../game/equipment.ts';
 import { getLogger } from '../game/logging.ts';
 
@@ -579,6 +580,9 @@ export class GameWorld extends LitElement {
   /** Item action menu: which item is selected and where it came from. */
   @state() private actionItem: { item: Item; source: 'equip' | 'pack' | 'belt' | 'ground'; slotName?: string } | null = null;
 
+  /** Spell targeting mode: spell selected, waiting for direction input. */
+  @state() private castingSpell: string | null = null;
+
   /** Counter used to generate unique monster instance IDs. */
   private monsterSeq = 0;
   private farmNarrativeShown = false;
@@ -643,8 +647,21 @@ export class GameWorld extends LitElement {
     if (e.key === 'Escape') {
       e.preventDefault();
       this.actionItem = null;
+      this.castingSpell = null;
       return;
     }
+
+    // Spell targeting mode: directional keys fire the spell
+    if (this.castingSpell) {
+      const delta = KEY_TO_DELTA[e.key];
+      if (delta) {
+        e.preventDefault();
+        this.fireDirectionalSpell(this.castingSpell, delta.dx, delta.dy);
+        this.castingSpell = null;
+      }
+      return;
+    }
+
     if (e.key === 'g' || e.key === 'G') {
       e.preventDefault();
       this.pickupGround();
@@ -1213,6 +1230,83 @@ export class GameWorld extends LitElement {
     this.requestUpdate();
   }
 
+  // ── Spell casting ──────────────────────────────────────────────────────────
+
+  private tryCastSpell(spellId: string): void {
+    const c = this.character;
+    if (!c) return;
+    this.overlay = 'none';
+
+    const kind = spellTargetKind(spellId);
+    if (kind === 'directional') {
+      this.castingSpell = spellId;
+      this.pushMessage('Choose a direction to cast… (arrow keys / numpad)');
+      return;
+    }
+    // Self-targeted: cast immediately
+    this.executeCast(spellId, {});
+  }
+
+  private fireDirectionalSpell(spellId: string, dx: number, dy: number): void {
+    // Find the first monster along the direction (up to 20 tiles)
+    let target: SpellTarget = { dx, dy };
+    for (let dist = 1; dist <= 20; dist++) {
+      const tx = this.pos.x + dx * dist;
+      const ty = this.pos.y + dy * dist;
+      const m = this.monsters.find((mon) => mon.x === tx && mon.y === ty);
+      if (m) {
+        target = { dx, dy, monster: m, distance: dist };
+        break;
+      }
+      // Stop at walls
+      if (!isWalkable(this.map, tx, ty)) break;
+    }
+    this.executeCast(spellId, target);
+  }
+
+  private executeCast(spellId: string, target: SpellTarget): void {
+    const c = this.character;
+    if (!c) return;
+
+    const result = castSpell(c, spellId, target, this.monsters, this.playerStatus);
+    for (const msg of result.messages) this.pushMessage(msg);
+    this.character = result.character;
+
+    if (result.monsterDamage) {
+      const { instanceId, damage } = result.monsterDamage;
+      const m = this.monsters.find((mon) => mon.instanceId === instanceId);
+      if (m) {
+        const newHp = m.hp - damage;
+        if (newHp <= 0) {
+          const spec = monsterById(m.specId);
+          if (spec) {
+            this.pushMessage(`You defeat the ${spec.name}!`);
+            this.character = { ...result.character, experience: result.character.experience + spec.xp };
+            const loot = rollMonsterLoot(spec, 1);
+            for (const item of loot) dropItem(this.map, m.x, m.y, item);
+            if (loot.length > 0) {
+              this.pushMessage(`The ${spec.name} drops ${loot.length === 1 ? displayName(loot[0]!) : `${loot.length} items`}.`);
+            }
+          }
+          this.monsters = this.monsters.filter((mon) => mon.instanceId !== instanceId);
+        } else {
+          const spec = monsterById(m.specId);
+          if (spec) this.pushMessage(`The ${spec.name} is ${healthDescription(newHp, spec.hp)}.`);
+          this.monsters = this.monsters.map((mon) =>
+            mon.instanceId === instanceId ? { ...mon, hp: newHp } : mon,
+          );
+        }
+      }
+    }
+
+    if (result.statusChanges) {
+      this.playerStatus = { ...this.playerStatus, ...result.statusChanges };
+    }
+
+    saveCharacter(this.character);
+    this.runMonsterTurns();
+  }
+
   private pickupGround(): void {
     const c = this.character;
     if (!c) return;
@@ -1392,12 +1486,11 @@ export class GameWorld extends LitElement {
             : known.map((id) => {
                 const sp = spellById(id);
                 if (!sp) return html``;
+                const canCast = c.mana >= sp.baseMana;
                 return html`
-                  <div class="spell-row">
+                  <div class="spell-row ${canCast ? 'castable' : 'no-mana'}" @click=${canCast ? () => { this.tryCastSpell(sp.id); } : undefined} style="${canCast ? 'cursor:pointer' : 'opacity:0.5'}">
                     <span class="spell-row-name">${sp.name}</span>
-                    <span class="spell-row-school">${SCHOOL_LABELS[sp.school]}</span>
                     <span class="spell-row-cost">${sp.baseMana} mp</span>
-                    <span class="spell-row-desc">${sp.description}</span>
                   </div>
                 `;
               })}
@@ -1572,7 +1665,9 @@ export class GameWorld extends LitElement {
         <div class="map-panel">
           ${this.renderMap()}
 
-          ${this.locationName
+          ${this.castingSpell
+            ? html`<div class="location-banner" style="color:#f0e0a8;background:rgba(0,0,0,0.7);padding:4px 12px">⚡ Choose direction — arrow keys / numpad · Esc to cancel</div>`
+            : this.locationName
             ? html`<div class="location-banner">${this.locationName}</div>`
             : ''}
 
