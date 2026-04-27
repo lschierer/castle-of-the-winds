@@ -443,7 +443,7 @@ export class CharacterCreation extends LitElement {
     if (this.phase === 'spell') {
       this.phase = 'stats';
     } else {
-      window.location.href = '/';
+      window.location.href = '/index.html';
     }
   }
 
@@ -463,7 +463,7 @@ export class CharacterCreation extends LitElement {
     );
     logger.info(`Character created: ${character.name}, starting spell: ${this.selectedSpell}`);
     saveCharacter(character);
-    window.location.href = '/game/';
+    window.location.href = '/game.html';
   }
 
   private barClass(value: number): string {

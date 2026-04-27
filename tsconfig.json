@@ -18,13 +18,14 @@
   },
   "include": [
     "src/**/*",
-    "greenwood.config.ts",
+    "vite.config.ts",
     "eslint.config.mts"
   ],
   "exclude": [
     "node_modules",
     "blib",
     "build",
-    "infrastructure"
+    "dist",
+    "src-tauri"
   ]
 }

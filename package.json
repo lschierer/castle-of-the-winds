@@ -8,25 +8,28 @@
     "pnpm": ">=9"
   },
   "scripts": {
-    "dev": "greenwood develop",
-    "build": "greenwood build",
-    "serve": "greenwood serve",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "lit": "^3.0.0",
-    "yaml": "^2.0.0",
-    "loglevel": "^1.9.2"
+    "loglevel": "^1.9.2",
+    "yaml": "^2.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
-    "@greenwood/cli": "^0.33.0",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/cli": "^2.10.1",
     "@types/node": "^24.12.2",
     "@types/trusted-types": "^2.0.7",
     "eslint": "^9.0.0",
     "globals": "^15.0.0",
     "typescript": "^5.5.0",
-    "typescript-eslint": "^8.0.0"
+    "typescript-eslint": "^8.0.0",
+    "vite": "^8.0.10"
   }
 }

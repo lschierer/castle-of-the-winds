@@ -543,7 +543,7 @@ export class GameWorld extends LitElement {
     super.connectedCallback();
     const character = loadCharacter();
     if (!character) {
-      window.location.href = '/';
+      window.location.href = '/index.html';
       return;
     }
     this.character = character;

@@ -8,7 +8,7 @@ import globals from 'globals';
 
 export default defineConfig(
   {
-    ignores: ['build/**','blib/**','**/public/**', '**/cdk.out/**'],
+    ignores: ['build/**','blib/**','dist/**','**/public/**', 'src-tauri/**'],
   },
   {
     ignores: ["**/*.md"],
@@ -52,14 +52,5 @@ export default defineConfig(
     ignores: ["**/*.md"],
     files: ['**/*/*.js', '**/*/*.mjs'],
     extends: [eslint.configs.recommended, tseslint.configs.disableTypeChecked],
-  },
-  // Add a new configuration specifically for cdk
-  {
-    files: [
-      'infrastructure/**/*.ts',
-    ],
-    rules: {
-      '@typescript-eslint/no-unused-vars': 'off',
-    },
   },
 );

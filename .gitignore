@@ -11,9 +11,8 @@ blib/
 dist/
 .greenwood/
 
-# CDK
-cdk.out/
-infrastructure/cdk.out/
+# Tauri / Rust
+src-tauri/target/
 
 # Logs
 logs/

@@ -1,4 +1,2 @@
-packages:
-  - 'infrastructure'
 patchedDependencies:
   '@types/trusted-types@2.0.7': patches/@types__trusted-types@2.0.7.patch
