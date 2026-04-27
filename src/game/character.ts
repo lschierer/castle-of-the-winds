@@ -297,6 +297,75 @@ export function createCharacter(
   };
 }
 
+// ── Level-up ──────────────────────────────────────────────────────────────────
+
+/**
+ * XP required to reach each level. Difficulty-dependent.
+ *
+ * Per StrategyWiki: Level 2 = 20 XP (all difficulties).
+ * For n > 2, XP(n) = XP(n-1) * multiplier, where multiplier varies by difficulty.
+ * The level 30 cap requires ~10-27 billion XP depending on difficulty,
+ * indicating roughly doubling per level.
+ *
+ * Difficulty multipliers (approximate from the level 30 values):
+ *   Easy: ~1.8x   Normal: ~1.9x   Hard: ~2.0x   Expert: ~2.05x
+ */
+const DIFFICULTY_XP_MULT: Record<string, number> = {
+  easy: 1.8,
+  normal: 1.9,
+  hard: 2.0,
+};
+
+/** XP needed to reach the given level at the given difficulty. */
+export function xpForLevel(level: number, difficulty: Difficulty = 'normal'): number {
+  if (level <= 1) return 0;
+  if (level === 2) return 20;
+  const mult = DIFFICULTY_XP_MULT[difficulty] ?? 2.0;
+  let xp = 20;
+  for (let i = 3; i <= level; i++) {
+    xp = Math.floor(xp * mult);
+  }
+  return xp;
+}
+
+/** Check if the character has enough XP to level up. */
+export function canLevelUp(character: Character): boolean {
+  return character.experience >= xpForLevel(character.level + 1, character.difficulty);
+}
+
+/**
+ * Apply a level-up: increase level, HP, Mana.
+ * Returns the updated character. Does NOT add spells — that's handled by the UI.
+ */
+export function levelUp(character: Character): Character {
+  const hpGain = hpPerLevel(character.stats);
+  const mpGain = spPerLevel(character.stats);
+  return {
+    ...character,
+    level: character.level + 1,
+    maxHitPoints: character.maxHitPoints + hpGain,
+    hitPoints: character.hitPoints + hpGain, // heal the gained amount
+    maxMana: character.maxMana + mpGain,
+    mana: character.mana + mpGain,
+  };
+}
+
+/**
+ * Spell tier thresholds: at which levels new spell tiers unlock.
+ * Tier 1: levels 1-3 (available at creation)
+ * Tier 2: levels 4-5 (unlocked at level 2)
+ * Tier 3: levels 6-7 (unlocked at level 3)
+ * etc.
+ * Returns the max spell level available at the given character level.
+ */
+export function maxSpellLevelAt(charLevel: number): number {
+  if (charLevel >= 7) return 5;
+  if (charLevel >= 5) return 4;
+  if (charLevel >= 4) return 3;
+  if (charLevel >= 2) return 2;
+  return 1;
+}
+
 // ── Equipment stat bonuses ────────────────────────────────────────────────────
 
 const EQUIPMENT_SLOTS: readonly (keyof Character)[] = [

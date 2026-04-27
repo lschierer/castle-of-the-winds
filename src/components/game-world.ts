@@ -13,6 +13,7 @@
 import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { Character } from '../game/character.ts';
+import { canLevelUp, levelUp, maxSpellLevelAt, hpPerLevel, spPerLevel } from '../game/character.ts';
 import { loadCharacter, saveCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
 import {
   type TileMap,
@@ -30,7 +31,14 @@ import {
 } from '../game/world-map.ts';
 import { getTileStyle } from '../game/sprites.ts';
 import { spellById, SCHOOL_LABELS } from '../game/spells.ts';
-import { coinsIn, type Item, addToContainer, removeFromContainer, removeFromSlot, equipItem, displayName } from '../game/items.ts';
+import { LEARNABLE_SPELLS } from '../game/spells.ts';
+import {
+  SHOPS, type ShopDef, type ShopInventory,
+  generateShopInventory, buyItem, sellItem, buyPrice, sellPrice, junkYardPrice,
+  sageIdentify, identifyFee, templeHeal, templeHealCost, templeUncurse, templeUncurseCost,
+  resetVisitPrices,
+} from '../game/shop.ts';
+import { coinsIn, type Item, addToContainer, removeFromContainer, removeFromSlot, equipItem, displayName, addCoins } from '../game/items.ts';
 import {
   type MonsterInstance,
   type PlayerStatus,
@@ -53,7 +61,7 @@ const VP_ROWS = 21;
 const VP_HALF_X = (VP_COLS - 1) / 2;
 const VP_HALF_Y = (VP_ROWS - 1) / 2;
 
-type Overlay = 'none' | 'inventory' | 'spells' | 'building';
+type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn';
 
 @customElement('game-world')
 export class GameWorld extends LitElement {
@@ -584,9 +592,15 @@ export class GameWorld extends LitElement {
   /** Spell targeting mode: spell selected, waiting for direction input. */
   @state() private castingSpell: string | null = null;
 
+  /** Pending spell learning: character leveled up and can pick a new spell. */
+  @state() private pendingSpellLearn = false;
+
   /** Counter used to generate unique monster instance IDs. */
   private monsterSeq = 0;
   private farmNarrativeShown = false;
+
+  /** Shop inventories, keyed by shop name. Generated on first visit. */
+  private shopInventories = new Map<string, ShopInventory>();
 
   /** Generated dungeon floors, keyed by level number. */
   private dungeonFloors = new Map<number, DungeonFloor>();
@@ -837,7 +851,9 @@ export class GameWorld extends LitElement {
   private enterMap(id: MapId, position: Vec2): void {
     if (id.startsWith('dungeon-')) {
       const level = parseInt(id.split('-')[1] ?? '1', 10);
-      this.enterDungeonFloor(level, position);
+      // Don't use the exit's targetPosition for generated dungeons —
+      // the generator places stairs-up at the correct spawn point.
+      this.enterDungeonFloor(level);
       return;
     }
     const staticMap = ALL_MAPS[id as keyof typeof ALL_MAPS];
@@ -846,6 +862,11 @@ export class GameWorld extends LitElement {
       this.pos = { ...position };
       this.monsters = [];
       this.currentDungeonLevel = 0;
+      // New visit: reset shop prices and inventories
+      if (id === 'village') {
+        resetVisitPrices();
+        this.shopInventories.clear();
+      }
     }
     this.locationName = '';
     this.overlay = 'none';
@@ -955,6 +976,7 @@ export class GameWorld extends LitElement {
         const xp = spec.xp;
         const newChar = { ...c, experience: c.experience + xp };
         this.character = newChar;
+        this.checkLevelUp();
         this.autoSave();
         this.monsters = this.monsters.filter((m) => m.instanceId !== target.instanceId);
         // Drop loot on the monster's tile
@@ -1136,37 +1158,183 @@ export class GameWorld extends LitElement {
 
   private renderBuildingOverlay(): TemplateResult {
     const b = this.activeBuilding;
-    if (!b) return html``;
+    const c = this.character;
+    if (!b || !c) return html``;
 
-    const BUILDING_SERVICES: Record<string, string> = {
-      'Weaponsmith': 'Buys and sells weapons, armor, helms, shields, bracers, and gauntlets.',
-      'General Store': 'Buys and sells scrolls, potions, spellbooks, cloaks, boots, and containers.',
-      "Kael's Scrolls": 'The sage will identify any unknown item for a fee.',
-      'Junk Yard': 'Buys anything you bring, even "worthless" items, for a flat 25 copper. Will not pay more than 25 cp for any item.',
-      'Temple of Odin': 'Offers healing, restoration of drained attributes, Remove Curse, and Rune of Return — all for a price.',
-      "Barg's House": 'A locked private home. Nobody answers.',
-      'Farm House': 'A locked farmhouse. Nobody answers.',
-    };
-
-    const services = BUILDING_SERVICES[b.name] ?? b.description;
-
-    return html`
-      <div class="overlay" @click=${() => { this.overlay = 'none'; this.activeBuilding = null; }}>
-        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
-          <div>
+    const shop = SHOPS[b.name];
+    if (!shop) {
+      // Non-shop building (Barg's House, Farm House)
+      return html`
+        <div class="overlay" @click=${() => { this.overlay = 'none'; this.activeBuilding = null; }}>
+          <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
             <p class="overlay-title">${b.name}</p>
-            <p class="overlay-subtitle">Village · ${b.name}</p>
+            <div class="divider"></div>
+            <p class="building-services">${b.description}</p>
+            <span class="overlay-close" @click=${() => { this.overlay = 'none'; this.activeBuilding = null; }}>[ Esc to leave ]</span>
           </div>
+        </div>`;
+    }
+
+    // Get or generate shop inventory
+    if (!this.shopInventories.has(b.name)) {
+      this.shopInventories.set(b.name, generateShopInventory(shop));
+    }
+    const inv = this.shopInventories.get(b.name)!;
+    const packItems: Item[] = c.pack?.slots?.flatMap((s) => s.items) ?? [];
+    const close = () => { this.overlay = 'none'; this.activeBuilding = null; };
+
+    if (shop.type === 'sage') return this.renderSageShop(b.name, c, packItems, close);
+    if (shop.type === 'temple') return this.renderTempleShop(b.name, c, close);
+    if (shop.type === 'junkyard') return this.renderJunkYard(b.name, c, packItems, close);
+    return this.renderTradeShop(b.name, shop, inv, c, packItems, close);
+  }
+
+  private renderTradeShop(name: string, shop: ShopDef, inv: ShopInventory, c: Character, packItems: Item[], close: () => void): TemplateResult {
+    return html`
+      <div class="overlay" @click=${close}>
+        <div class="overlay-box inv-screen" @click=${(e: Event) => e.stopPropagation()}>
+          <p class="overlay-title">${name}</p>
           <div class="divider"></div>
-          <p class="building-services">${services}</p>
-          <div class="divider"></div>
-          <span
-            class="overlay-close"
-            @click=${() => { this.overlay = 'none'; this.activeBuilding = null; }}
-          >[ Escape / Space to leave ]</span>
+          <div class="inv-container-block">
+            <div class="inv-container-label">For Sale</div>
+            <div class="pack-items">
+              ${inv.items.length === 0 ? html`<div class="inv-empty">Nothing for sale.</div>` :
+                inv.items.map((it) => html`
+                  <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopBuy(inv, it.id); }}>
+                    ${displayName(it)} — <span style="color:#d4a820">${buyPrice(it)} cp</span>
+                  </div>`)}
+            </div>
+          </div>
+          <div class="inv-container-block">
+            <div class="inv-container-label">Sell from Pack</div>
+            <div class="pack-items">
+              ${packItems.filter((it) => it.kind !== 'coin').length === 0 ? html`<div class="inv-empty">Nothing to sell.</div>` :
+                packItems.filter((it) => it.kind !== 'coin').map((it) => {
+                  const price = shop.type === 'junkyard' ? junkYardPrice(it) : sellPrice(it);
+                  const canSell = price > 0 || shop.type === 'junkyard';
+                  return html`
+                    <div class="inv-item ${canSell ? '' : 'no-mana'}" style="${canSell ? 'cursor:pointer' : 'opacity:0.5'}" @click=${canSell ? () => { this.shopSell(it, shop); } : undefined}>
+                      ${displayName(it)} — <span style="color:#4a7a20">${price} cp</span>
+                    </div>`;
+                })}
+            </div>
+          </div>
+          <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
         </div>
-      </div>
-    `;
+      </div>`;
+  }
+
+  private renderSageShop(name: string, c: Character, packItems: Item[], close: () => void): TemplateResult {
+    const unidentified = packItems.filter((it) => !it.identified);
+    return html`
+      <div class="overlay" @click=${close}>
+        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+          <p class="overlay-title">${name}</p>
+          <p class="building-services">Identify an item for ${identifyFee()} cp.</p>
+          <div class="divider"></div>
+          ${unidentified.length === 0 ? html`<div class="inv-empty">No unidentified items.</div>` :
+            unidentified.map((it) => html`
+              <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopIdentify(it); }}>
+                ${it.name} — <span style="color:#d4a820">${identifyFee()} cp</span>
+              </div>`)}
+          <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
+        </div>
+      </div>`;
+  }
+
+  private renderTempleShop(name: string, c: Character, close: () => void): TemplateResult {
+    const healCost = templeHealCost(c);
+    const cursedItems = [c.weapon, c.armor, c.helm, c.shield, c.boots, c.cloak, c.bracers, c.gauntlets, c.ringLeft, c.ringRight, c.amulet]
+      .filter((it): it is Item => it !== null && it.cursed);
+    return html`
+      <div class="overlay" @click=${close}>
+        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+          <p class="overlay-title">${name}</p>
+          <div class="divider"></div>
+          <div class="inv-item ${healCost > 0 ? '' : 'no-mana'}" style="${healCost > 0 ? 'cursor:pointer' : 'opacity:0.5'}" @click=${healCost > 0 ? () => { this.shopHeal(); } : undefined}>
+            Heal wounds — <span style="color:#d4a820">${healCost > 0 ? `${healCost} cp` : 'Fully healed'}</span>
+          </div>
+          ${cursedItems.length > 0 ? cursedItems.map((it) => html`
+            <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopUncurse(it); }}>
+              Remove curse: ${displayName(it)} — <span style="color:#d4a820">${templeUncurseCost()} cp</span>
+            </div>`) : html`<div class="inv-empty">No cursed equipment.</div>`}
+          <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
+        </div>
+      </div>`;
+  }
+
+  private renderJunkYard(name: string, c: Character, packItems: Item[], close: () => void): TemplateResult {
+    const shop = SHOPS['Junk Yard']!;
+    return html`
+      <div class="overlay" @click=${close}>
+        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+          <p class="overlay-title">${name}</p>
+          <p class="building-services">We buy anything. 25 cp flat.</p>
+          <div class="divider"></div>
+          <div class="pack-items">
+            ${packItems.filter((it) => it.kind !== 'coin').length === 0 ? html`<div class="inv-empty">Nothing to sell.</div>` :
+              packItems.filter((it) => it.kind !== 'coin').map((it) => html`
+                <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopSell(it, shop); }}>
+                  ${displayName(it)} — <span style="color:#4a7a20">${junkYardPrice(it)} cp</span>
+                </div>`)}
+          </div>
+          <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
+        </div>
+      </div>`;
+  }
+
+  // ── Shop action handlers ──────────────────────────────────────────────────
+
+  private shopBuy(inv: ShopInventory, itemId: string): void {
+    const c = this.character;
+    if (!c) return;
+    const result = buyItem(c, inv, itemId);
+    this.pushMessage(result.message);
+    if (result.success) this.autoSave();
+    this.requestUpdate();
+  }
+
+  private shopSell(item: Item, shop: ShopDef): void {
+    const c = this.character;
+    if (!c || !c.pack) return;
+    const result = sellItem(c, item, shop);
+    if (result.success) {
+      // Remove from pack
+      for (const slot of c.pack.slots ?? []) {
+        const idx = slot.items.findIndex((i) => i.id === item.id);
+        if (idx !== -1) { slot.items.splice(idx, 1); break; }
+      }
+      this.autoSave();
+    }
+    this.pushMessage(result.message);
+    this.requestUpdate();
+  }
+
+  private shopIdentify(item: Item): void {
+    const c = this.character;
+    if (!c) return;
+    const result = sageIdentify(c, item);
+    this.pushMessage(result.message);
+    if (result.success) this.autoSave();
+    this.requestUpdate();
+  }
+
+  private shopHeal(): void {
+    const c = this.character;
+    if (!c) return;
+    const result = templeHeal(c);
+    this.pushMessage(result.message);
+    if (result.success) this.autoSave();
+    this.requestUpdate();
+  }
+
+  private shopUncurse(item: Item): void {
+    const c = this.character;
+    if (!c) return;
+    const result = templeUncurse(c, item);
+    this.pushMessage(result.message);
+    if (result.success) this.autoSave();
+    this.requestUpdate();
   }
 
   /**
@@ -1270,6 +1438,104 @@ export class GameWorld extends LitElement {
     this.requestUpdate();
   }
 
+  /** Move all coins from a found purse into the player's equipped purse. */
+  private transferCoins(fromPurse: Item, toPurse: Item): number {
+    let total = 0;
+    if (!fromPurse.slots || !toPurse.slots) return 0;
+    for (const slot of fromPurse.slots) {
+      for (const coin of [...slot.items]) {
+        if (coin.kind === 'coin' && coin.coinKind && coin.quantity > 0) {
+          addCoins(toPurse, coin.coinKind, coin.quantity);
+          total += coin.quantity;
+          coin.quantity = 0;
+        }
+      }
+      slot.items = slot.items.filter((i) => i.quantity > 0);
+    }
+    return total;
+  }
+
+  private doConsolidatePurse(purseItem: Item, source: 'pack' | 'belt'): void {
+    const c = this.character;
+    if (!c?.purse) return;
+    const count = this.transferCoins(purseItem, c.purse);
+    this.pushMessage(count > 0 ? `Consolidated ${count} coins into your purse.` : 'No coins to consolidate.');
+    // Remove empty purse from container
+    const container = source === 'pack' ? c.pack : c.belt;
+    if (container) removeFromContainer(container, purseItem.id);
+    this.actionItem = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  private doConsolidateGroundPurse(purseItem: Item): void {
+    const c = this.character;
+    if (!c?.purse) return;
+    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+    const count = this.transferCoins(purseItem, c.purse);
+    this.pushMessage(count > 0 ? `Consolidated ${count} coins into your purse.` : 'No coins to consolidate.');
+    // Remove empty purse from ground
+    const idx = tile.items.findIndex((i) => i.id === purseItem.id);
+    if (idx !== -1) tile.items.splice(idx, 1);
+    this.actionItem = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  private doSwapPurse(newPurse: Item, source: 'pack' | 'belt'): void {
+    const c = this.character;
+    if (!c) return;
+    const container = source === 'pack' ? c.pack : c.belt;
+    if (!container) return;
+    removeFromContainer(container, newPurse.id);
+    // Move coins from old purse to new one
+    if (c.purse) {
+      this.transferCoins(c.purse, newPurse);
+      // Old purse goes to pack or ground
+      if (!addToContainer(container, c.purse)) {
+        dropItem(this.map, this.pos.x, this.pos.y, c.purse);
+        this.pushMessage('Old purse dropped (pack full).');
+      }
+    }
+    c.purse = newPurse;
+    this.pushMessage(`Now using ${displayName(newPurse)}.`);
+    this.actionItem = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  private doSwapGroundPurse(newPurse: Item): void {
+    const c = this.character;
+    if (!c) return;
+    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+    const idx = tile.items.findIndex((i) => i.id === newPurse.id);
+    if (idx === -1) return;
+    tile.items.splice(idx, 1);
+    if (c.purse) {
+      this.transferCoins(c.purse, newPurse);
+      tile.items.push(c.purse); // old purse goes on ground
+    }
+    c.purse = newPurse;
+    this.pushMessage(`Now using ${displayName(newPurse)}.`);
+    this.actionItem = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  private doCoinsToPurse(item: Item, source: 'pack' | 'belt'): void {
+    const c = this.character;
+    if (!c || !c.purse || !item.coinKind) return;
+    const container = source === 'pack' ? c.pack : c.belt;
+    if (!container) return;
+    const removed = removeFromContainer(container, item.id);
+    if (!removed) return;
+    addCoins(c.purse, item.coinKind, removed.quantity);
+    this.pushMessage(`Moved ${removed.quantity} ${item.coinKind} coins to purse.`);
+    this.actionItem = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
   private doDrop(): void {
     const a = this.actionItem;
     const c = this.character;
@@ -1308,11 +1574,20 @@ export class GameWorld extends LitElement {
         actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
       }
     } else if (a.source === 'pack' || a.source === 'belt') {
-      if (a.item.kind in this.KIND_TO_SLOT) {
+      if (a.item.kind === 'coin' && a.item.coinKind) {
+        actions.push({ label: 'To Purse', handler: () => { this.doCoinsToPurse(a.item, a.source); } });
+      } else if (a.item.kind === 'container' && a.item.name.includes('Purse')) {
+        actions.push({ label: 'Consolidate Coins', handler: () => { this.doConsolidatePurse(a.item, a.source); } });
+        actions.push({ label: 'Swap Purse', handler: () => { this.doSwapPurse(a.item, a.source); } });
+      } else if (a.item.kind in this.KIND_TO_SLOT) {
         actions.push({ label: 'Equip', handler: () => { this.doEquipFromPack(a.item); } });
       }
       actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
     } else if (a.source === 'ground') {
+      if (a.item.kind === 'container' && a.item.name.includes('Purse')) {
+        actions.push({ label: 'Consolidate Coins', handler: () => { this.doConsolidateGroundPurse(a.item); } });
+        actions.push({ label: 'Swap Purse', handler: () => { this.doSwapGroundPurse(a.item); } });
+      }
       actions.push({ label: 'Pick up', handler: () => { this.doPickup(a.item); } });
     }
 
@@ -1336,10 +1611,12 @@ export class GameWorld extends LitElement {
     const idx = tile.items.findIndex((i) => i.id === item.id);
     if (idx === -1) return;
     tile.items.splice(idx, 1);
-    if (c.pack && addToContainer(c.pack, item)) {
+    if (item.kind === 'coin' && item.coinKind && c.purse) {
+      addCoins(c.purse, item.coinKind, item.quantity);
+      this.pushMessage(`Picked up ${item.quantity} ${item.coinKind} coins.`);
+    } else if (c.pack && addToContainer(c.pack, item)) {
       this.pushMessage(`Picked up ${displayName(item)}.`);
     } else {
-      // No room — put it back
       tile.items.push(item);
       this.pushMessage(`Pack is full — cannot pick up ${displayName(item)}.`);
     }
@@ -1349,6 +1626,24 @@ export class GameWorld extends LitElement {
   }
 
   // ── Spell casting ──────────────────────────────────────────────────────────
+
+  private checkLevelUp(): void {
+    if (!this.character) return;
+    while (canLevelUp(this.character)) {
+      this.character = levelUp(this.character);
+      this.pushMessage(`*** Level up! You are now level ${this.character.level}! ***`);
+      this.pushMessage(`HP: ${this.character.maxHitPoints} (+${hpPerLevel(this.character.stats)})  Mana: ${this.character.maxMana} (+${spPerLevel(this.character.stats)})`);
+      // Check if new spell tier unlocked
+      const maxSpell = maxSpellLevelAt(this.character.level);
+      const available = LEARNABLE_SPELLS.filter(
+        (s) => s.level <= maxSpell && !this.character!.spells.includes(s.id),
+      );
+      if (available.length > 0) {
+        this.pendingSpellLearn = true;
+        this.overlay = 'spell-learn';
+      }
+    }
+  }
 
   private tryCastSpell(spellId: string): void {
     const c = this.character;
@@ -1400,6 +1695,7 @@ export class GameWorld extends LitElement {
           if (spec) {
             this.pushMessage(`You defeat the ${spec.name}!`);
             this.character = { ...result.character, experience: result.character.experience + spec.xp };
+            this.checkLevelUp();
             const loot = rollMonsterLoot(spec, 1);
             for (const item of loot) dropItem(this.map, m.x, m.y, item);
             if (loot.length > 0) {
@@ -1433,10 +1729,13 @@ export class GameWorld extends LitElement {
       this.pushMessage('Nothing here to pick up.');
       return;
     }
-    // Pick up all items that fit in the pack
     const remaining: Item[] = [];
     for (const item of tile.items) {
-      if (c.pack && addToContainer(c.pack, item)) {
+      if (item.kind === 'coin' && item.coinKind && c.purse) {
+        // Coins go directly to purse
+        addCoins(c.purse, item.coinKind, item.quantity);
+        this.pushMessage(`Picked up ${item.quantity} ${item.coinKind} coins.`);
+      } else if (c.pack && addToContainer(c.pack, item)) {
         this.pushMessage(`Picked up ${displayName(item)}.`);
       } else {
         remaining.push(item);
@@ -1581,6 +1880,23 @@ export class GameWorld extends LitElement {
             ` : ''}
           </div>
 
+          <!-- Ground items at current tile -->
+          ${(() => {
+            const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+            return tile.items.length > 0 ? html`
+              <div class="inv-container-block">
+                <div class="inv-container-label">On the ground</div>
+                <div class="pack-items">
+                  ${tile.items.map((it) => html`
+                    <div class="inv-item" style="cursor:pointer" @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'ground' }; }}>
+                      ${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}
+                    </div>
+                  `)}
+                </div>
+              </div>
+            ` : '';
+          })()}
+
           <span class="overlay-close" @click=${() => { this.overlay = 'none'; this.actionItem = null; }}>[ I / Esc to close ]</span>
           ${this.renderActionMenu()}
         </div>
@@ -1622,6 +1938,41 @@ export class GameWorld extends LitElement {
     `;
   }
 
+
+  private renderSpellLearnOverlay(): TemplateResult {
+    const c = this.character;
+    if (!c) return html``;
+    const maxSpell = maxSpellLevelAt(c.level);
+    const available = LEARNABLE_SPELLS.filter(
+      (s) => s.level <= maxSpell && !c.spells.includes(s.id),
+    );
+    if (available.length === 0) {
+      this.pendingSpellLearn = false;
+      this.overlay = 'none';
+      return html``;
+    }
+    return html`
+      <div class="overlay">
+        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+          <p class="overlay-title">Level ${c.level}! Choose a new spell:</p>
+          <div class="divider"></div>
+          ${available.map((sp) => html`
+            <div class="spell-row castable" style="cursor:pointer" @click=${() => {
+              c.spells.push(sp.id);
+              this.pendingSpellLearn = false;
+              this.overlay = 'none';
+              this.pushMessage(`You learn ${sp.name}!`);
+              this.autoSave();
+              this.requestUpdate();
+            }}>
+              <span class="spell-row-name">${sp.name}</span>
+              <span class="spell-row-cost">${sp.baseMana} mp</span>
+            </div>
+          `)}
+        </div>
+      </div>
+    `;
+  }
   private renderNarrativeOverlay(): TemplateResult {
     if (this.narrative === null) return html``;
     return html`
@@ -1797,7 +2148,9 @@ export class GameWorld extends LitElement {
                 ? this.renderInventoryOverlay()
                 : this.overlay === 'spells'
                   ? this.renderSpellsOverlay()
-                  : ''}
+                  : this.overlay === 'spell-learn'
+                    ? this.renderSpellLearnOverlay()
+                    : ''}
         </div>
         ${this.renderSidebar()}
       </div>

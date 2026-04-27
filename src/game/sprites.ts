@@ -148,6 +148,38 @@ function buildingRegionStyle(region: BuildingRegion, x: number, y: number, base:
   };
 }
 
+// ── Ground item icons ─────────────────────────────────────────────────────────
+
+import type { Item } from './items.ts';
+
+const FALLBACK_ICON: Record<string, string> = {
+  coin: 'copper.png', weapon: 'sword.png', armor: 'armor.png', helm: 'helmet.png',
+  shield: 'shield.png', boots: 'boots.png', cloak: 'cloak.png', bracers: 'bracers.png',
+  gauntlets: 'gauntlet.png', ring: 'ring.png', amulet: 'amulet.png', potion: 'potion.png',
+  scroll: 'scroll.png', wand: 'wand.png', container: 'BAG.png', belt: 'belt.png',
+};
+
+function itemIcon(item: Item): string {
+  if (item.icon) return item.icon;
+  if (item.kind === 'coin' && item.coinKind) return `${item.coinKind}.png`;
+  return FALLBACK_ICON[item.kind] ?? 'pile.png';
+}
+
+function groundItemIcon(items: Item[]): string | undefined {
+  if (items.length === 0) return undefined;
+  if (items.length === 1) {
+    return `${ICONS}/${itemIcon(items[0]!)}`;
+  }
+  // 2+ items: if all coins, show best denomination
+  if (items.every((i) => i.kind === 'coin')) {
+    const order: string[] = ['platinum', 'gold', 'silver', 'copper'];
+    for (const kind of order) {
+      if (items.some((i) => i.coinKind === kind)) return `${ICONS}/${kind}.png`;
+    }
+  }
+  return `${ICONS}/pile.png`;
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function getTileStyle(
@@ -180,7 +212,8 @@ export function getTileStyle(
           const wallSprite = DUNGEON_WALL[tile.direction] ?? `${ICONS}/wall_NW.png`;
           style = addLayer(wallSprite, style);
         } else {
-          style = addLayer(`${ICONS}/castle2.png`, style);
+          // Wall without direction — default wall sprite
+          style = addLayer(`${ICONS}/wall_NW.png`, style);
         }
         break;
 
@@ -235,6 +268,14 @@ export function getTileStyle(
           }
         }
         break;
+    }
+  }
+
+  // Ground item overlay — show the topmost item on the tile
+  if (tile.items.length > 0) {
+    const itemIcon = groundItemIcon(tile.items);
+    if (itemIcon) {
+      style = addLayer(itemIcon, style);
     }
   }
 

@@ -24,7 +24,7 @@ import {
 } from '../game/character.ts';
 import { STARTING_SPELLS, SCHOOL_LABELS, type Spell } from '../game/spells.ts';
 import { getLogger } from '../game/logging.ts';
-import { saveCharacter } from '../game/save.ts';
+import { saveCharacter, clearSave } from '../game/save.ts';
 
 const logger = getLogger('game:ui');
 
@@ -462,6 +462,7 @@ export class CharacterCreation extends LitElement {
       this.selectedSpell,
     );
     logger.info(`Character created: ${character.name}, starting spell: ${this.selectedSpell}`);
+    clearSave();
     saveCharacter(character);
     window.location.href = '/game/';
   }

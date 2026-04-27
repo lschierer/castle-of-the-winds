@@ -120,7 +120,9 @@ export interface FloorLootOptions {
  */
 export function generateTileLoot(opts: FloorLootOptions): Item[] {
   const { level, inRoom = false } = opts;
-  const density = inRoom ? 0.12 : 0.05;
+  // Very sparse: ~1 item per 40 room tiles, ~1 per 80 corridor tiles.
+  // A typical floor 1 with ~200 walkable tiles yields ~3-5 items total.
+  const density = inRoom ? 0.025 : 0.012;
   if (roll() > density) return [];
 
   const items: Item[] = [];

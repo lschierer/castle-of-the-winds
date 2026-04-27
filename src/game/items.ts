@@ -124,6 +124,8 @@ export interface Item {
   coinKind?: CoinKind;
   /** Weapon damage dice — only present when kind === 'weapon'. */
   damage?: DamageDice;
+  /** Sprite icon filename (e.g. 'sword.png'). Used for ground/inventory display. */
+  icon?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -188,6 +190,7 @@ export function makeCoinStack(kind: CoinKind, quantity: number): Item {
     kind: 'coin',
     coinKind: kind,
     name: COIN_NAMES[kind],
+    icon: `${kind}.png`,
     weight: 5,          // ~5 g per coin
     bulk: 0,            // coins are negligibly bulky
     quantity,
@@ -464,6 +467,7 @@ export function makeWeapon(name: string, weight?: number, dungeonLevel?: number)
     cursed: enchantment < 0,
     broken: false,
     enchantment,
+    icon: spec?.weaponType === 'blunt' ? 'mace.png' : spec?.weaponType === 'polearm' ? 'spear.png' : 'sword.png',
     ...(spec?.damage !== undefined ? { damage: spec.damage } : {}),
   };
 }
@@ -521,9 +525,13 @@ export function makeStartingLoadout(): StartingLoadout {
 /**
  * Human-readable name to display for an item.
  *
- * Unidentified items show their base type name without enchantment.
- * Identified items append the enchantment level when non-zero.
- * Magical packs of holding show their mundane appearance until identified.
+ * Naming conventions from the original game:
+ *   Unidentified:  base type name only ("Gauntlet", "Long Sword")
+ *   Normal:        "Normal <name>" ("Normal Gauntlet")
+ *   Enchanted equipment: "Enchanted <name> of <suffix>" ("Enchanted Gauntlets of Dexterity")
+ *   Enchanted weapon:    "Enchanted <name>" (no suffix — stat hidden until tooltip)
+ *   Cursed:        "Cursed <name> of <suffix>" or "Cursed <name>"
+ *   Broken/rusted: shown as-is (name already includes "Broken"/"Rusty"/"Ripped")
  */
 export function displayName(item: Item): string {
   if (!item.identified) {
@@ -532,14 +540,73 @@ export function displayName(item: Item): string {
       const spec = PACK_SPECS.find((s) => s.name === item.name);
       if (spec?.unidentifiedName) return spec.unidentifiedName;
     }
-    // Everything else: show the plain name (material visible, magic hidden)
     return item.name;
   }
 
-  // Identified: append enchantment
-  if (item.enchantment === 0) return item.name;
-  if (item.enchantment > 0)   return `${item.name} +${item.enchantment}`;
-  return `${item.name} −${Math.abs(item.enchantment)}`; // cursed
+  // Broken/rusted items use their name as-is
+  if (item.broken) return item.name;
+
+  // Coins and non-equipment
+  if (item.kind === 'coin' || item.kind === 'potion' || item.kind === 'scroll' ||
+      item.kind === 'wand' || item.kind === 'staff' || item.kind === 'spellbook' ||
+      item.kind === 'container' || item.kind === 'misc') {
+    return item.name;
+  }
+
+  // Equipment naming
+  if (item.cursed) {
+    return item.kind === 'weapon'
+      ? `Cursed ${item.name}`
+      : `Cursed ${item.name}`;
+  }
+  if (item.enchantment > 0) {
+    return item.kind === 'weapon'
+      ? `Enchanted ${item.name}`
+      : `Enchanted ${item.name}`;
+  }
+  return `Normal ${item.name}`;
+}
+
+/**
+ * Enchantment adjective based on magnitude.
+ * +5 / -5  = "Increases" / "Decreases"
+ * +10 / -10 = "Strongly Increases" / "Strongly Decreases"
+ * +20 / -20 = "Very Strongly Increases" / "Very Strongly Decreases"
+ */
+function enchantAdjective(value: number): string {
+  const abs = Math.abs(value);
+  const verb = value > 0 ? 'Increases' : 'Decreases';
+  if (abs >= 20) return `Very Strongly ${verb}`;
+  if (abs >= 10) return `Strongly ${verb}`;
+  return verb;
+}
+
+/**
+ * Detailed description lines for an identified item (for tooltip/info panel).
+ * Returns an array of description strings.
+ */
+export function itemDescription(item: Item): string[] {
+  const lines: string[] = [];
+  if (!item.identified) {
+    lines.push('Unidentified');
+    return lines;
+  }
+  if (item.cursed) lines.push('This item is cursed.');
+  if (item.enchantment !== 0 && item.kind !== 'coin') {
+    const ench = item.enchantment;
+    if (item.kind === 'weapon') {
+      // Weapons: random stat, shown generically
+      lines.push(`${enchantAdjective(ench)} your chance of hitting`);
+      lines.push(`${enchantAdjective(ench)} your damage`);
+    } else {
+      // Equipment: enchantment affects armor value
+      lines.push(`${enchantAdjective(ench)} your armor value`);
+    }
+  }
+  if (item.damage) {
+    lines.push(`Damage: ${item.damage.count}d${item.damage.sides}${item.damage.bonus > 0 ? `+${item.damage.bonus}` : item.damage.bonus < 0 ? `${item.damage.bonus}` : ''}`);
+  }
+  return lines;
 }
 
 /**
