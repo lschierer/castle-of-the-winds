@@ -14,7 +14,7 @@
 │   │   └── game-world.ts
 │   ├── game/             # Shared game logic (runs in webview)
 │   │   └── logging.ts    # loglevel initialization + Tauri IPC bridge
-│   └── pages/            # HTML entry points (Vite root)
+│   └── pages/            # HTML entry points (Greenwood pages)
 │       ├── index.html    # Landing page
 │       ├── create.html   # Character creation
 │       └── game.html     # Game world
@@ -25,7 +25,7 @@
 │   └── capabilities/     # Tauri v2 permission capabilities
 ├── mise.toml             # Tool versions + task runner
 ├── package.json          # Root package (Vite + Tauri frontend)
-├── vite.config.ts        # Vite build configuration
+├── greenwood.config.ts   # Greenwood framework configuration
 └── tsconfig.json         # TypeScript configuration
 ```
 
@@ -40,15 +40,18 @@ commands that the frontend calls with `invoke()`.
 
 Initial target is macOS, with future growth to Android and ChromeOS.
 
-### Frontend Build: Vite
+### Frontend Build: Greenwood
 
-Vite serves as the development server (HMR) and production bundler.  It handles
-TypeScript transpilation, Lit decorator transforms, and CJS→ESM interop (e.g.
-loglevel) natively — no custom plugins needed.
+Greenwood is a lightweight full-stack web framework built on web standards.  It
+provides directory-based routing (`src/pages/create/` → `/create/`), native Lit
+web component support, and handles TypeScript transpilation via `tsc`.
 
-The Vite dev server runs on `localhost:5173` during development; Tauri's
-`beforeDevCommand` starts it automatically.  In production, Vite builds static
-assets to `dist/` which Tauri embeds in the native binary.
+During development, Tauri launches Greenwood's dev server on `localhost:8080`
+(via `beforeDevCommand`).  For production builds, `greenwood build` outputs
+static assets to `public/` which Tauri embeds in the native binary.
+
+A custom resource plugin (`plugin-loglevel-esm-shim`) wraps loglevel's CJS/UMD
+bundle as ESM so it works in the browser without a separate bundler plugin.
 
 ### UI: Lit
 
@@ -87,4 +90,5 @@ also supports loading a YAML save file from disk via file picker.
 ### Deployment
 
 `mise run build` (or `pnpm tauri build`) produces a native `.app` bundle for
-macOS.  No server infrastructure is required.
+macOS.  Greenwood builds the static frontend to `public/`, which Tauri embeds
+in the binary.  No server infrastructure is required.

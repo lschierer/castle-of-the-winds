@@ -135,7 +135,7 @@ export class LandingPage extends LitElement {
 
   private onNewGame(): void {
     logger.info('Landing: new game');
-    window.location.href = '/create.html';
+    window.location.href = '/create/';
   }
 
   private onLoadGameClick(): void {
@@ -164,7 +164,7 @@ export class LandingPage extends LitElement {
       const character = (data as { character: Character }).character;
       logger.info(`Landing: loading save from ${file.name}`);
       saveCharacter(character);
-      window.location.href = '/game.html';
+      window.location.href = '/game/';
     } catch (err) {
       logger.warn('Landing: failed to parse save file', err);
       this.loadError = 'Could not read save file — is it valid YAML?';
