@@ -173,8 +173,12 @@ function dungeonWallStyle(map: TileMap, x: number, y: number): TileStyle {
   else if (fS && fW) floorSide = 'SW';
 
   if (floorSide) {
-    const adjacentFloorCount = [fN, fS, fE, fW].filter(Boolean).length;
-    const spriteSet = adjacentFloorCount >= 3 ? ROOM_ROCK_FLOOR : CORRIDOR_ROCK_FLOOR;
+    const isRoomWall =
+      (fN && getTileAt(map, x, y - 1).roomId !== undefined) ||
+      (fS && getTileAt(map, x, y + 1).roomId !== undefined) ||
+      (fE && getTileAt(map, x + 1, y).roomId !== undefined) ||
+      (fW && getTileAt(map, x - 1, y).roomId !== undefined);
+    const spriteSet = isRoomWall ? ROOM_ROCK_FLOOR : CORRIDOR_ROCK_FLOOR;
     return singleLayer(spriteSet[floorSide] ?? `${BITMAPS}/LLROCKFL.png`, TILE32, REPEAT_NO);
   }
 

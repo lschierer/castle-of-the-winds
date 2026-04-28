@@ -29,6 +29,7 @@ import {
   getTileAt,
   dropItem,
   revealAround,
+  revealRoom,
 } from '../game/world-map.ts';
 import { getTileStyle } from '../game/sprites.ts';
 import { spellById } from '../game/spells.ts';
@@ -615,6 +616,12 @@ export class GameWorld extends LitElement {
     this.pos = { x, y };
     // Fog of war: only reveal in dungeons (village/farm-map are fully visible)
     if (this.currentDungeonLevel > 0) {
+      const tile = getTileAt(this.map, x, y);
+      if (tile.roomId) {
+        // Entering a room: reveal the entire room at once
+        revealRoom(this.map, tile.roomId);
+      }
+      // Always run LOS reveal so corridor neighbours and door views are lit
       revealAround(this.map, x, y);
     }
   }
@@ -1145,6 +1152,8 @@ export class GameWorld extends LitElement {
     }
 
     const inDungeon = this.currentDungeonLevel > 0;
+    // When the player is in a room, monsters in the same room are always visible
+    const playerRoomId = inDungeon ? getTileAt(map, pos.x, pos.y).roomId : undefined;
 
     for (let row = 0; row < VP_ROWS; row++) {
       for (let col = 0; col < VP_COLS; col++) {
@@ -1161,9 +1170,10 @@ export class GameWorld extends LitElement {
 
         const s = getTileStyle(map, mx, my, isHero, heroGender);
 
-        // Monsters only visible if tile is in LOS (within reveal radius)
+        // Monsters visible via LOS (distance check) or when in the same room as player
         const dist = Math.abs(mx - pos.x) + Math.abs(my - pos.y);
-        const inLOS = !inDungeon || dist <= 10;
+        const inLOS = !inDungeon || dist <= 10 ||
+          (playerRoomId !== undefined && tile.roomId === playerRoomId);
         const monster = inLOS ? monsterAt.get(`${mx},${my}`) : undefined;
         if (monster) {
           const spec = monsterById(monster.specId);

@@ -9,7 +9,7 @@
  * 5. Spawn monsters and loot
  */
 
-import type { Tile, TileMap, Vec2 } from './tile-map.ts';
+import type { Tile, TileMap, Vec2, RoomInfo } from './tile-map.ts';
 import type { MonsterInstance } from './combat.ts';
 import { monstersForDepth } from './monsters.ts';
 import { generateTileLoot } from './loot.ts';
@@ -20,6 +20,7 @@ import { itemQualityLevel, type GameStage } from './progression.ts';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Room {
+  id: string;
   x: number; y: number;
   w: number; h: number;
 }
@@ -96,7 +97,7 @@ function placeRooms(w: number, h: number, count: number): Room[] {
     const rh = randRange(4, 7);
     const rx = randRange(2, w - rw - 2);
     const ry = randRange(2, h - rh - 2);
-    const room: Room = { x: rx, y: ry, w: rw, h: rh };
+    const room: Room = { id: `r${rooms.length}`, x: rx, y: ry, w: rw, h: rh };
     if (rooms.every((r) => !roomsOverlap(r, room, 2))) {
       rooms.push(room);
     }
@@ -150,6 +151,26 @@ function addWalls(grid: Tile[][], w: number, h: number): void {
             const wallRow = grid[ny];
             if (wallRow) wallRow[nx] = { terrain: 'floor', walkable: false, feature: 'wall', items: [] };
           }
+        }
+      }
+    }
+  }
+}
+
+// ── Room tile tagging ─────────────────────────────────────────────────────────
+
+/**
+ * After all carving is done, stamp roomId onto every walkable floor tile
+ * that falls within a room's footprint.  Corridor tiles that thread through
+ * a room inherit that room's id (they are inside the room, not a corridor).
+ */
+function tagRoomTiles(grid: Tile[][], rooms: Room[]): void {
+  for (const room of rooms) {
+    for (let y = room.y; y < room.y + room.h; y++) {
+      for (let x = room.x; x < room.x + room.w; x++) {
+        const t = grid[y]?.[x];
+        if (t && t.terrain === 'floor' && t.walkable) {
+          t.roomId = room.id;
         }
       }
     }
@@ -401,6 +422,9 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   // Add doors at room-corridor junctions
   addDoors(grid, rooms);
 
+  // Tag floor tiles that belong to rooms (after doors so door tiles get roomId too)
+  tagRoomTiles(grid, rooms);
+
   // Assign wall directions for sprite rendering
   assignWallDirections(grid, w, h);
 
@@ -438,12 +462,18 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
     placeGuaranteedSpawns(grid, rooms, stairsUp, monsters);
   }
 
+  const roomsRecord: Record<string, RoomInfo> = {};
+  for (const room of rooms) {
+    roomsRecord[room.id] = { x: room.x, y: room.y, w: room.w, h: room.h };
+  }
+
   const map: TileMap = {
     id: `dungeon-${dungeonLevel}` as TileMap['id'],
     width: w,
     height: h,
     tiles: grid,
     entryPosition: stairsUp,
+    rooms: roomsRecord,
   };
 
   return stairsDown === undefined

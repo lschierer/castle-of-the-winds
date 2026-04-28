@@ -25,6 +25,7 @@ export {
   type Building,
   type MapExit,
   type Direction,
+  type RoomInfo,
   getTileAt,
   isWalkable,
   exitAt,
@@ -33,6 +34,7 @@ export {
   pickupItem,
   pickupAllItems,
   revealAround,
+  revealRoom,
 } from './tile-map.ts';
 
 // ── Signpost positions (village only) ─────────────────────────────────────────

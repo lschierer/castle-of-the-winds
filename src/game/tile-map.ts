@@ -69,6 +69,22 @@ export interface Tile {
   items: Item[];
   /** Whether the player has seen this tile. */
   explored?: boolean;
+  /**
+   * Set on dungeon floor tiles that are inside a room (not a corridor).
+   * Used by sprites.ts to pick room vs. corridor wall sprites, and by the
+   * fog-of-war system to bulk-reveal the whole room on first entry.
+   * Secret passages and traps are NOT revealed by room entry even though
+   * they may share a roomId; those require explicit searching.
+   */
+  roomId?: string;
+}
+
+/** Bounding box for a dungeon room, stored in TileMap.rooms. */
+export interface RoomInfo {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 /**
@@ -82,6 +98,11 @@ export interface TileMap {
   tiles: Tile[][];
   /** Where the hero spawns when first entering this map. */
   entryPosition: Vec2;
+  /**
+   * Dungeon rooms keyed by roomId. Present only on procedurally generated
+   * dungeon maps; undefined on village/farm-map.
+   */
+  rooms?: Record<string, RoomInfo>;
 }
 
 // ── Accessors ─────────────────────────────────────────────────────────────────
@@ -133,6 +154,23 @@ export function pickupAllItems(map: TileMap, x: number, y: number): Item[] {
 }
 
 // ── Fog of war ────────────────────────────────────────────────────────────────
+
+/**
+ * Reveal all tiles in the named room plus its surrounding wall ring.
+ * Called when the player first steps onto any floor tile with that roomId.
+ * Secret passages (feature === 'door' discovered via search) are NOT
+ * affected here — they remain hidden until searched.
+ */
+export function revealRoom(map: TileMap, roomId: string): void {
+  const room = map.rooms?.[roomId];
+  if (!room) return;
+  for (let y = room.y - 1; y <= room.y + room.h; y++) {
+    for (let x = room.x - 1; x <= room.x + room.w; x++) {
+      const tile = map.tiles[y]?.[x];
+      if (tile) tile.explored = true;
+    }
+  }
+}
 
 /**
  * Reveal tiles visible from (px, py) using simple raycasting.
