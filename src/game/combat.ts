@@ -14,7 +14,7 @@
 import type { Character, CharacterStats } from './character.ts';
 import type { MonsterSpec, SpecialAttack } from './monsters.ts';
 import type { Item } from './items.ts';
-import { WEAPON_SPECS, rollDamage } from './items.ts';
+import { WEAPON_SPECS } from './items.ts';
 import type { ElementType } from './equipment.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -177,13 +177,14 @@ export function playerMeleeAttack(
     return { damage: 0, message: `${monster.name} dodges your attack.`, dodged: true };
   }
 
-  // Weapon damage roll
+  // Weapon damage from weapon class
   let rawDamage = 1; // unarmed base
   let weaponName = 'fists';
   if (weapon) {
     const spec = WEAPON_SPECS.find((s) => s.name === weapon.name);
-    const dice = weapon.damage ?? spec?.damage ?? { count: 1, sides: 4, bonus: 0 };
-    rawDamage = rollDamage(dice);
+    const wc = weapon.weaponClass ?? spec?.weaponClass ?? 2;
+    // Weapon class damage: base 1 + WC * 1.5, with some randomness
+    rawDamage = 1 + Math.floor(wc * 1.5) + Math.floor(rand() * (wc + 1));
     weaponName = weapon.name;
     // Enchantment bonus
     rawDamage += weapon.enchantment;

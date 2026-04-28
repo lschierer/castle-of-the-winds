@@ -28,6 +28,7 @@ import {
   exitAt,
   getTileAt,
   dropItem,
+  revealAround,
 } from '../game/world-map.ts';
 import { getTileStyle } from '../game/sprites.ts';
 import { spellById, SCHOOL_LABELS } from '../game/spells.ts';
@@ -609,6 +610,16 @@ export class GameWorld extends LitElement {
   /** Total floors in the mine dungeon. */
   private readonly MINE_FLOORS = 4;
 
+
+  /** Set player position and reveal surrounding tiles. */
+  private moveTo(x: number, y: number): void {
+    this.pos = { x, y };
+    // Fog of war: only reveal in dungeons (village/farm-map are fully visible)
+    if (this.currentDungeonLevel > 0) {
+      revealAround(this.map, x, y);
+    }
+  }
+
   private toggleOverlay(which: Overlay): void {
     this.overlay = this.overlay === which ? 'none' : which;
   }
@@ -668,6 +679,10 @@ export class GameWorld extends LitElement {
       } else {
         const staticMap = ALL_MAPS[state.mapId as keyof typeof ALL_MAPS];
         if (staticMap) this.map = staticMap;
+      }
+      // Reveal around current position
+      if (state.currentDungeonLevel > 0) {
+        revealAround(this.map, state.pos.x, state.pos.y);
       }
       return;
     }
@@ -750,6 +765,16 @@ export class GameWorld extends LitElement {
       this.pickupGround();
       return;
     }
+    if (e.key === 'r' && !e.shiftKey) {
+      e.preventDefault();
+      this.doRest();
+      return;
+    }
+    if (e.key === 'R' && e.shiftKey) {
+      e.preventDefault();
+      this.doSleep();
+      return;
+    }
     if (e.key === '>' || e.key === '.') {
       e.preventDefault();
       this.useStairs('down');
@@ -790,7 +815,7 @@ export class GameWorld extends LitElement {
 
     if (!isWalkable(this.map, nx, ny)) return;
 
-    this.pos = { x: nx, y: ny };
+    this.moveTo(nx, ny);
 
     // Special tile messages
     const tile = getTileAt(this.map, nx, ny);
@@ -859,7 +884,7 @@ export class GameWorld extends LitElement {
     const staticMap = ALL_MAPS[id as keyof typeof ALL_MAPS];
     if (staticMap) {
       this.map = staticMap;
-      this.pos = { ...position };
+      this.moveTo(position.x, position.y);
       this.monsters = [];
       this.currentDungeonLevel = 0;
       // New visit: reset shop prices and inventories
@@ -882,7 +907,10 @@ export class GameWorld extends LitElement {
       logger.info(`Generated dungeon floor ${level}: ${floor.map.width}×${floor.map.height}`);
     }
     this.map = floor.map;
-    this.pos = position ? { ...position } : { ...floor.stairsUp };
+    this.moveTo(
+      position ? position.x : floor.stairsUp.x,
+      position ? position.y : floor.stairsUp.y,
+    );
     this.monsters = floor.monsters;
     this.currentDungeonLevel = level;
     this.locationName = `Mine — Floor ${level}`;
@@ -1115,15 +1143,27 @@ export class GameWorld extends LitElement {
       monsterAt.set(`${m.x},${m.y}`, m);
     }
 
+    const inDungeon = this.currentDungeonLevel > 0;
+
     for (let row = 0; row < VP_ROWS; row++) {
       for (let col = 0; col < VP_COLS; col++) {
         const mx = pos.x - VP_HALF_X + col;
         const my = pos.y - VP_HALF_Y + row;
+        const tile = getTileAt(map, mx, my);
         const isHero = mx === pos.x && my === pos.y;
+
+        // Fog of war: unexplored dungeon tiles are black
+        if (inDungeon && !tile.explored) {
+          tiles.push(html`<div class="tile" style="background:#000"></div>`);
+          continue;
+        }
+
         const s = getTileStyle(map, mx, my, isHero, heroGender);
 
-        // Overlay monster icon if one is here
-        const monster = monsterAt.get(`${mx},${my}`);
+        // Monsters only visible if tile is in LOS (within reveal radius)
+        const dist = Math.abs(mx - pos.x) + Math.abs(my - pos.y);
+        const inLOS = !inDungeon || dist <= 10;
+        const monster = inLOS ? monsterAt.get(`${mx},${my}`) : undefined;
         if (monster) {
           const spec = monsterById(monster.specId);
           const iconSrc = spec ? `/assets/sprites/icons/${spec.icon}` : '';
@@ -1719,6 +1759,65 @@ export class GameWorld extends LitElement {
 
     this.autoSave();
     this.runMonsterTurns();
+  }
+
+  // ── Rest & Sleep ───────────────────────────────────────────────────────────
+
+  private doRest(): void {
+    const c = this.character;
+    if (!c) return;
+    if (c.hitPoints >= c.maxHitPoints) {
+      this.pushMessage('You are already fully healed.');
+      return;
+    }
+    // Rest: recover HP over multiple turns. Each turn has a chance of monster interrupt.
+    const turnsNeeded = Math.ceil((c.maxHitPoints - c.hitPoints) / 2);
+    let interrupted = false;
+    for (let t = 0; t < turnsNeeded; t++) {
+      // 5% chance per turn of being interrupted by a nearby monster
+      if (this.monsters.length > 0 && Math.random() < 0.05) {
+        interrupted = true;
+        this.pushMessage('Your rest is interrupted!');
+        break;
+      }
+      c.hitPoints = Math.min(c.maxHitPoints, c.hitPoints + 2);
+      this.runMonsterTurns();
+    }
+    if (!interrupted) {
+      this.pushMessage(`You rest until healed. HP: ${c.hitPoints}/${c.maxHitPoints}`);
+    }
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  private doSleep(): void {
+    const c = this.character;
+    if (!c) return;
+    if (c.hitPoints >= c.maxHitPoints && c.mana >= c.maxMana) {
+      this.pushMessage('You are already fully restored.');
+      return;
+    }
+    // Sleep: recover HP and Mana. Takes longer, higher interrupt risk.
+    const hpNeeded = c.maxHitPoints - c.hitPoints;
+    const mpNeeded = c.maxMana - c.mana;
+    const turnsNeeded = Math.ceil(Math.max(hpNeeded / 2, mpNeeded));
+    let interrupted = false;
+    for (let t = 0; t < turnsNeeded; t++) {
+      // 10% chance per turn of interrupt during sleep
+      if (this.monsters.length > 0 && Math.random() < 0.10) {
+        interrupted = true;
+        this.pushMessage('Your sleep is interrupted by a noise!');
+        break;
+      }
+      c.hitPoints = Math.min(c.maxHitPoints, c.hitPoints + 2);
+      c.mana = Math.min(c.maxMana, c.mana + 1);
+      this.runMonsterTurns();
+    }
+    if (!interrupted) {
+      this.pushMessage(`You sleep until restored. HP: ${c.hitPoints}/${c.maxHitPoints}, Mana: ${c.mana}/${c.maxMana}`);
+    }
+    this.autoSave();
+    this.requestUpdate();
   }
 
   private pickupGround(): void {

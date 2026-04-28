@@ -122,8 +122,8 @@ export interface Item {
   slots?: ContainerSlot[];
   /** Subtype tag for coins — only present when kind === 'coin'. */
   coinKind?: CoinKind;
-  /** Weapon damage dice — only present when kind === 'weapon'. */
-  damage?: DamageDice;
+  /** Weapon class (0-12) — only present when kind === 'weapon'. Higher = more damage. */
+  weaponClass?: number;
   /** Sprite icon filename (e.g. 'sword.png'). Used for ground/inventory display. */
   icon?: string;
 }
@@ -269,43 +269,36 @@ export interface PackSpec {
 }
 
 export const PACK_SPECS: readonly PackSpec[] = [
-  // ── Mundane packs ────────────────────────────────────────────────────────────
-  { name: 'Small Pack',         weight:  200, bulk: 1, maxPayloadWeight:  5_000, maxPayloadBulk:  10 },
-  { name: 'Medium Pack',        weight:  350, bulk: 1, maxPayloadWeight: 10_000, maxPayloadBulk:  20 },
-  { name: 'Large Pack',         weight:  500, bulk: 2, maxPayloadWeight: 15_000, maxPayloadBulk:  30 },
-  { name: 'Giant Pack',         weight:  700, bulk: 2, maxPayloadWeight: 20_000, maxPayloadBulk:  40 },
-  // ── Chests and caskets (store-rooms, dungeon furniture — not carried) ─────────
-  { name: 'Small Chest',        weight: 2000, bulk: 4, maxPayloadWeight:  30_000, maxPayloadBulk:  50 },
-  { name: 'Medium Chest',       weight: 3000, bulk: 5, maxPayloadWeight:  50_000, maxPayloadBulk:  80 },
-  { name: 'Large Chest',        weight: 5000, bulk: 6, maxPayloadWeight:  80_000, maxPayloadBulk: 120 },
-  { name: 'Small Casket',       weight: 1200, bulk: 3, maxPayloadWeight:  20_000, maxPayloadBulk:  35 },
-  { name: 'Large Casket',       weight: 2500, bulk: 4, maxPayloadWeight:  40_000, maxPayloadBulk:  60 },
+  // ── Mundane packs (from help file) ───────────────────────────────────────────
+  { name: 'Small Pack',         weight:  1000, bulk: 1000, maxPayloadWeight:  12000, maxPayloadBulk:  50000 },
+  { name: 'Medium Pack',        weight:  2000, bulk: 1500, maxPayloadWeight:  22000, maxPayloadBulk:  75000 },
+  { name: 'Large Pack',         weight:  4000, bulk: 2000, maxPayloadWeight:  35000, maxPayloadBulk: 100000 },
+  // ── Bags ─────────────────────────────────────────────────────────────────────
+  { name: 'Small Bag',          weight:   300, bulk:  500, maxPayloadWeight:   5000, maxPayloadBulk:   6000 },
+  { name: 'Medium Bag',         weight:   500, bulk:  700, maxPayloadWeight:  10000, maxPayloadBulk:  12000 },
+  { name: 'Large Bag',          weight:   900, bulk:  900, maxPayloadWeight:  15000, maxPayloadBulk:  18000 },
+  // ── Chests and caskets ───────────────────────────────────────────────────────
+  { name: 'Small Chest',        weight:  5000, bulk: 10000, maxPayloadWeight: 100000, maxPayloadBulk:  50000 },
+  { name: 'Medium Chest',       weight: 15000, bulk:  2000, maxPayloadWeight: 100000, maxPayloadBulk: 150000 },
+  { name: 'Large Chest',        weight: 25000, bulk:  4000, maxPayloadWeight: 100000, maxPayloadBulk: 250000 },
   // ── Packs of Holding (magical) ───────────────────────────────────────────────
-  // Each PoH weighs and looks exactly like its mundane equivalent while unidentified.
-  // Once identified, the true name is revealed and the vast interior becomes usable.
   {
     name: 'Small Pack of Holding',
-    weight:  220, bulk: 1,
-    maxPayloadWeight:  25_000, maxPayloadBulk:  50,
+    weight: 1000, bulk: 1000,
+    maxPayloadWeight: 50000, maxPayloadBulk: 150000,
     magical: true, unidentifiedName: 'Small Pack',
   },
   {
-    name: 'Pack of Holding',
-    weight:  380, bulk: 1,
-    maxPayloadWeight:  50_000, maxPayloadBulk: 100,
+    name: 'Medium Pack of Holding',
+    weight: 2000, bulk: 1500,
+    maxPayloadWeight: 75000, maxPayloadBulk: 200000,
     magical: true, unidentifiedName: 'Medium Pack',
   },
   {
     name: 'Large Pack of Holding',
-    weight:  530, bulk: 2,
-    maxPayloadWeight: 100_000, maxPayloadBulk: 200,
+    weight: 4000, bulk: 2000,
+    maxPayloadWeight: 100000, maxPayloadBulk: 250000,
     magical: true, unidentifiedName: 'Large Pack',
-  },
-  {
-    name: 'Giant Pack of Holding',
-    weight:  730, bulk: 2,
-    maxPayloadWeight: 200_000, maxPayloadBulk: 400,
-    magical: true, unidentifiedName: 'Giant Pack',
   },
 ];
 
@@ -372,43 +365,40 @@ export function makeBelt(name: string): Item {
 
 export interface WeaponSpec {
   name: string;
-  /** Weight in grams (approximate). */
   weight: number;
-  /** Bulk (size units): 1 = tiny, 2 = small, 3 = medium, 4–5 = large, 6+ = huge. */
   bulk: number;
-  damage: DamageDice;
-  /** Broad category for display / combat logic. */
+  /** Weapon class (0-12). Higher = more damage. */
+  weaponClass: number;
   weaponType: 'blade' | 'blunt' | 'polearm';
-}
-
-function d(count: number, sides: number, bonus = 0): DamageDice {
-  return { count, sides, bonus };
+  /** Base buy price in copper. */
+  baseBuyPrice?: number;
+  /** Base sell price in copper. */
+  baseSellPrice?: number;
 }
 
 /**
- * All player-usable weapons, per Item/Weapon.elm.
- * Sorted roughly by progression (weakest → strongest).
+ * All player-usable weapons, per the official help file Object Directory.
+ * Weight and bulk in game units (not grams).
  */
 export const WEAPON_SPECS: readonly WeaponSpec[] = [
-  //                                          wt (g)  bulk  damage           type
-  { name: 'Normal Dagger',     weight:   250, bulk: 1, damage: d(1,  4),     weaponType: 'blade'   },
-  { name: 'Short Sword',       weight:   700, bulk: 2, damage: d(1,  6),     weaponType: 'blade'   },
-  { name: 'Long Sword',        weight:  1200, bulk: 3, damage: d(1,  8),     weaponType: 'blade'   },
-  { name: 'Broad Sword',       weight:  1400, bulk: 3, damage: d(1,  7, 1),  weaponType: 'blade'   },
-  { name: 'Bastard Sword',     weight:  1800, bulk: 4, damage: d(1, 10),     weaponType: 'blade'   },
-  { name: 'Two-Handed Sword',  weight:  2500, bulk: 6, damage: d(1, 15),     weaponType: 'blade'   },
-  { name: 'Club',              weight:   800, bulk: 3, damage: d(2,  2, 1),  weaponType: 'blunt'   },
-  { name: 'Hammer',            weight:  1000, bulk: 3, damage: d(2,  2),     weaponType: 'blunt'   },
-  { name: 'Mace',              weight:  1200, bulk: 3, damage: d(2,  3),     weaponType: 'blunt'   },
-  { name: 'Morning Star',      weight:  1500, bulk: 4, damage: d(2,  4),     weaponType: 'blunt'   },
-  { name: 'War Hammer',        weight:  2000, bulk: 5, damage: d(3,  4),     weaponType: 'blunt'   },
-  { name: 'Flail',             weight:  1800, bulk: 5, damage: d(3,  5),     weaponType: 'blunt'   },
-  { name: 'Quarterstaff',      weight:  1000, bulk: 5, damage: d(1,  6),     weaponType: 'polearm' },
-  { name: 'Hand Axe',          weight:   700, bulk: 2, damage: d(1,  5, 1),  weaponType: 'blade'   },
-  { name: 'Axe',               weight:  1500, bulk: 4, damage: d(1, 10, 1),  weaponType: 'blade'   },
-  { name: 'Battle Axe',        weight:  2200, bulk: 5, damage: d(1, 12, 2),  weaponType: 'blade'   },
-  { name: 'Spear',             weight:  1800, bulk: 6, damage: d(1, 12),     weaponType: 'polearm' },
-  { name: 'Broken Sword',      weight:   600, bulk: 2, damage: d(1,  6, -2), weaponType: 'blade'   },
+  { name: 'Broken Sword',      weight:  1000, bulk:  5000, weaponClass:  0, weaponType: 'blade' },
+  { name: 'Club',              weight:  1500, bulk:  3000, weaponClass:  1, weaponType: 'blunt' },
+  { name: 'Normal Dagger',     weight:   500, bulk:   500, weaponClass:  2, weaponType: 'blade' },
+  { name: 'Hammer',            weight:  2000, bulk:  3000, weaponClass:  2, weaponType: 'blunt' },
+  { name: 'Hand Axe',          weight:  1000, bulk:  3000, weaponClass:  3, weaponType: 'blade' },
+  { name: 'Quarterstaff',      weight:   750, bulk:  5000, weaponClass:  3, weaponType: 'polearm' },
+  { name: 'Spear',             weight:  1500, bulk:  5000, weaponClass:  4, weaponType: 'polearm' },
+  { name: 'Short Sword',       weight:  1000, bulk:  5000, weaponClass:  5, weaponType: 'blade' },
+  { name: 'Mace',              weight:  2500, bulk:  4375, weaponClass:  5, weaponType: 'blunt' },
+  { name: 'Flail',             weight:  2000, bulk:  3250, weaponClass:  6, weaponType: 'blunt' },
+  { name: 'Axe',               weight:  2000, bulk:  5000, weaponClass:  6, weaponType: 'blade' },
+  { name: 'War Hammer',        weight:  1400, bulk:  7500, weaponClass:  7, weaponType: 'blunt' },
+  { name: 'Long Sword',        weight:  1500, bulk:  8000, weaponClass:  8, weaponType: 'blade' },
+  { name: 'Battle Axe',        weight:  3000, bulk:  6000, weaponClass:  8, weaponType: 'blade' },
+  { name: 'Broad Sword',       weight:  1600, bulk:  9000, weaponClass:  9, weaponType: 'blade' },
+  { name: 'Morning Star',      weight:  3000, bulk:  9000, weaponClass: 10, weaponType: 'blunt' },
+  { name: 'Bastard Sword',     weight:  3000, bulk: 10000, weaponClass: 11, weaponType: 'blade' },
+  { name: 'Two-Handed Sword',  weight:  5000, bulk: 12000, weaponClass: 12, weaponType: 'blade' },
 ] as const;
 
 /** Weapon tiers for level-scaled drops. */
@@ -468,7 +458,7 @@ export function makeWeapon(name: string, weight?: number, dungeonLevel?: number)
     broken: false,
     enchantment,
     icon: spec?.weaponType === 'blunt' ? 'mace.png' : spec?.weaponType === 'polearm' ? 'spear.png' : 'sword.png',
-    ...(spec?.damage !== undefined ? { damage: spec.damage } : {}),
+    weaponClass: spec?.weaponClass ?? 2,
   };
 }
 
@@ -603,8 +593,8 @@ export function itemDescription(item: Item): string[] {
       lines.push(`${enchantAdjective(ench)} your armor value`);
     }
   }
-  if (item.damage) {
-    lines.push(`Damage: ${item.damage.count}d${item.damage.sides}${item.damage.bonus > 0 ? `+${item.damage.bonus}` : item.damage.bonus < 0 ? `${item.damage.bonus}` : ''}`);
+  if (item.weaponClass !== undefined) {
+    lines.push(`Weapon Class: ${item.weaponClass}`);
   }
   return lines;
 }

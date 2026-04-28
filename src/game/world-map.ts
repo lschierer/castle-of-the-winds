@@ -32,6 +32,7 @@ export {
   dropItem,
   pickupItem,
   pickupAllItems,
+  revealAround,
 } from './tile-map.ts';
 
 // ── Signpost positions (village only) ─────────────────────────────────────────

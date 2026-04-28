@@ -67,6 +67,8 @@ export interface Tile {
   building?: Building;
   /** Items lying on the ground at this tile. */
   items: Item[];
+  /** Whether the player has seen this tile. */
+  explored?: boolean;
 }
 
 /**
@@ -128,4 +130,42 @@ export function pickupAllItems(map: TileMap, x: number, y: number): Item[] {
   const items = [...tile.items];
   tile.items.length = 0;
   return items;
+}
+
+// ── Fog of war ────────────────────────────────────────────────────────────────
+
+/**
+ * Reveal tiles visible from (px, py) using simple raycasting.
+ * Walls block vision but are themselves revealed.
+ */
+export function revealAround(map: TileMap, px: number, py: number, radius = 8): void {
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      if (dx * dx + dy * dy > radius * radius) continue;
+      const tx = px + dx, ty = py + dy;
+      if (ty < 0 || ty >= map.height || tx < 0 || tx >= map.width) continue;
+      // Cast a ray from player to target
+      if (hasLineOfSight(map, px, py, tx, ty)) {
+        const tile = map.tiles[ty]?.[tx];
+        if (tile) tile.explored = true;
+      }
+    }
+  }
+}
+
+function hasLineOfSight(map: TileMap, x0: number, y0: number, x1: number, y1: number): boolean {
+  // Bresenham's line — stop if we hit a non-walkable tile (but mark it visible)
+  let x = x0, y = y0;
+  const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+  while (true) {
+    if (x === x1 && y === y1) return true;
+    const tile = map.tiles[y]?.[x];
+    // Walls and void block vision but are themselves visible
+    if (tile && !tile.walkable && !(x === x0 && y === y0)) return x === x1 && y === y1;
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x += sx; }
+    if (e2 < dx) { err += dx; y += sy; }
+  }
 }
