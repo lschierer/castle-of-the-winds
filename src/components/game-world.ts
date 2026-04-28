@@ -1366,6 +1366,8 @@ export class GameWorld extends LitElement {
   private shopSell(item: Item, shop: ShopDef): void {
     const c = this.character;
     if (!c || !c.pack) return;
+    const price = shop.type === 'junkyard' ? junkYardPrice(item) : sellPrice(item);
+    if (!confirm(`Sell ${displayName(item)} for ${price} cp?`)) return;
     const result = sellItem(c, item, shop);
     if (result.success) {
       // Remove from pack
@@ -1441,6 +1443,7 @@ export class GameWorld extends LitElement {
     boots: 'boots', cloak: 'cloak', bracers: 'bracers', gauntlets: 'gauntlets',
     'ring-l': 'ringLeft', 'ring-r': 'ringRight', amulet: 'amulet',
     belt: 'belt', freeh: 'freeHand',
+    pack: 'pack', purse: 'purse',
   };
 
   private readonly KIND_TO_SLOT: Record<string, string> = {
@@ -1591,6 +1594,54 @@ export class GameWorld extends LitElement {
     this.requestUpdate();
   }
 
+
+  private doSwapPack(newPack: Item, source: 'pack' | 'belt'): void {
+    const c = this.character;
+    if (!c) return;
+    const container = source === 'pack' ? c.pack : c.belt;
+    if (!container) return;
+    removeFromContainer(container, newPack.id);
+    // Move contents from old pack to new pack
+    if (c.pack && c.pack.slots) {
+      for (const slot of c.pack.slots) {
+        for (const item of [...slot.items]) {
+          addToContainer(newPack, item);
+        }
+        slot.items.length = 0;
+      }
+      // Old pack goes on ground
+      dropItem(this.map, this.pos.x, this.pos.y, c.pack);
+    }
+    c.pack = newPack;
+    this.pushMessage(`Now using ${displayName(newPack)}.`);
+    this.actionItem = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  private doSwapGroundPack(newPack: Item): void {
+    const c = this.character;
+    if (!c) return;
+    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+    const idx = tile.items.findIndex((i) => i.id === newPack.id);
+    if (idx === -1) return;
+    tile.items.splice(idx, 1);
+    if (c.pack && c.pack.slots) {
+      for (const slot of c.pack.slots) {
+        for (const item of [...slot.items]) {
+          addToContainer(newPack, item);
+        }
+        slot.items.length = 0;
+      }
+      tile.items.push(c.pack);
+    }
+    c.pack = newPack;
+    this.pushMessage(`Now using ${displayName(newPack)}.`);
+    this.actionItem = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
   private doCoinsToPurse(item: Item, source: 'pack' | 'belt'): void {
     const c = this.character;
     if (!c || !c.purse || !item.coinKind) return;
@@ -1636,7 +1687,6 @@ export class GameWorld extends LitElement {
 
     if (a.source === 'equip') {
       if (a.item.slots) {
-        // Container (pack, belt, purse) — no unequip, just drop
         actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
       } else {
         actions.push({ label: 'Unequip', handler: () => { this.doUnequip(); } });
@@ -1648,14 +1698,18 @@ export class GameWorld extends LitElement {
       } else if (a.item.kind === 'container' && a.item.name.includes('Purse')) {
         actions.push({ label: 'Consolidate Coins', handler: () => { this.doConsolidatePurse(a.item, a.source); } });
         actions.push({ label: 'Swap Purse', handler: () => { this.doSwapPurse(a.item, a.source); } });
+      } else if (a.item.kind === 'container' && a.item.name.includes('Pack')) {
+        actions.push({ label: 'Swap Pack', handler: () => { this.doSwapPack(a.item, a.source); } });
       } else if (a.item.kind in this.KIND_TO_SLOT) {
         actions.push({ label: 'Equip', handler: () => { this.doEquipFromPack(a.item); } });
       }
       actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
-    } else {
+    } else if (a.source === 'ground') {
       if (a.item.kind === 'container' && a.item.name.includes('Purse')) {
         actions.push({ label: 'Consolidate Coins', handler: () => { this.doConsolidateGroundPurse(a.item); } });
         actions.push({ label: 'Swap Purse', handler: () => { this.doSwapGroundPurse(a.item); } });
+      } else if (a.item.kind === 'container' && a.item.name.includes('Pack')) {
+        actions.push({ label: 'Swap Pack', handler: () => { this.doSwapGroundPack(a.item); } });
       }
       actions.push({ label: 'Pick up', handler: () => { this.doPickup(a.item); } });
     }

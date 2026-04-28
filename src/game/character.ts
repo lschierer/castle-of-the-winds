@@ -32,9 +32,9 @@ import { ALL_EQUIPMENT_SPECS, specForItem } from './equipment.ts';
 
 export const STAT_MIN = 10;
 export const STAT_MAX = 100;
-export const STAT_START = 40;
-export const POINT_POOL = 100;
-export const POINT_STEP = 5;
+export const STAT_START = 49;
+export const POINT_POOL = 49;
+export const POINT_STEP = 1;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

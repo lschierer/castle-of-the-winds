@@ -313,7 +313,8 @@ function maxWeaponClassForStockLevel(stockLevel: number): number {
 }
 
 function minStockLevelForSpec(spec: EquipmentSpec): number {
-  return SPECIAL_MIN_STOCK_LEVEL[spec.name] ?? 1;
+  // Use the tier field — tier 1 items need stockLevel 1, tier 2 needs 2, etc.
+  return spec.tier ?? (SPECIAL_MIN_STOCK_LEVEL[spec.name] ?? 1);
 }
 
 function makeStockItem(kind: ItemKind, stockLevel: number): Item {
