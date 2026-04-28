@@ -463,7 +463,7 @@ export class CharacterCreation extends LitElement {
     logger.info(`Character created: ${character.name}, starting spell: ${this.selectedSpell}`);
     clearSave();
     saveCharacter(character);
-    window.location.href = '/game/';
+    window.location.href = '/game/?new=1';
   }
 
   private barClass(value: number): string {

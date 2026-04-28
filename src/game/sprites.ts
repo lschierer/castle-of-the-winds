@@ -133,7 +133,16 @@ function addLayer(top: string, base: TileStyle): TileStyle {
 
 function terrainBase(tile: Tile): TileStyle {
   const sprite = TERRAIN_SPRITE[tile.terrain];
-  if (sprite) return singleLayer(sprite.src, sprite.size, sprite.repeat);
+  if (sprite) {
+    const style = singleLayer(sprite.src, sprite.size, sprite.repeat);
+    // Room floors get a slightly lighter tint than corridor floors
+    if (tile.terrain === 'floor' && tile.roomId !== undefined) {
+      style.backgroundColor = '#1a1a2e';
+    } else if (tile.terrain === 'floor') {
+      style.backgroundColor = '#0e0e1a';
+    }
+    return style;
+  }
   if (tile.terrain === 'mountain') {
     const dir = tile.direction ?? 'N';
     return singleLayer(MOUNTAIN_SPRITE[dir]);
@@ -166,23 +175,19 @@ function dungeonWallStyle(map: TileMap, x: number, y: number): TileStyle {
   const fE = isDungeonFloorSide(map, x + 1, y);
   const fW = isDungeonFloorSide(map, x - 1, y);
 
-  let floorSide: Direction | undefined;
-  if (fN && fE) floorSide = 'NE';
-  else if (fN && fW) floorSide = 'NW';
-  else if (fS && fE) floorSide = 'SE';
-  else if (fS && fW) floorSide = 'SW';
+  // Pick wall icon based on which side has floor
+  let wallIcon: string;
+  if (fN && fE) wallIcon = `${ICONS}/wall_NEI.png`;
+  else if (fN && fW) wallIcon = `${ICONS}/wall_NWI.png`;
+  else if (fS && fE) wallIcon = `${ICONS}/wall_SEI.png`;
+  else if (fS && fW) wallIcon = `${ICONS}/wall_SWI.png`;
+  else if (fN) wallIcon = `${ICONS}/wall_NE.png`;
+  else if (fS) wallIcon = `${ICONS}/wall_SW.png`;
+  else if (fE) wallIcon = `${ICONS}/wall_NE.png`;
+  else if (fW) wallIcon = `${ICONS}/wall_NW.png`;
+  else wallIcon = `${ICONS}/wall_NW.png`;
 
-  if (floorSide) {
-    const isRoomWall =
-      (fN && getTileAt(map, x, y - 1).roomId !== undefined) ||
-      (fS && getTileAt(map, x, y + 1).roomId !== undefined) ||
-      (fE && getTileAt(map, x + 1, y).roomId !== undefined) ||
-      (fW && getTileAt(map, x - 1, y).roomId !== undefined);
-    const spriteSet = isRoomWall ? ROOM_ROCK_FLOOR : CORRIDOR_ROCK_FLOOR;
-    return singleLayer(spriteSet[floorSide] ?? `${BITMAPS}/LLROCKFL.png`, TILE32, REPEAT_NO);
-  }
-
-  return ROCK_WALL_STYLE;
+  return singleLayer(wallIcon);
 }
 
 function findRegion(mapId: string, buildingId: string, x: number, y: number): BuildingRegion | undefined {

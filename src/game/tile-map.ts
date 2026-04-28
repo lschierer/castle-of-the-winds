@@ -69,6 +69,8 @@ export interface Tile {
   items: Item[];
   /** Whether the player has seen this tile. */
   explored?: boolean;
+  /** Room index (if this tile is part of a room, not a corridor). */
+  roomId?: number;
   /**
    * Set on dungeon floor tiles that are inside a room (not a corridor).
    * Used by sprites.ts to pick room vs. corridor wall sprites, and by the
@@ -161,31 +163,46 @@ export function pickupAllItems(map: TileMap, x: number, y: number): Item[] {
  * Secret passages (feature === 'door' discovered via search) are NOT
  * affected here — they remain hidden until searched.
  */
-export function revealRoom(map: TileMap, roomId: string): void {
-  const room = map.rooms?.[roomId];
-  if (!room) return;
-  for (let y = room.y - 1; y <= room.y + room.h; y++) {
-    for (let x = room.x - 1; x <= room.x + room.w; x++) {
-      const tile = map.tiles[y]?.[x];
-      if (tile) tile.explored = true;
-    }
-  }
-}
-
 /**
  * Reveal tiles visible from (px, py) using simple raycasting.
  * Walls block vision but are themselves revealed.
  */
 export function revealAround(map: TileMap, px: number, py: number, radius = 8): void {
+  // If player is in a room, reveal the entire room + its walls
+  const playerTile = getTileAt(map, px, py);
+  if (playerTile.roomId !== undefined) {
+    revealRoom(map, playerTile.roomId);
+  }
+
+  // Normal LOS reveal for corridors and nearby area
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
       if (dx * dx + dy * dy > radius * radius) continue;
       const tx = px + dx, ty = py + dy;
       if (ty < 0 || ty >= map.height || tx < 0 || tx >= map.width) continue;
-      // Cast a ray from player to target
       if (hasLineOfSight(map, px, py, tx, ty)) {
         const tile = map.tiles[ty]?.[tx];
         if (tile) tile.explored = true;
+      }
+    }
+  }
+}
+
+/** Reveal all tiles in a room plus adjacent walls. */
+function revealRoom(map: TileMap, roomId: number): void {
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const tile = map.tiles[y]?.[x];
+      if (!tile) continue;
+      if (tile.roomId === roomId) {
+        tile.explored = true;
+        // Also reveal adjacent walls
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const adj = map.tiles[y + dy]?.[x + dx];
+            if (adj && adj.feature === 'wall') adj.explored = true;
+          }
+        }
       }
     }
   }

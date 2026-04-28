@@ -29,7 +29,6 @@ import {
   getTileAt,
   dropItem,
   revealAround,
-  revealRoom,
 } from '../game/world-map.ts';
 import { getTileStyle } from '../game/sprites.ts';
 import { spellById } from '../game/spells.ts';
@@ -596,6 +595,9 @@ export class GameWorld extends LitElement {
   /** Pending spell learning: character leveled up and can pick a new spell. */
   @state() private pendingSpellLearn = false;
 
+  /** Player is dead — game over. */
+  @state() private dead: { killedBy: string } | null = null;
+
   /** Counter used to generate unique monster instance IDs. */
   private monsterSeq = 0;
   private farmNarrativeShown = false;
@@ -617,11 +619,7 @@ export class GameWorld extends LitElement {
     // Fog of war: only reveal in dungeons (village/farm-map are fully visible)
     if (this.currentDungeonLevel > 0) {
       const tile = getTileAt(this.map, x, y);
-      if (tile.roomId) {
-        // Entering a room: reveal the entire room at once
-        revealRoom(this.map, tile.roomId);
-      }
-      // Always run LOS reveal so corridor neighbours and door views are lit
+      // revealAround handles room reveal internally when player is in a room
       revealAround(this.map, x, y);
     }
   }
@@ -665,6 +663,21 @@ export class GameWorld extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+
+    // Check if this is a fresh new game (from character creation)
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('new')) {
+      // Remove the param so refresh doesn't re-trigger
+      url.searchParams.delete('new');
+      window.history.replaceState({}, '', url.toString());
+      // Load only the character, ignore any stale game state
+      const character = loadCharacter();
+      if (!character) { window.location.href = '/'; return; }
+      this.character = character;
+      this.dungeonFloors.clear();
+      return;
+    }
+
     // Try loading full game state first, fall back to character-only
     const state = loadGameState();
     if (state) {
@@ -709,6 +722,12 @@ export class GameWorld extends LitElement {
   private readonly onKeyDown = (e: KeyboardEvent): void => {
     // Prevent backspace from acting as browser "back" navigation
     if (e.key === 'Backspace') {
+      e.preventDefault();
+      return;
+    }
+
+    // Dead — no actions allowed
+    if (this.dead) {
       e.preventDefault();
       return;
     }
@@ -1069,9 +1088,8 @@ export class GameWorld extends LitElement {
 
           // Check for death
           if (updatedChar.hitPoints <= 0) {
-            this.pushMessage('*** You have been slain! ***');
             this.character = updatedChar;
-            this.autoSave();
+            this.dead = { killedBy: spec.name };
             return;
           }
 
@@ -2085,6 +2103,46 @@ export class GameWorld extends LitElement {
       </div>
     `;
   }
+
+  private renderDeathOverlay(): TemplateResult {
+    const c = this.character;
+    const d = this.dead;
+    if (!c || !d) return html``;
+    const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    return html`
+      <div class="overlay" style="background:rgba(0,0,0,0.85)">
+        <div style="
+          display:flex;flex-direction:column;align-items:center;gap:1rem;
+          padding:2rem 3rem;
+          border:2px solid #5a4a2a;
+          background:#0e0c09;
+          max-width:360px;
+          text-align:center;
+          font-family:'Courier New',monospace;
+          color:#c8b78e;
+        ">
+          <div style="font-size:2rem;color:#6b5830">⚰</div>
+          <div style="font-size:1.4rem;color:#d4a820;letter-spacing:0.15em">REST IN PEACE</div>
+          <div style="width:100%;height:1px;background:#3d3020"></div>
+          <div style="font-size:1.1rem;color:#f0e0a8">${c.name}</div>
+          <div style="font-size:0.8rem;color:#6b5830">Level ${c.level} Adventurer</div>
+          <div style="font-size:0.75rem;color:#a04040;margin-top:0.5rem">
+            Slain by ${d.killedBy}
+          </div>
+          <div style="font-size:0.7rem;color:#6b5830">${date}</div>
+          <div style="width:100%;height:1px;background:#3d3020;margin-top:0.5rem"></div>
+          <button style="
+            background:transparent;border:1px solid #5a4a2a;color:#c8b78e;
+            font-family:inherit;font-size:0.8rem;padding:0.5rem 1.5rem;
+            cursor:pointer;letter-spacing:0.1em;
+          " @click=${() => { window.location.href = '/'; }}>
+            Return to Title
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   private renderNarrativeOverlay(): TemplateResult {
     if (this.narrative === null) return html``;
     return html`
@@ -2252,7 +2310,9 @@ export class GameWorld extends LitElement {
             ? html`<div class="location-banner">${this.locationName}</div>`
             : ''}
 
-          ${this.narrative !== null
+          ${this.dead
+            ? this.renderDeathOverlay()
+            : this.narrative !== null
             ? this.renderNarrativeOverlay()
             : this.overlay === 'building'
               ? this.renderBuildingOverlay()

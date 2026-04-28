@@ -1,279 +1,189 @@
 /**
- * Procedural dungeon generator.
+ * Procedural dungeon generator using rot.js.
  *
- * Produces TileMap grids using a room-and-corridor algorithm:
- * 1. Place random non-overlapping rooms
- * 2. Connect rooms with L-shaped corridors
- * 3. Add doors at room-corridor junctions
- * 4. Place stairs up/down
- * 5. Spawn monsters and loot
+ * Uses rot.js Digger algorithm for room-and-corridor generation,
+ * then converts to our TileMap format with monsters and loot.
  */
 
-import type { Tile, TileMap, Vec2, RoomInfo } from './tile-map.ts';
+import { Map as RotMap } from 'rot-js';
+import type { Tile, TileMap, Vec2 } from './tile-map.ts';
 import type { MonsterInstance } from './combat.ts';
-import { monstersForDepth } from './monsters.ts';
+import { monstersForLevel } from './monsters.ts';
 import { generateTileLoot } from './loot.ts';
 import type { Item } from './items.ts';
 import { ARMOR_SPECS } from './equipment.ts';
-import { itemQualityLevel, type GameStage } from './progression.ts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Room {
-  id: string;
-  x: number; y: number;
-  w: number; h: number;
-}
 
 export interface DungeonFloor {
   map: TileMap;
   monsters: MonsterInstance[];
-  /** Position of stairs leading up (to previous floor or surface). */
   stairsUp: Vec2;
-  /** Position of stairs leading down (to next floor). Absent on last floor. */
   stairsDown?: Vec2;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function rand(max: number): number { return Math.floor(Math.random() * max); }
-function randRange(min: number, max: number): number { return min + rand(max - min + 1); }
-function pick<T>(arr: readonly T[]): T {
-  const item = arr[rand(arr.length)];
-  if (item === undefined) throw new Error('pick called on empty array');
-  return item;
-}
-function cellAt(grid: Tile[][], x: number, y: number): Tile {
-  const t = grid[y]?.[x];
-  if (!t) throw new Error(`Out of bounds: (${x},${y})`);
-  return t;
-}
+function pick<T>(arr: readonly T[]): T { return arr[rand(arr.length)]!; }
 
-function roomCenter(r: Room): Vec2 {
-  return { x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) };
+let monsterSeq = 1000;
+
+// ── Main entry point ──────────────────────────────────────────────────────────
+
+export interface GenerateFloorOptions {
+  dungeonLevel: number;
+  totalFloors: number;
+  width?: number;
+  height?: number;
 }
 
-function roomsOverlap(a: Room, b: Room, pad = 1): boolean {
-  return a.x - pad < b.x + b.w && a.x + a.w + pad > b.x &&
-         a.y - pad < b.y + b.h && a.y + a.h + pad > b.y;
-}
+export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
+  const {
+    dungeonLevel,
+    totalFloors,
+    width: w = 40 + dungeonLevel * 2,
+    height: h = 30 + dungeonLevel * 2,
+  } = opts;
 
-// ── Grid operations ───────────────────────────────────────────────────────────
+  // Generate using rot.js Digger
+  const digger = new RotMap.Digger(w, h, {
+    roomWidth: [4, 9],
+    roomHeight: [3, 7],
+    corridorLength: [2, 8],
+    dugPercentage: 0.3 + dungeonLevel * 0.02,
+  });
 
-function makeGrid(w: number, h: number): Tile[][] {
+  // Collect floor tiles
+  const floorSet = new Set<string>();
+  digger.create((x, y, value) => {
+    if (value === 0) floorSet.add(`${x},${y}`); // 0 = floor in rot.js
+  });
+
+  // Build tile grid
   const grid: Tile[][] = [];
   for (let y = 0; y < h; y++) {
     const row: Tile[] = [];
     for (let x = 0; x < w; x++) {
-      row.push({ terrain: 'void', walkable: false, items: [] });
+      if (floorSet.has(`${x},${y}`)) {
+        row.push({ terrain: 'floor', walkable: true, items: [] });
+      } else {
+        row.push({ terrain: 'void', walkable: false, items: [] });
+      }
     }
     grid.push(row);
   }
-  return grid;
-}
 
-function setFloor(grid: Tile[][], x: number, y: number): void {
-  const row = grid[y];
-  if (row && x >= 0 && x < row.length) {
-    row[x] = { terrain: 'floor', walkable: true, items: [] };
-  }
-}
-
-function isFloor(grid: Tile[][], x: number, y: number): boolean {
-  return grid[y]?.[x]?.terrain === 'floor';
-}
-
-function isVoid(grid: Tile[][], x: number, y: number): boolean {
-  const t = grid[y]?.[x]?.terrain;
-  return t === 'void' || t === undefined;
-}
-
-// ── Room placement ────────────────────────────────────────────────────────────
-
-function placeRooms(w: number, h: number, count: number): Room[] {
-  const rooms: Room[] = [];
-  for (let attempt = 0; attempt < count * 20 && rooms.length < count; attempt++) {
-    const rw = randRange(4, 9);
-    const rh = randRange(4, 7);
-    const rx = randRange(2, w - rw - 2);
-    const ry = randRange(2, h - rh - 2);
-    const room: Room = { id: `r${rooms.length}`, x: rx, y: ry, w: rw, h: rh };
-    if (rooms.every((r) => !roomsOverlap(r, room, 2))) {
-      rooms.push(room);
-    }
-  }
-  return rooms;
-}
-
-function carveRoom(grid: Tile[][], room: Room): void {
-  for (let y = room.y; y < room.y + room.h; y++) {
-    for (let x = room.x; x < room.x + room.w; x++) {
-      setFloor(grid, x, y);
-    }
-  }
-}
-
-// ── Corridors ─────────────────────────────────────────────────────────────────
-
-function carveCorridor(grid: Tile[][], a: Vec2, b: Vec2): void {
-  let { x, y } = a;
-  const dx = x < b.x ? 1 : -1;
-  const dy = y < b.y ? 1 : -1;
-
-  if (rand(2) === 0) {
-    // Castle of the Winds leans heavily on diagonal dungeon joins. Carving the
-    // shared x/y delta first gives the wall renderer proper sloped edges.
-    while (x !== b.x && y !== b.y) {
-      setFloor(grid, x, y);
-      x += dx;
-      y += dy;
-    }
-  }
-
-  // Finish any remaining offset with a straight run.
-  while (x !== b.x) { setFloor(grid, x, y); x += dx; }
-  while (y !== b.y) { setFloor(grid, x, y); y += dy; }
-  setFloor(grid, b.x, b.y);
-}
-
-// ── Walls ─────────────────────────────────────────────────────────────────────
-
-function addWalls(grid: Tile[][], w: number, h: number): void {
+  // Add walls around floor tiles (cardinal only to avoid blocking diagonals)
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (!isFloor(grid, x, y)) continue;
-      // Place walls at cardinal neighbours only — diagonals get walls
-      // only if they wouldn't block a diagonal passage between two floor tiles
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dy === 0) continue;
-          const nx = x + dx, ny = y + dy;
-          if (ny < 0 || ny >= h || nx < 0 || nx >= w) continue;
-          if (!isVoid(grid, nx, ny)) continue;
-
-          // For diagonal positions, check if placing a wall here would
-          // block movement between two floor tiles that share this corner
-          if (dx !== 0 && dy !== 0) {
-            // The two cardinal tiles adjacent to this diagonal
-            const adjA = isFloor(grid, x + dx, y); // horizontal neighbour
-            const adjB = isFloor(grid, x, y + dy); // vertical neighbour
-            // If both cardinal neighbours are floor, this diagonal is a
-            // passage corner — don't wall it off
-            if (adjA && adjB) continue;
-          }
-
-          const wallRow = grid[ny];
-          if (wallRow) wallRow[nx] = { terrain: 'floor', walkable: false, feature: 'wall', items: [] };
+      if (grid[y]![x]!.terrain !== 'floor' || !grid[y]![x]!.walkable) continue;
+      for (const [dx, dy] of [[-1,0],[1,0],[0,-1],[0,1]] as const) {
+        const nx = x + dx, ny = y + dy;
+        if (ny >= 0 && ny < h && nx >= 0 && nx < w && grid[ny]![nx]!.terrain === 'void') {
+          grid[ny]![nx] = { terrain: 'floor', walkable: false, feature: 'wall', items: [] };
         }
       }
     }
   }
-}
 
-// ── Room tile tagging ─────────────────────────────────────────────────────────
+  // Get rooms from rot.js
+  const rooms = digger.getRooms();
 
-/**
- * After all carving is done, stamp roomId onto every walkable floor tile
- * that falls within a room's footprint.  Corridor tiles that thread through
- * a room inherit that room's id (they are inside the room, not a corridor).
- */
-function tagRoomTiles(grid: Tile[][], rooms: Room[]): void {
-  for (const room of rooms) {
-    for (let y = room.y; y < room.y + room.h; y++) {
-      for (let x = room.x; x < room.x + room.w; x++) {
-        const t = grid[y]?.[x];
-        if (t && t.terrain === 'floor' && t.walkable) {
-          t.roomId = room.id;
-        }
+  // Tag room tiles with roomId for rendering and reveal
+  for (let ri = 0; ri < rooms.length; ri++) {
+    const room = rooms[ri]!;
+    for (let y = room.getTop(); y <= room.getBottom(); y++) {
+      for (let x = room.getLeft(); x <= room.getRight(); x++) {
+        const tile = grid[y]?.[x];
+        if (tile && tile.walkable) tile.roomId = ri;
       }
     }
   }
-}
 
-// ── Doors ─────────────────────────────────────────────────────────────────────
-
-function addDoors(grid: Tile[][], rooms: Room[]): void {
-  // A door candidate: a floor tile at the edge of a room where a corridor enters.
-  // Heuristic: floor tile with exactly 2 floor neighbours on opposite sides (N/S or E/W)
-  // and wall neighbours on the perpendicular axis.
+  // Add diagonal corner walls for rooms (so corners are visually distinct)
   for (const room of rooms) {
-    // Check the perimeter of each room
-    for (let x = room.x; x < room.x + room.w; x++) {
-      checkDoor(grid, x, room.y);           // top edge
-      checkDoor(grid, x, room.y + room.h - 1); // bottom edge
-    }
-    for (let y = room.y; y < room.y + room.h; y++) {
-      checkDoor(grid, room.x, y);           // left edge
-      checkDoor(grid, room.x + room.w - 1, y); // right edge
-    }
-  }
-}
-
-function checkDoor(grid: Tile[][], x: number, y: number): void {
-  if (!isFloor(grid, x, y)) return;
-  const fN = isFloor(grid, x, y - 1), fS = isFloor(grid, x, y + 1);
-  const fE = isFloor(grid, x + 1, y), fW = isFloor(grid, x - 1, y);
-  const wN = grid[y - 1]?.[x]?.feature === 'wall';
-  const wS = grid[y + 1]?.[x]?.feature === 'wall';
-  const wE = grid[y]?.[x + 1]?.feature === 'wall';
-  const wW = grid[y]?.[x - 1]?.feature === 'wall';
-
-  const doorRow = grid[y];
-  if (!doorRow) return;
-  // Corridor runs N-S through walls on E-W
-  if (fN && fS && wE && wW) {
-    doorRow[x] = { terrain: 'floor', walkable: true, feature: 'door', items: [] };
-  }
-  // Corridor runs E-W through walls on N-S
-  if (fE && fW && wN && wS) {
-    doorRow[x] = { terrain: 'floor', walkable: true, feature: 'door', items: [] };
-  }
-}
-
-// ── Wall direction detection (for sprite rendering) ───────────────────────────
-
-function assignWallDirections(grid: Tile[][], w: number, h: number): void {
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const t = cellAt(grid, x, y);
-      if (t.feature !== 'wall') continue;
-      const fN = isFloor(grid, x, y - 1) && grid[y - 1]?.[x]?.feature !== 'wall';
-      const fS = isFloor(grid, x, y + 1) && grid[y + 1]?.[x]?.feature !== 'wall';
-      const fE = isFloor(grid, x + 1, y) && grid[y]?.[x + 1]?.feature !== 'wall';
-      const fW = isFloor(grid, x - 1, y) && grid[y]?.[x - 1]?.feature !== 'wall';
-      if (fN && fE) t.direction = 'NE';
-      else if (fN && fW) t.direction = 'NW';
-      else if (fS && fE) t.direction = 'SE';
-      else if (fS && fW) t.direction = 'SW';
-      else if (fN) t.direction = 'NE';
-      else if (fS) t.direction = 'SW';
-      else if (fE) t.direction = 'NE';
-      else if (fW) t.direction = 'NW';
-      else t.direction = 'NW';
+    const corners = [
+      [room.getLeft() - 1, room.getTop() - 1],
+      [room.getRight() + 1, room.getTop() - 1],
+      [room.getLeft() - 1, room.getBottom() + 1],
+      [room.getRight() + 1, room.getBottom() + 1],
+    ];
+    for (const [cx, cy] of corners) {
+      if (cy! >= 0 && cy! < h && cx! >= 0 && cx! < w && grid[cy!]![cx!]!.terrain === 'void') {
+        grid[cy!]![cx!] = { terrain: 'floor', walkable: false, feature: 'wall', items: [] };
+      }
     }
   }
+
+  // Place doors at room corridor connections
+  for (const room of rooms) {
+    room.getDoors((x, y) => {
+      if (y >= 0 && y < h && x >= 0 && x < w) {
+        const tile = grid[y]![x]!;
+        if (tile.terrain === 'floor' && tile.walkable) {
+          tile.feature = 'door';
+        }
+      }
+    });
+  }
+
+  // Place stairs-up in the first room
+  const firstRoom = rooms[0]!;
+  const stairsUp: Vec2 = {
+    x: Math.floor((firstRoom.getLeft() + firstRoom.getRight()) / 2),
+    y: Math.floor((firstRoom.getTop() + firstRoom.getBottom()) / 2),
+  };
+  grid[stairsUp.y]![stairsUp.x] = { terrain: 'floor', walkable: true, feature: 'stairs-up', items: [] };
+
+  // Place stairs-down in the last room (if not final floor)
+  let stairsDown: Vec2 | undefined;
+  if (dungeonLevel < totalFloors && rooms.length > 1) {
+    const lastRoom = rooms[rooms.length - 1]!;
+    stairsDown = {
+      x: Math.floor((lastRoom.getLeft() + lastRoom.getRight()) / 2),
+      y: Math.floor((lastRoom.getTop() + lastRoom.getBottom()) / 2),
+    };
+    grid[stairsDown.y]![stairsDown.x] = { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] };
+  }
+
+  // Spawn monsters
+  const monsterCount = 4 + dungeonLevel * 2;
+  const monsters = spawnMonsters(grid, w, h, dungeonLevel, stairsUp, monsterCount);
+
+  // Place floor loot
+  placeLoot(grid, w, h, dungeonLevel, rooms);
+
+  // Floor 1 guaranteed spawns
+  if (dungeonLevel === 1) {
+    placeGuaranteedSpawns(grid, rooms, stairsUp, monsters);
+  }
+
+  const map: TileMap = {
+    id: `dungeon-${dungeonLevel}` as TileMap['id'],
+    width: w,
+    height: h,
+    tiles: grid,
+    entryPosition: stairsUp,
+  };
+
+  return { map, monsters, stairsUp, stairsDown };
 }
 
 // ── Monster spawning ──────────────────────────────────────────────────────────
 
-let monsterSeq = 1000;
-
 function spawnMonsters(
-  grid: Tile[][],
-  w: number,
-  h: number,
-  stage: GameStage,
-  localDepth: number,
-  stairsUp: Vec2,
-  count: number,
+  grid: Tile[][], w: number, h: number,
+  dungeonLevel: number, stairsUp: Vec2, count: number,
 ): MonsterInstance[] {
-  const pool = monstersForDepth(stage, localDepth);
+  const pool = monstersForLevel(dungeonLevel);
   if (pool.length === 0) return [];
 
   const walkable: Vec2[] = [];
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (isFloor(grid, x, y) && cellAt(grid, x, y).feature === undefined) {
+      const t = grid[y]![x]!;
+      if (t.terrain === 'floor' && t.walkable && !t.feature) {
         const dist = Math.abs(x - stairsUp.x) + Math.abs(y - stairsUp.y);
         if (dist >= 8) walkable.push({ x, y });
       }
@@ -284,8 +194,7 @@ function spawnMonsters(
   const used = new Set<string>();
   for (let i = 0; i < count && walkable.length > 0; i++) {
     const idx = rand(walkable.length);
-    const pos = walkable[idx];
-    if (!pos) continue;
+    const pos = walkable[idx]!;
     const key = `${pos.x},${pos.y}`;
     if (used.has(key)) continue;
     used.add(key);
@@ -294,10 +203,8 @@ function spawnMonsters(
       specId: spec.id,
       instanceId: `m${monsterSeq++}`,
       hp: spec.hp,
-      x: pos.x,
-      y: pos.y,
+      x: pos.x, y: pos.y,
       alerted: false,
-      status: {},
     });
   }
   return monsters;
@@ -305,11 +212,14 @@ function spawnMonsters(
 
 // ── Floor loot ────────────────────────────────────────────────────────────────
 
-function placeLoot(grid: Tile[][], rooms: Room[], w: number, h: number, lootLevel: number): void {
+function placeLoot(
+  grid: Tile[][], w: number, h: number, dungeonLevel: number,
+  rooms: ReturnType<InstanceType<typeof RotMap.Digger>['getRooms']>,
+): void {
   const roomSet = new Set<string>();
   for (const room of rooms) {
-    for (let y = room.y; y < room.y + room.h; y++) {
-      for (let x = room.x; x < room.x + room.w; x++) {
+    for (let y = room.getTop(); y <= room.getBottom(); y++) {
+      for (let x = room.getLeft(); x <= room.getRight(); x++) {
         roomSet.add(`${x},${y}`);
       }
     }
@@ -317,9 +227,9 @@ function placeLoot(grid: Tile[][], rooms: Room[], w: number, h: number, lootLeve
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const t = cellAt(grid, x, y);
+      const t = grid[y]![x]!;
       if (t.terrain !== 'floor' || !t.walkable || t.feature) continue;
-      const items = generateTileLoot({ level: lootLevel, inRoom: roomSet.has(`${x},${y}`) });
+      const items = generateTileLoot({ level: dungeonLevel, inRoom: roomSet.has(`${x},${y}`) });
       t.items.push(...items);
     }
   }
@@ -329,167 +239,58 @@ function placeLoot(grid: Tile[][], rooms: Room[], w: number, h: number, lootLeve
 
 function placeGuaranteedSpawns(
   grid: Tile[][],
-  rooms: Room[],
+  rooms: ReturnType<InstanceType<typeof RotMap.Digger>['getRooms']>,
   stairsUp: Vec2,
   monsters: MonsterInstance[],
 ): void {
-  // Find rooms sorted by distance from stairs (skip the stairs room)
   const sorted = rooms
-    .map((r) => ({ room: r, center: roomCenter(r) }))
-    .filter(({ center }) => Math.abs(center.x - stairsUp.x) + Math.abs(center.y - stairsUp.y) > 5)
+    .map((r) => ({
+      room: r,
+      cx: Math.floor((r.getLeft() + r.getRight()) / 2),
+      cy: Math.floor((r.getTop() + r.getBottom()) / 2),
+    }))
+    .filter(({ cx, cy }) => Math.abs(cx - stairsUp.x) + Math.abs(cy - stairsUp.y) > 5)
     .sort((a, b) => {
-      const da = Math.abs(a.center.x - stairsUp.x) + Math.abs(a.center.y - stairsUp.y);
-      const db = Math.abs(b.center.x - stairsUp.x) + Math.abs(b.center.y - stairsUp.y);
+      const da = Math.abs(a.cx - stairsUp.x) + Math.abs(a.cy - stairsUp.y);
+      const db = Math.abs(b.cx - stairsUp.x) + Math.abs(b.cy - stairsUp.y);
       return da - db;
     });
 
   if (sorted.length === 0) return;
 
   // Room 0: Kobold + Leather Armour
-  const r0 = sorted[0];
-  if (!r0) return;
+  const r0 = sorted[0]!;
   const spec = ARMOR_SPECS.find((s) => s.name === 'Leather Armour');
   const armor: Item = {
     id: Math.random().toString(36).slice(2, 10),
-    kind: 'armor',
-    name: 'Leather Armour',
-    weight: spec?.weight ?? 5000,
-    bulk: spec?.bulk ?? 4,
-    quantity: 1,
-    identified: false,
-    cursed: false,
-    broken: false,
-    enchantment: 0,
+    kind: 'armor', name: 'Leather Armour',
+    icon: spec?.icon ?? 'LARMOR.png',
+    weight: spec?.weight ?? 5000, bulk: spec?.bulk ?? 24000,
+    quantity: 1, identified: false, cursed: false, broken: false, enchantment: 0,
   };
-  const armorPos = { x: r0.center.x, y: r0.center.y };
-  cellAt(grid, armorPos.x, armorPos.y).items.push(armor);
+  grid[r0.cy]![r0.cx]!.items.push(armor);
   monsters.push({
     specId: 'kobold', instanceId: `m${monsterSeq++}`,
-    hp: 4, x: armorPos.x + 1, y: armorPos.y, alerted: false, status: {},
+    hp: 5, x: r0.cx + 1, y: r0.cy, alerted: false,
   });
 
   // Room 1: 2 Giant Rats
   if (sorted.length > 1) {
-    const r1 = sorted[1];
-    if (!r1) return;;
+    const r1 = sorted[1]!;
     for (let i = 0; i < 2; i++) {
       monsters.push({
         specId: 'giant_rat', instanceId: `m${monsterSeq++}`,
-        hp: 3, x: r1.center.x + i, y: r1.center.y, alerted: false, status: {},
+        hp: 4, x: r1.cx + i, y: r1.cy, alerted: false,
       });
     }
   }
 
   // Room 2: 1 Goblin
   if (sorted.length > 2) {
-    const r2 = sorted[2];
-    if (!r2) return;;
+    const r2 = sorted[2]!;
     monsters.push({
       specId: 'goblin', instanceId: `m${monsterSeq++}`,
-      hp: 6, x: r2.center.x, y: r2.center.y, alerted: false, status: {},
+      hp: 6, x: r2.cx, y: r2.cy, alerted: false,
     });
   }
-}
-
-// ── Main entry point ──────────────────────────────────────────────────────────
-
-export interface GenerateFloorOptions {
-  dungeonLevel: number;
-  stage?: GameStage;
-  /** Total floors in this dungeon (determines if stairs-down is placed). */
-  totalFloors: number;
-  /** Map dimensions. */
-  width?: number;
-  height?: number;
-  /** Number of rooms to attempt. */
-  roomCount?: number;
-}
-
-export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
-  const {
-    dungeonLevel,
-    stage = 'mine',
-    totalFloors,
-    width: w = 40 + dungeonLevel * 2,
-    height: h = 30 + dungeonLevel * 2,
-    roomCount = 6 + dungeonLevel,
-  } = opts;
-
-  const grid = makeGrid(w, h);
-  const rooms = placeRooms(w, h, roomCount);
-
-  // Carve rooms
-  for (const room of rooms) carveRoom(grid, room);
-
-  // Connect rooms with corridors (each room to the next)
-  for (let i = 1; i < rooms.length; i++) {
-    const prevRoom = rooms[i - 1];
-    const currRoom = rooms[i];
-    if (!prevRoom || !currRoom) continue;
-    carveCorridor(grid, roomCenter(prevRoom), roomCenter(currRoom));
-  }
-
-  // Add walls around all floor tiles
-  addWalls(grid, w, h);
-
-  // Add doors at room-corridor junctions
-  addDoors(grid, rooms);
-
-  // Tag floor tiles that belong to rooms (after doors so door tiles get roomId too)
-  tagRoomTiles(grid, rooms);
-
-  // Assign wall directions for sprite rendering
-  assignWallDirections(grid, w, h);
-
-  // Place stairs-up in the first room
-  const firstRoom = rooms[0];
-  if (!firstRoom) throw new Error('No rooms generated');
-  const stairsUp = roomCenter(firstRoom);
-  const stairsUpRow = grid[stairsUp.y];
-  if (stairsUpRow) stairsUpRow[stairsUp.x] = {
-    terrain: 'floor', walkable: true, feature: 'stairs-up', items: [],
-  };
-
-  // Place stairs-down in the last room (if not the final floor)
-  let stairsDown: Vec2 | undefined;
-  if (dungeonLevel < totalFloors && rooms.length > 1) {
-    const lastRoom = rooms[rooms.length - 1];
-    if (lastRoom) {
-      stairsDown = roomCenter(lastRoom);
-      const stairsDownRow = grid[stairsDown.y];
-      if (stairsDownRow) stairsDownRow[stairsDown.x] = {
-        terrain: 'floor', walkable: true, feature: 'stairs-down', items: [],
-      };
-    }
-  }
-
-  // Spawn monsters
-  const monsterCount = 4 + dungeonLevel * 2;
-  const monsters = spawnMonsters(grid, w, h, stage, dungeonLevel, stairsUp, monsterCount);
-
-  // Place floor loot
-  placeLoot(grid, rooms, w, h, itemQualityLevel(stage, dungeonLevel));
-
-  // Floor 1 guaranteed spawns
-  if (dungeonLevel === 1) {
-    placeGuaranteedSpawns(grid, rooms, stairsUp, monsters);
-  }
-
-  const roomsRecord: Record<string, RoomInfo> = {};
-  for (const room of rooms) {
-    roomsRecord[room.id] = { x: room.x, y: room.y, w: room.w, h: room.h };
-  }
-
-  const map: TileMap = {
-    id: `dungeon-${dungeonLevel}` as TileMap['id'],
-    width: w,
-    height: h,
-    tiles: grid,
-    entryPosition: stairsUp,
-    rooms: roomsRecord,
-  };
-
-  return stairsDown === undefined
-    ? { map, monsters, stairsUp }
-    : { map, monsters, stairsUp, stairsDown };
 }

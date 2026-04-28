@@ -19,6 +19,7 @@
     "@tauri-apps/api": "^2.10.1",
     "lit": "^3.0.0",
     "loglevel": "^1.9.2",
+    "rot-js": "^2.2.1",
     "yaml": "^2.0.0"
   },
   "devDependencies": {
