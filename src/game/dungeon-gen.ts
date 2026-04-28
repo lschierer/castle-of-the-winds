@@ -107,10 +107,21 @@ function carveRoom(grid: Tile[][], room: Room): void {
 
 function carveCorridor(grid: Tile[][], a: Vec2, b: Vec2): void {
   let { x, y } = a;
-  // Horizontal first, then vertical (L-shaped)
   const dx = x < b.x ? 1 : -1;
-  while (x !== b.x) { setFloor(grid, x, y); x += dx; }
   const dy = y < b.y ? 1 : -1;
+
+  if (rand(2) === 0) {
+    // Castle of the Winds leans heavily on diagonal dungeon joins. Carving the
+    // shared x/y delta first gives the wall renderer proper sloped edges.
+    while (x !== b.x && y !== b.y) {
+      setFloor(grid, x, y);
+      x += dx;
+      y += dy;
+    }
+  }
+
+  // Finish any remaining offset with a straight run.
+  while (x !== b.x) { setFloor(grid, x, y); x += dx; }
   while (y !== b.y) { setFloor(grid, x, y); y += dy; }
   setFloor(grid, b.x, b.y);
 }

@@ -456,13 +456,9 @@ function charToTile(
       if (mapId === 'village') {
         return { terrain: 'farmland', walkable: false };
       }
-      // Farm-map: diagonal road corner — walkable
-      return {
-        terrain: 'grass',
-        walkable: true,
-        feature: 'diagonal-road',
-        direction: detectDiagonalDirection(rows, x, y),
-      };
+      // Farm-map: the original outdoor paths stair-step with full path tiles.
+      // Rock/path split tiles are reserved for later mountain routes.
+      return { terrain: 'road', walkable: true };
 
     case '!':
       return {

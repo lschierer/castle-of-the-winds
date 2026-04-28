@@ -33,6 +33,7 @@ export interface TileStyle {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const TILE32 = '32px 32px';
+const TILE8 = '8px 8px';
 const REPEAT_NO = 'no-repeat';
 const REPEAT_TILE = 'repeat';
 const POS_00 = '0 0';
@@ -45,13 +46,21 @@ const VOID_STYLE: TileStyle = {
   backgroundColor: '#000',
 };
 
+const ROCK_WALL_STYLE: TileStyle = {
+  backgroundImage: 'none',
+  backgroundSize: TILE32,
+  backgroundPosition: POS_00,
+  backgroundRepeat: REPEAT_NO,
+  backgroundColor: '#c0c0c0',
+};
+
 // ── Terrain base sprites ──────────────────────────────────────────────────────
 
-const TERRAIN_SPRITE: Record<string, string> = {
-  grass:    `${BITMAPS}/grass.png`,
-  road:     `${BITMAPS}/road.png`,
-  farmland: `${BITMAPS}/FARMLAND.png`,
-  floor:    `${BITMAPS}/floor.png`,
+const TERRAIN_SPRITE: Record<string, { src: string; size: string; repeat: string }> = {
+  grass:    { src: `${BITMAPS}/grass.png`,    size: TILE8, repeat: REPEAT_TILE },
+  road:     { src: `${BITMAPS}/road.png`,     size: TILE8, repeat: REPEAT_TILE },
+  farmland: { src: `${BITMAPS}/FARMLAND.png`, size: TILE8, repeat: REPEAT_TILE },
+  floor:    { src: `${BITMAPS}/floor.png`,    size: TILE8, repeat: REPEAT_TILE },
 };
 
 // ── Diagonal road sprites by direction ────────────────────────────────────────
@@ -63,13 +72,20 @@ const DIAGONAL_ROAD: Record<string, string> = {
   SW: `${BITMAPS}/ULROCKRD.png`,
 };
 
-// ── Dungeon wall sprites by direction ─────────────────────────────────────────
+// ── Mine rock sprites by exposed floor side ──────────────────────────────────
 
-const DUNGEON_WALL: Record<string, string> = {
-  NE: `${ICONS}/wall_NEI.png`,
-  NW: `${ICONS}/wall_NWI.png`,
-  SE: `${ICONS}/wall_SEI.png`,
-  SW: `${ICONS}/wall_SWI.png`,
+const CORRIDOR_ROCK_FLOOR: Record<string, string> = {
+  NE: `${BITMAPS}/LLROCKFL.png`,
+  NW: `${BITMAPS}/LRROCKFL.png`,
+  SE: `${BITMAPS}/URROCKFL.png`,
+  SW: `${BITMAPS}/ULROCKFL.png`,
+};
+
+const ROOM_ROCK_FLOOR: Record<string, string> = {
+  NE: `${BITMAPS}/LLROCKLF.png`,
+  NW: `${BITMAPS}/LRROCKLF.png`,
+  SE: `${BITMAPS}/URROCKLF.png`,
+  SW: `${BITMAPS}/ULROCKLF.png`,
 };
 
 // ── Mountain sprites by direction ─────────────────────────────────────────────
@@ -117,12 +133,52 @@ function addLayer(top: string, base: TileStyle): TileStyle {
 
 function terrainBase(tile: Tile): TileStyle {
   const sprite = TERRAIN_SPRITE[tile.terrain];
-  if (sprite) return singleLayer(sprite, TILE32, REPEAT_TILE);
+  if (sprite) return singleLayer(sprite.src, sprite.size, sprite.repeat);
   if (tile.terrain === 'mountain') {
     const dir = tile.direction ?? 'N';
     return singleLayer(MOUNTAIN_SPRITE[dir] ?? MOUNTAIN_SPRITE['N']!);
   }
   return VOID_STYLE;
+}
+
+function outOfBoundsStyle(map: TileMap, y: number): TileStyle {
+  if (map.id === 'farm-map') {
+    if (y < 0) return singleLayer(MOUNTAIN_SPRITE['N']!, TILE32, REPEAT_NO);
+    return singleLayer(`${BITMAPS}/grass.png`, TILE8, REPEAT_TILE);
+  }
+  if (map.id === 'village') {
+    return singleLayer(`${BITMAPS}/FARMLAND.png`, TILE8, REPEAT_TILE);
+  }
+  if (map.id.startsWith('dungeon-')) {
+    return ROCK_WALL_STYLE;
+  }
+  return VOID_STYLE;
+}
+
+function isDungeonFloorSide(map: TileMap, x: number, y: number): boolean {
+  const tile = getTileAt(map, x, y);
+  return tile.terrain === 'floor' && tile.feature !== 'wall';
+}
+
+function dungeonWallStyle(map: TileMap, x: number, y: number): TileStyle {
+  const fN = isDungeonFloorSide(map, x, y - 1);
+  const fS = isDungeonFloorSide(map, x, y + 1);
+  const fE = isDungeonFloorSide(map, x + 1, y);
+  const fW = isDungeonFloorSide(map, x - 1, y);
+
+  let floorSide: Direction | undefined;
+  if (fN && fE) floorSide = 'NE';
+  else if (fN && fW) floorSide = 'NW';
+  else if (fS && fE) floorSide = 'SE';
+  else if (fS && fW) floorSide = 'SW';
+
+  if (floorSide) {
+    const adjacentFloorCount = [fN, fS, fE, fW].filter(Boolean).length;
+    const spriteSet = adjacentFloorCount >= 3 ? ROOM_ROCK_FLOOR : CORRIDOR_ROCK_FLOOR;
+    return singleLayer(spriteSet[floorSide] ?? `${BITMAPS}/LLROCKFL.png`, TILE32, REPEAT_NO);
+  }
+
+  return ROCK_WALL_STYLE;
 }
 
 function findRegion(mapId: string, buildingId: string, x: number, y: number): BuildingRegion | undefined {
@@ -189,6 +245,10 @@ export function getTileStyle(
   isHero: boolean,
   heroGender: 'male' | 'female',
 ): TileStyle {
+  if (x < 0 || y < 0 || x >= map.width || y >= map.height) {
+    return outOfBoundsStyle(map, y);
+  }
+
   const tile = getTileAt(map, x, y);
   const heroIcon = heroGender === 'male' ? `${ICONS}/man.png` : `${ICONS}/woman.png`;
 
@@ -208,12 +268,11 @@ export function getTileStyle(
             style = addLayer(`${ICONS}/castle2.png`, style);
           }
         } else if (tile.direction) {
-          // Dungeon wall with direction
-          const wallSprite = DUNGEON_WALL[tile.direction] ?? `${ICONS}/wall_NW.png`;
-          style = addLayer(wallSprite, style);
+          // Mine/cave rock walls. The wall_* icon family is for town/castle wall
+          // corners; solid rock cells are plain gray fill, not a sprite.
+          style = dungeonWallStyle(map, x, y);
         } else {
-          // Wall without direction — default wall sprite
-          style = addLayer(`${ICONS}/wall_NW.png`, style);
+          style = ROCK_WALL_STYLE;
         }
         break;
 
@@ -250,7 +309,7 @@ export function getTileStyle(
         break;
 
       case 'mine-entrance':
-        style = addLayer(`${ICONS}/mine.png`, style);
+        style = twoLayer(`${ICONS}/mine.png`, `${BITMAPS}/BtGrasMn.png`);
         break;
 
       case 'diagonal-road': {
