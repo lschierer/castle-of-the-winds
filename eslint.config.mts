@@ -41,7 +41,7 @@ export default defineConfig(
       },
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['eslint.config.mts', 'commitlint.config.js', 'stylelint.config.js'],
+          allowDefaultProject: ['commitlint.config.js', 'stylelint.config.js'],
         },
         tsconfigRootDir: import.meta.dirname,
         projectFolderIgnoreList: ['**/node_modules/**'],

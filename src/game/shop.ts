@@ -10,10 +10,12 @@
 
 import type { Item, ItemKind } from './items.ts';
 import { identifyItem, displayName } from './items.ts';
-import type { Character } from './character.ts';
+import type { Character, ShopReputation } from './character.ts';
 import { ALL_EQUIPMENT_SPECS, type EquipmentSpec, specForItem, makeEquipmentItem } from './equipment.ts';
 import { makeWeapon, randomWeaponName, addCoins, removeCoins, coinsIn, addToContainer, makePack, makeBelt } from './items.ts';
 import { townStockLevel, type TownTier } from './progression.ts';
+
+export type { ShopReputation } from './character.ts';
 
 // ── Pricing ───────────────────────────────────────────────────────────────────
 
@@ -78,6 +80,8 @@ export function junkYardPrice(item: Item): number {
 // ── Shop definitions ──────────────────────────────────────────────────────────
 
 export interface ShopDef {
+  /** Unique shop identifier (equals name). */
+  id: string;
   name: string;
   townTier: TownTier;
   stockLevel: number;
@@ -91,6 +95,7 @@ export interface ShopDef {
 
 export const SHOPS: Record<string, ShopDef> = {
   'Weaponsmith': {
+    id: 'Weaponsmith',
     name: 'Weaponsmith',
     townTier: 'hamlet',
     stockLevel: townStockLevel('hamlet'),
@@ -99,6 +104,7 @@ export const SHOPS: Record<string, ShopDef> = {
     type: 'trade',
   },
   'General Store': {
+    id: 'General Store',
     name: 'General Store',
     townTier: 'hamlet',
     stockLevel: townStockLevel('hamlet'),
@@ -107,6 +113,7 @@ export const SHOPS: Record<string, ShopDef> = {
     type: 'trade',
   },
   "Kael's Scrolls": {
+    id: "Kael's Scrolls",
     name: "Kael's Scrolls",
     townTier: 'hamlet',
     stockLevel: townStockLevel('hamlet'),
@@ -115,6 +122,7 @@ export const SHOPS: Record<string, ShopDef> = {
     type: 'sage',
   },
   'Junk Yard': {
+    id: 'Junk Yard',
     name: 'Junk Yard',
     townTier: 'hamlet',
     stockLevel: townStockLevel('hamlet'),
@@ -123,6 +131,7 @@ export const SHOPS: Record<string, ShopDef> = {
     type: 'junkyard',
   },
   'Temple of Odin': {
+    id: 'Temple of Odin',
     name: 'Temple of Odin',
     townTier: 'hamlet',
     stockLevel: townStockLevel('hamlet'),
@@ -136,6 +145,104 @@ export const SHOPS: Record<string, ShopDef> = {
 
 export interface ShopInventory {
   items: Item[];
+}
+
+/** A single item entry in a shop's inventory with its displayed buy price. */
+export interface ShopInventoryEntry {
+  item: Item;
+  buyPrice: number;
+}
+
+/** Current shop state passed to the shop-screen component. */
+export interface ShopState {
+  spec: ShopDef;
+  inventory: ShopInventoryEntry[];
+}
+
+export const DEFAULT_REPUTATION: ShopReputation = { bannedFromSelling: false };
+
+/** Price the shop pays for an item (sell price from player's perspective). */
+export function shopSellPrice(item: Item, _identified: boolean, isJunk: boolean): number {
+  return isJunk ? junkYardPrice(item) : sellPrice(item);
+}
+
+/** Whether this shop will consider buying the item from the player. */
+export function shopWillBuy(item: Item, shop: ShopDef, rep: ShopReputation): boolean {
+  if (rep.bannedFromSelling) return false;
+  if (shop.type === 'junkyard') return true;
+  if (item.cursed && item.identified) return false;
+  if (shop.buys.length > 0 && !shop.buys.includes(item.kind)) return false;
+  return sellPrice(item) > 0;
+}
+
+export interface BuyResult {
+  accepted: boolean;
+  item?: Item;
+  price?: number;
+  updatedInventory?: ShopInventoryEntry[];
+  reason?: string;
+}
+
+/** Execute a buy transaction (returns new state without mutating). */
+export function executeBuy(
+  entry: ShopInventoryEntry,
+  inventory: ShopInventoryEntry[],
+  totalCp: number,
+): BuyResult {
+  if (totalCp < entry.buyPrice) {
+    return { accepted: false, reason: `Need ${entry.buyPrice} cp, have ${totalCp} cp.` };
+  }
+  const updatedInventory = inventory.filter((e) => e !== entry);
+  return { accepted: true, item: entry.item, price: entry.buyPrice, updatedInventory };
+}
+
+export interface SellResult {
+  accepted: boolean;
+  price?: number;
+  updatedReputation?: ShopReputation;
+  identifiedItem?: Item;
+  reason?: string;
+  revealedCursed?: boolean;
+}
+
+/** Execute a sell transaction (returns new state without mutating). */
+export function executeSell(
+  item: Item,
+  shop: ShopDef,
+  rep: ShopReputation,
+): SellResult {
+  if (rep.bannedFromSelling) return { accepted: false, reason: 'The shopkeeper refuses to deal with you.' };
+
+  const identifiedItem: Item = item.identified ? item : { ...item, ...identifyItem(item) };
+  const revealedCursed = !item.identified && identifiedItem.cursed;
+
+  if (shop.type !== 'junkyard') {
+    if (identifiedItem.cursed) {
+      const updatedReputation: ShopReputation = { ...rep, bannedFromSelling: true };
+      return { accepted: false, reason: 'The shop refuses cursed items.', revealedCursed, updatedReputation };
+    }
+    if (shop.buys.length > 0 && !shop.buys.includes(item.kind)) {
+      return { accepted: false, reason: `This shop doesn't buy ${item.kind} items.` };
+    }
+  }
+
+  const price = shop.type === 'junkyard' ? junkYardPrice(item) : sellPrice(identifiedItem);
+  if (price <= 0) return { accepted: false, reason: 'This item has no value here.' };
+
+  const updatedReputation = revealedCursed
+    ? { ...rep, bannedFromSelling: true }
+    : rep;
+
+  return { accepted: true, price, updatedReputation, identifiedItem, revealedCursed };
+}
+
+/** Build a ShopState from a ShopDef. */
+export function makeShopState(shop: ShopDef): ShopState {
+  const inv = generateShopInventory(shop);
+  return {
+    spec: shop,
+    inventory: inv.items.map((item) => ({ item, buyPrice: buyPrice(item) })),
+  };
 }
 
 const WEAPON_MAX_CLASS_BY_STOCK_LEVEL = [
@@ -192,7 +299,9 @@ const SPECIAL_MIN_STOCK_LEVEL: Record<string, number> = {
 };
 
 function pick<T>(items: readonly T[]): T {
-  return items[Math.floor(Math.random() * items.length)]!;
+  const item = items[Math.floor(Math.random() * items.length)];
+  if (item === undefined) throw new Error('pick called on empty array');
+  return item;
 }
 
 function priceCapForStockLevel(stockLevel: number): number {
@@ -290,7 +399,8 @@ export function buyItem(
 ): TransactionResult {
   const idx = shopInventory.items.findIndex((i) => i.id === itemId);
   if (idx === -1) return { success: false, message: 'Item not available.' };
-  const item = shopInventory.items[idx]!;
+  const item = shopInventory.items[idx];
+  if (!item) return { success: false, message: 'Item not available.' };
   const price = buyPrice(item);
   const purse = character.purse;
   if (!purse) return { success: false, message: 'You have no purse!' };

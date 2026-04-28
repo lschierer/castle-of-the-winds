@@ -41,6 +41,11 @@ export const POINT_STEP = 5;
 /** The four primary attributes chosen during character creation. */
 export type StatName = 'strength' | 'intelligence' | 'constitution' | 'dexterity';
 
+/** Per-shop reputation state stored on the character. */
+export interface ShopReputation {
+  bannedFromSelling: boolean;
+}
+
 export type Gender = 'male' | 'female';
 
 /**
@@ -127,6 +132,8 @@ export interface Character {
   purse: Item | null;
   /** Carried pack (container with a weight-limited bulk slot). */
   pack: Item | null;
+  /** Per-shop reputations, keyed by shop id (shop name). */
+  shopReputations: Record<string, ShopReputation>;
 }
 
 // ── Point-buy helpers ─────────────────────────────────────────────────────────
@@ -294,6 +301,7 @@ export function createCharacter(
     belt:      null,
     purse:     loadout.purse,
     pack:      loadout.pack,
+    shopReputations: {},
   };
 }
 
@@ -388,7 +396,7 @@ export function effectiveStats(character: Character): CharacterStats {
     if (!spec?.statBonus) continue;
     for (const [stat, bonus] of Object.entries(spec.statBonus)) {
       if (stat in base) {
-        base[stat as StatName] += bonus as number;
+        base[stat as StatName] += bonus;
       }
     }
   }

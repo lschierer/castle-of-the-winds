@@ -84,7 +84,7 @@ export function castSpell(
   character: Character,
   spellId: string,
   target: SpellTarget,
-  monsters: MonsterInstance[],
+  _monsters: MonsterInstance[],
   playerStatus: PlayerStatus,
 ): CastResult {
   const spell = spellById(spellId);
@@ -101,7 +101,7 @@ export function castSpell(
 
   // Dispatch by spell type
   if (BOLT_SPELLS.has(spellId) || BALL_SPELLS.has(spellId)) {
-    return castAttack(c, spell, spellId, target, monsters);
+    return castAttack(c, spell, spellId, target);
   }
   if (spellId in HEAL_AMOUNTS) {
     return castHeal(c, spell, spellId);
@@ -131,7 +131,6 @@ function castAttack(
   spell: Spell,
   spellId: string,
   target: SpellTarget,
-  monsters: MonsterInstance[],
 ): CastResult {
   const monster = target.monster;
   if (!monster) {
@@ -145,7 +144,7 @@ function castAttack(
 
   const baseDamage = rollSpellDamage(spellId, c.level);
   const isBolt = BOLT_SPELLS.has(spellId);
-  const element = SPELL_ELEMENT[spellId] as ElementType | undefined;
+  const element = SPELL_ELEMENT[spellId];
 
   const params: SpellAttackParams = {
     baseDamage,
@@ -198,6 +197,6 @@ function castResist(
   currentStatus: PlayerStatus,
   key: 'resistFire' | 'resistCold' | 'resistLightning',
 ): CastResult {
-  const current = (currentStatus[key] as number | undefined) ?? 0;
+  const current = currentStatus[key] ?? 0;
   return castBuff(c, spell, { [key]: current + 1 });
 }

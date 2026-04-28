@@ -23,7 +23,7 @@
  */
 
 import type { Item, ItemKind } from './items.ts';
-import { makeCoinStack, makeLootWeapon, PACK_SPECS, makePack } from './items.ts';
+import { makeCoinStack, makeLootWeapon, makePack } from './items.ts';
 import { makeEquipmentItem } from './equipment.ts';
 
 // ── Internal helpers ──────────────────────────────────────────────────────────

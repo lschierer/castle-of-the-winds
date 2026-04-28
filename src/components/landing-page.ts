@@ -150,7 +150,7 @@ export class LandingPage extends LitElement {
 
     try {
       const text = await file.text();
-      const data = parseYaml(text);
+      const data: unknown = parseYaml(text);
 
       if (
         typeof data !== 'object' ||
@@ -185,8 +185,8 @@ export class LandingPage extends LitElement {
         <div class="divider"></div>
 
         <nav class="menu" role="navigation" aria-label="Main menu">
-          <button @click=${this.onNewGame}>⚔ New Game</button>
-          <button class="secondary" @click=${this.onLoadGameClick}>
+          <button @click=${() => { this.onNewGame(); }}>⚔ New Game</button>
+          <button class="secondary" @click=${() => { this.onLoadGameClick(); }}>
             ↑ Load Game
           </button>
         </nav>
@@ -199,7 +199,7 @@ export class LandingPage extends LitElement {
           id="save-file-input"
           type="file"
           accept=".yaml,.yml,.json"
-          @change=${this.onFileChosen}
+          @change=${(e: Event) => { void this.onFileChosen(e); }}
         />
       </div>
     `;

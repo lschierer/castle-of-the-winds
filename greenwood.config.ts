@@ -28,7 +28,7 @@ const loglevelEsmShim = {
     extensions: ['js'],
     contentType: 'text/javascript',
 
-    async shouldServe(url: URL) {
+    shouldServe(url: URL) {
       const { pathname } = url;
       return (
         pathname.includes('/loglevel/') &&

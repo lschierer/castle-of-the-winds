@@ -11,7 +11,7 @@
  * tuned during playtesting once monsters are rendered in the dungeon.
  */
 
-import type { Character, CharacterStats } from './character.ts';
+import type { Character } from './character.ts';
 import type { MonsterSpec, SpecialAttack } from './monsters.ts';
 import type { Item } from './items.ts';
 import { WEAPON_SPECS } from './items.ts';
@@ -135,12 +135,6 @@ function elementalMultiplier(monster: MonsterSpec, element: ElementType): number
   return AFFINITY_MOD[aff.mod];
 }
 
-function playerResistMultiplier(status: PlayerStatus, element: ElementType): number {
-  if (element === 'fire')      return Math.pow(0.5, status.resistFire ?? 0);
-  if (element === 'cold')      return Math.pow(0.5, status.resistCold ?? 0);
-  if (element === 'lightning') return Math.pow(0.5, status.resistLightning ?? 0);
-  return 1.0;
-}
 
 /** True if the attack is dodged given the defender's dodge rating. */
 function isDodged(dodgeRating: number, hitBonus = 0): boolean {
@@ -232,7 +226,7 @@ export function monsterMeleeAttack(
 
   // Monster damage roll: attack + 1d6 base + enchantment
   const roll = 1 + Math.floor(rand() * 6);
-  let rawDamage = Math.max(1, monster.attack + monsterEnch + roll - 30);
+  const rawDamage = Math.max(1, monster.attack + monsterEnch + roll - 30);
 
   // Player AC reduction
   const netDamage = Math.max(1, rawDamage - playerAC);
@@ -314,7 +308,6 @@ export function playerSpellAttack(
 export function applyDrainAttack(
   drainType: SpecialAttack,
   status: PlayerStatus,
-  char: Character,
 ): { status: PlayerStatus; message: string } {
   if (drainType === 'drain_str') {
     const amt = 1 + Math.floor(rand() * 3);

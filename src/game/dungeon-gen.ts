@@ -37,7 +37,16 @@ export interface DungeonFloor {
 
 function rand(max: number): number { return Math.floor(Math.random() * max); }
 function randRange(min: number, max: number): number { return min + rand(max - min + 1); }
-function pick<T>(arr: readonly T[]): T { return arr[rand(arr.length)]!; }
+function pick<T>(arr: readonly T[]): T {
+  const item = arr[rand(arr.length)];
+  if (item === undefined) throw new Error('pick called on empty array');
+  return item;
+}
+function cellAt(grid: Tile[][], x: number, y: number): Tile {
+  const t = grid[y]?.[x];
+  if (!t) throw new Error(`Out of bounds: (${x},${y})`);
+  return t;
+}
 
 function roomCenter(r: Room): Vec2 {
   return { x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) };
@@ -138,7 +147,8 @@ function addWalls(grid: Tile[][], w: number, h: number): void {
           if (dx === 0 && dy === 0) continue;
           const nx = x + dx, ny = y + dy;
           if (ny >= 0 && ny < h && nx >= 0 && nx < w && isVoid(grid, nx, ny)) {
-            grid[ny]![nx] = { terrain: 'floor', walkable: false, feature: 'wall', items: [] };
+            const wallRow = grid[ny];
+            if (wallRow) wallRow[nx] = { terrain: 'floor', walkable: false, feature: 'wall', items: [] };
           }
         }
       }
@@ -174,13 +184,15 @@ function checkDoor(grid: Tile[][], x: number, y: number): void {
   const wE = grid[y]?.[x + 1]?.feature === 'wall';
   const wW = grid[y]?.[x - 1]?.feature === 'wall';
 
+  const doorRow = grid[y];
+  if (!doorRow) return;
   // Corridor runs N-S through walls on E-W
   if (fN && fS && wE && wW) {
-    grid[y]![x] = { terrain: 'floor', walkable: true, feature: 'door', items: [] };
+    doorRow[x] = { terrain: 'floor', walkable: true, feature: 'door', items: [] };
   }
   // Corridor runs E-W through walls on N-S
   if (fE && fW && wN && wS) {
-    grid[y]![x] = { terrain: 'floor', walkable: true, feature: 'door', items: [] };
+    doorRow[x] = { terrain: 'floor', walkable: true, feature: 'door', items: [] };
   }
 }
 
@@ -189,7 +201,7 @@ function checkDoor(grid: Tile[][], x: number, y: number): void {
 function assignWallDirections(grid: Tile[][], w: number, h: number): void {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const t = grid[y]![x]!;
+      const t = cellAt(grid, x, y);
       if (t.feature !== 'wall') continue;
       const fN = isFloor(grid, x, y - 1) && grid[y - 1]?.[x]?.feature !== 'wall';
       const fS = isFloor(grid, x, y + 1) && grid[y + 1]?.[x]?.feature !== 'wall';
@@ -227,7 +239,7 @@ function spawnMonsters(
   const walkable: Vec2[] = [];
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (isFloor(grid, x, y) && grid[y]![x]!.feature === undefined) {
+      if (isFloor(grid, x, y) && cellAt(grid, x, y).feature === undefined) {
         const dist = Math.abs(x - stairsUp.x) + Math.abs(y - stairsUp.y);
         if (dist >= 8) walkable.push({ x, y });
       }
@@ -238,7 +250,8 @@ function spawnMonsters(
   const used = new Set<string>();
   for (let i = 0; i < count && walkable.length > 0; i++) {
     const idx = rand(walkable.length);
-    const pos = walkable[idx]!;
+    const pos = walkable[idx];
+    if (!pos) continue;
     const key = `${pos.x},${pos.y}`;
     if (used.has(key)) continue;
     used.add(key);
@@ -270,7 +283,7 @@ function placeLoot(grid: Tile[][], rooms: Room[], w: number, h: number, lootLeve
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const t = grid[y]![x]!;
+      const t = cellAt(grid, x, y);
       if (t.terrain !== 'floor' || !t.walkable || t.feature) continue;
       const items = generateTileLoot({ level: lootLevel, inRoom: roomSet.has(`${x},${y}`) });
       t.items.push(...items);
@@ -299,7 +312,8 @@ function placeGuaranteedSpawns(
   if (sorted.length === 0) return;
 
   // Room 0: Kobold + Leather Armour
-  const r0 = sorted[0]!;
+  const r0 = sorted[0];
+  if (!r0) return;
   const spec = ARMOR_SPECS.find((s) => s.name === 'Leather Armour');
   const armor: Item = {
     id: Math.random().toString(36).slice(2, 10),
@@ -314,7 +328,7 @@ function placeGuaranteedSpawns(
     enchantment: 0,
   };
   const armorPos = { x: r0.center.x, y: r0.center.y };
-  grid[armorPos.y]![armorPos.x]!.items.push(armor);
+  cellAt(grid, armorPos.x, armorPos.y).items.push(armor);
   monsters.push({
     specId: 'kobold', instanceId: `m${monsterSeq++}`,
     hp: 4, x: armorPos.x + 1, y: armorPos.y, alerted: false, status: {},
@@ -322,7 +336,8 @@ function placeGuaranteedSpawns(
 
   // Room 1: 2 Giant Rats
   if (sorted.length > 1) {
-    const r1 = sorted[1]!;
+    const r1 = sorted[1];
+    if (!r1) return;;
     for (let i = 0; i < 2; i++) {
       monsters.push({
         specId: 'giant_rat', instanceId: `m${monsterSeq++}`,
@@ -333,7 +348,8 @@ function placeGuaranteedSpawns(
 
   // Room 2: 1 Goblin
   if (sorted.length > 2) {
-    const r2 = sorted[2]!;
+    const r2 = sorted[2];
+    if (!r2) return;;
     monsters.push({
       specId: 'goblin', instanceId: `m${monsterSeq++}`,
       hp: 6, x: r2.center.x, y: r2.center.y, alerted: false, status: {},
@@ -373,7 +389,10 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
 
   // Connect rooms with corridors (each room to the next)
   for (let i = 1; i < rooms.length; i++) {
-    carveCorridor(grid, roomCenter(rooms[i - 1]!), roomCenter(rooms[i]!));
+    const prevRoom = rooms[i - 1];
+    const currRoom = rooms[i];
+    if (!prevRoom || !currRoom) continue;
+    carveCorridor(grid, roomCenter(prevRoom), roomCenter(currRoom));
   }
 
   // Add walls around all floor tiles
@@ -386,18 +405,25 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   assignWallDirections(grid, w, h);
 
   // Place stairs-up in the first room
-  const stairsUp = roomCenter(rooms[0]!);
-  grid[stairsUp.y]![stairsUp.x] = {
+  const firstRoom = rooms[0];
+  if (!firstRoom) throw new Error('No rooms generated');
+  const stairsUp = roomCenter(firstRoom);
+  const stairsUpRow = grid[stairsUp.y];
+  if (stairsUpRow) stairsUpRow[stairsUp.x] = {
     terrain: 'floor', walkable: true, feature: 'stairs-up', items: [],
   };
 
   // Place stairs-down in the last room (if not the final floor)
   let stairsDown: Vec2 | undefined;
   if (dungeonLevel < totalFloors && rooms.length > 1) {
-    stairsDown = roomCenter(rooms[rooms.length - 1]!);
-    grid[stairsDown.y]![stairsDown.x] = {
-      terrain: 'floor', walkable: true, feature: 'stairs-down', items: [],
-    };
+    const lastRoom = rooms[rooms.length - 1];
+    if (lastRoom) {
+      stairsDown = roomCenter(lastRoom);
+      const stairsDownRow = grid[stairsDown.y];
+      if (stairsDownRow) stairsDownRow[stairsDown.x] = {
+        terrain: 'floor', walkable: true, feature: 'stairs-down', items: [],
+      };
+    }
   }
 
   // Spawn monsters

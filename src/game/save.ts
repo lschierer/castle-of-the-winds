@@ -7,7 +7,7 @@
  */
 
 import type { Character } from './character.ts';
-import type { TileMap, Vec2 } from './tile-map.ts';
+import type { Vec2 } from './tile-map.ts';
 import type { MonsterInstance, PlayerStatus } from './combat.ts';
 import type { DungeonFloor } from './dungeon-gen.ts';
 

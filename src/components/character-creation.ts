@@ -1,7 +1,6 @@
 import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import {
-  type Character,
   type CharacterStats,
   type StatName,
   type Gender,
@@ -541,7 +540,7 @@ export class CharacterCreation extends LitElement {
             maxlength="32"
             placeholder="Enter a name…"
             .value=${this.name}
-            @input=${this.onNameInput}
+            @input=${(e: Event) => { this.onNameInput(e); }}
           />
         </div>
 
@@ -613,11 +612,11 @@ export class CharacterCreation extends LitElement {
           : ''}
 
         <div class="actions">
-          <button class="action-btn secondary" @click=${this.onBack}>← Back</button>
+          <button class="action-btn secondary" @click=${() => { this.onBack(); }}>← Back</button>
           <button
             class="action-btn primary"
             ?disabled=${!canBegin}
-            @click=${this.onNext}
+            @click=${() => { this.onNext(); }}
           >Choose Starting Spell →</button>
         </div>
       </div>
@@ -640,11 +639,11 @@ export class CharacterCreation extends LitElement {
         </div>
 
         <div class="actions">
-          <button class="action-btn secondary" @click=${this.onBack}>← Back</button>
+          <button class="action-btn secondary" @click=${() => { this.onBack(); }}>← Back</button>
           <button
             class="action-btn primary"
             ?disabled=${!this.selectedSpell}
-            @click=${this.onBegin}
+            @click=${() => { this.onBegin(); }}
           >Begin Adventure ⚔</button>
         </div>
       </div>

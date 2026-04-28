@@ -90,7 +90,7 @@ const ROOM_ROCK_FLOOR: Record<string, string> = {
 
 // ── Mountain sprites by direction ─────────────────────────────────────────────
 
-const MOUNTAIN_SPRITE: Record<string, string> = {
+const MOUNTAIN_SPRITE: Record<Direction, string> = {
   NW: `${BITMAPS}/PEAKnw.png`,
   NE: `${BITMAPS}/PEAKne.png`,
   SW: `${BITMAPS}/PEAKsw.png`,
@@ -136,14 +136,14 @@ function terrainBase(tile: Tile): TileStyle {
   if (sprite) return singleLayer(sprite.src, sprite.size, sprite.repeat);
   if (tile.terrain === 'mountain') {
     const dir = tile.direction ?? 'N';
-    return singleLayer(MOUNTAIN_SPRITE[dir] ?? MOUNTAIN_SPRITE['N']!);
+    return singleLayer(MOUNTAIN_SPRITE[dir]);
   }
   return VOID_STYLE;
 }
 
 function outOfBoundsStyle(map: TileMap, y: number): TileStyle {
   if (map.id === 'farm-map') {
-    if (y < 0) return singleLayer(MOUNTAIN_SPRITE['N']!, TILE32, REPEAT_NO);
+    if (y < 0) return singleLayer(MOUNTAIN_SPRITE['N'], TILE32, REPEAT_NO);
     return singleLayer(`${BITMAPS}/grass.png`, TILE8, REPEAT_TILE);
   }
   if (map.id === 'village') {
@@ -224,7 +224,9 @@ function itemIcon(item: Item): string {
 function groundItemIcon(items: Item[]): string | undefined {
   if (items.length === 0) return undefined;
   if (items.length === 1) {
-    return `${ICONS}/${itemIcon(items[0]!)}`;
+    const it = items[0];
+    if (!it) return undefined;
+    return `${ICONS}/${itemIcon(it)}`;
   }
   // 2+ items: if all coins, show best denomination
   if (items.every((i) => i.kind === 'coin')) {

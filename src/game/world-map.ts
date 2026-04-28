@@ -282,41 +282,6 @@ const VILLAGE_BUILDINGS: Building[] = [
   { position: { x: 11, y: 21 },name: 'Temple of Odin',   description: 'Wise Old Odin, healer of ailments.' },
 ];
 
-// ── Diagonal road direction detection ─────────────────────────────────────────
-
-function detectDiagonalDirection(rows: string[], x: number, y: number): Direction {
-  const isPath = (tx: number, ty: number): boolean => {
-    const c = rows[ty]?.[tx];
-    return c === '.' || c === ';';
-  };
-  const rN = isPath(x, y - 1);
-  const rS = isPath(x, y + 1);
-  const rE = isPath(x + 1, y);
-  const rW = isPath(x - 1, y);
-  const rNE = isPath(x + 1, y - 1);
-  const rNW = isPath(x - 1, y - 1);
-  const rSE = isPath(x + 1, y + 1);
-  const rSW = isPath(x - 1, y + 1);
-
-  if (rW && rN) return 'NW';
-  if (rS && rE) return 'SE';
-  if (rN && rE) return 'NE';
-  if (rS && rW) return 'SW';
-  if (rN && rSW) return 'SW';
-  if (rN && rSE) return 'SE';
-  if (rS && rNW) return 'NW';
-  if (rS && rNE) return 'NE';
-  if (rE && rSW) return 'SW';
-  if (rE && rNW) return 'NW';
-  if (rW && rNE) return 'NE';
-  if (rW && rSE) return 'SE';
-  if (rNE) return 'NE';
-  if (rNW) return 'NW';
-  if (rSE) return 'SE';
-  if (rSW) return 'SW';
-  return 'NE';
-}
-
 // ── Dungeon wall direction detection ──────────────────────────────────────────
 
 function detectDungeonWallDirection(rows: string[], x: number, y: number): Direction {

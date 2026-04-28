@@ -686,6 +686,50 @@ export function addToContainer(container: Item, item: Item): boolean {
   return false;
 }
 
+// ── Immutable purse helpers (for shop-screen) ─────────────────────────────────
+
+/** Total value of all coins in a purse, expressed in copper pieces. */
+export function totalPurseCopper(purse: Item): number {
+  return coinsIn(purse, 'copper') +
+    coinsIn(purse, 'silver') * 10 +
+    coinsIn(purse, 'gold') * 100 +
+    coinsIn(purse, 'platinum') * 1000;
+}
+
+/** Return a new purse with the given copper amount added. */
+export function addPurseCopper(purse: Item, amount: number): Item {
+  const copy = structuredClone(purse);
+  addCoins(copy, 'copper', amount);
+  return copy;
+}
+
+/** Return a new purse with the given copper amount deducted. */
+export function deductPurseCopper(purse: Item, amount: number): Item {
+  const copy = structuredClone(purse);
+  let remaining = amount;
+  for (const kind of ['copper', 'silver', 'gold', 'platinum'] as const) {
+    const value = kind === 'copper' ? 1 : kind === 'silver' ? 10 : kind === 'gold' ? 100 : 1000;
+    const have = coinsIn(copy, kind);
+    const take = Math.min(have, Math.floor(remaining / value));
+    if (take > 0) {
+      removeCoins(copy, kind, take);
+      remaining -= take * value;
+    }
+  }
+  if (remaining > 0) {
+    for (const kind of ['silver', 'gold', 'platinum'] as const) {
+      const value = kind === 'silver' ? 10 : kind === 'gold' ? 100 : 1000;
+      if (coinsIn(copy, kind) > 0 && value >= remaining) {
+        removeCoins(copy, kind, 1);
+        addCoins(copy, 'copper', value - remaining);
+        remaining = 0;
+        break;
+      }
+    }
+  }
+  return copy;
+}
+
 /**
  * Find and remove an item by id from any slot in a container.
  * Returns the removed item, or undefined.

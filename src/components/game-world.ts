@@ -14,7 +14,7 @@ import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { Character } from '../game/character.ts';
 import { canLevelUp, levelUp, maxSpellLevelAt, hpPerLevel, spPerLevel } from '../game/character.ts';
-import { loadCharacter, saveCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
+import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
 import {
   type TileMap,
   type MapId,
@@ -31,7 +31,7 @@ import {
   revealAround,
 } from '../game/world-map.ts';
 import { getTileStyle } from '../game/sprites.ts';
-import { spellById, SCHOOL_LABELS } from '../game/spells.ts';
+import { spellById } from '../game/spells.ts';
 import { LEARNABLE_SPELLS } from '../game/spells.ts';
 import {
   SHOPS, type ShopDef, type ShopInventory,
@@ -39,7 +39,7 @@ import {
   sageIdentify, identifyFee, templeHeal, templeHealCost, templeUncurse, templeUncurseCost,
   resetVisitPrices,
 } from '../game/shop.ts';
-import { coinsIn, type Item, addToContainer, removeFromContainer, removeFromSlot, equipItem, displayName, addCoins } from '../game/items.ts';
+import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins } from '../game/items.ts';
 import {
   type MonsterInstance,
   type PlayerStatus,
@@ -47,12 +47,11 @@ import {
   monsterMeleeAttack,
   applyDrainAttack,
   poisonTick,
-  type SpecialAttack,
 } from '../game/combat.ts';
 import { monsterById, healthDescription, rollMonsterLoot } from '../game/monsters.ts';
 import { castSpell, spellTargetKind, type SpellTarget } from '../game/spell-engine.ts';
 import { generateFloor, type DungeonFloor } from '../game/dungeon-gen.ts';
-import { ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../game/equipment.ts';
+import { type ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../game/equipment.ts';
 import { getLogger } from '../game/logging.ts';
 
 const logger = getLogger('game:world');
@@ -823,7 +822,8 @@ export class GameWorld extends LitElement {
     // Notify about ground items
     if (tile.items.length > 0) {
       if (tile.items.length === 1) {
-        this.pushMessage(`You see ${displayName(tile.items[0]!)} on the ground. (G to pick up)`);
+        const groundItem = tile.items[0];
+        this.pushMessage(`You see ${groundItem ? displayName(groundItem) : 'an item'} on the ground. (G to pick up)`);
       } else {
         this.pushMessage(`You see ${tile.items.length} items on the ground. (G to pick up)`);
       }
@@ -881,7 +881,7 @@ export class GameWorld extends LitElement {
       this.enterDungeonFloor(level);
       return;
     }
-    const staticMap = ALL_MAPS[id as keyof typeof ALL_MAPS];
+    const staticMap = ALL_MAPS[id];
     if (staticMap) {
       this.map = staticMap;
       this.moveTo(position.x, position.y);
@@ -1013,7 +1013,8 @@ export class GameWorld extends LitElement {
           dropItem(this.map, target.x, target.y, item);
         }
         if (loot.length > 0) {
-          this.pushMessage(`The ${spec.name} drops ${loot.length === 1 ? displayName(loot[0]!) : `${loot.length} items`}.`);
+          const firstLoot = loot[0];
+          this.pushMessage(`The ${spec.name} drops ${loot.length === 1 && firstLoot ? displayName(firstLoot) : `${loot.length} items`}.`);
         }
       } else {
         const desc = healthDescription(newHp, spec.hp);
@@ -1030,7 +1031,7 @@ export class GameWorld extends LitElement {
     const c = this.character;
     if (!c || this.map.id === 'village' || this.map.id === 'farm-map') return;
 
-    let updatedMonsters = [...this.monsters];
+    const updatedMonsters = [...this.monsters];
     let updatedChar = { ...c };
     let updatedStatus = { ...this.playerStatus };
     let charChanged = false;
@@ -1071,7 +1072,7 @@ export class GameWorld extends LitElement {
           if (result.specialTriggered === 'poison' && !updatedStatus.poisoned) {
             updatedStatus = { ...updatedStatus, poisoned: true, poisonStrength: 1 };
           } else if (result.specialTriggered) {
-            const drainResult = applyDrainAttack(result.specialTriggered as SpecialAttack, updatedStatus, updatedChar);
+            const drainResult = applyDrainAttack(result.specialTriggered, updatedStatus);
             updatedStatus = drainResult.status;
             if (drainResult.message) this.pushMessage(drainResult.message);
           }
@@ -1206,7 +1207,7 @@ export class GameWorld extends LitElement {
       // Non-shop building (Barg's House, Farm House)
       return html`
         <div class="overlay" @click=${() => { this.overlay = 'none'; this.activeBuilding = null; }}>
-          <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
             <p class="overlay-title">${b.name}</p>
             <div class="divider"></div>
             <p class="building-services">${b.description}</p>
@@ -1219,7 +1220,7 @@ export class GameWorld extends LitElement {
     if (!this.shopInventories.has(b.name)) {
       this.shopInventories.set(b.name, generateShopInventory(shop));
     }
-    const inv = this.shopInventories.get(b.name)!;
+    const inv = this.shopInventories.get(b.name) ?? generateShopInventory(shop);
     const packItems: Item[] = c.pack?.slots?.flatMap((s) => s.items) ?? [];
     const close = () => { this.overlay = 'none'; this.activeBuilding = null; };
 
@@ -1232,7 +1233,7 @@ export class GameWorld extends LitElement {
   private renderTradeShop(name: string, shop: ShopDef, inv: ShopInventory, c: Character, packItems: Item[], close: () => void): TemplateResult {
     return html`
       <div class="overlay" @click=${close}>
-        <div class="overlay-box inv-screen" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="overlay-box inv-screen" @click=${(e: Event) => { e.stopPropagation(); }}>
           <p class="overlay-title">${name}</p>
           <div class="divider"></div>
           <div class="inv-container-block">
@@ -1268,7 +1269,7 @@ export class GameWorld extends LitElement {
     const unidentified = packItems.filter((it) => !it.identified);
     return html`
       <div class="overlay" @click=${close}>
-        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
           <p class="overlay-title">${name}</p>
           <p class="building-services">Identify an item for ${identifyFee()} cp.</p>
           <div class="divider"></div>
@@ -1288,7 +1289,7 @@ export class GameWorld extends LitElement {
       .filter((it): it is Item => it !== null && it.cursed);
     return html`
       <div class="overlay" @click=${close}>
-        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
           <p class="overlay-title">${name}</p>
           <div class="divider"></div>
           <div class="inv-item ${healCost > 0 ? '' : 'no-mana'}" style="${healCost > 0 ? 'cursor:pointer' : 'opacity:0.5'}" @click=${healCost > 0 ? () => { this.shopHeal(); } : undefined}>
@@ -1304,10 +1305,10 @@ export class GameWorld extends LitElement {
   }
 
   private renderJunkYard(name: string, c: Character, packItems: Item[], close: () => void): TemplateResult {
-    const shop = SHOPS['Junk Yard']!;
+    const shop = SHOPS['Junk Yard'] ?? { id: 'Junk Yard', name: 'Junk Yard', townTier: 'hamlet' as const, stockLevel: 1, buys: [], sells: [], type: 'junkyard' as const };
     return html`
       <div class="overlay" @click=${close}>
-        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
           <p class="overlay-title">${name}</p>
           <p class="building-services">We buy anything. 25 cp flat.</p>
           <div class="divider"></div>
@@ -1623,7 +1624,7 @@ export class GameWorld extends LitElement {
         actions.push({ label: 'Equip', handler: () => { this.doEquipFromPack(a.item); } });
       }
       actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
-    } else if (a.source === 'ground') {
+    } else {
       if (a.item.kind === 'container' && a.item.name.includes('Purse')) {
         actions.push({ label: 'Consolidate Coins', handler: () => { this.doConsolidateGroundPurse(a.item); } });
         actions.push({ label: 'Swap Purse', handler: () => { this.doSwapGroundPurse(a.item); } });
@@ -1633,7 +1634,7 @@ export class GameWorld extends LitElement {
 
     return html`
       <div class="action-menu-backdrop" @click=${() => { this.actionItem = null; }}>
-        <div class="action-menu" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="action-menu" @click=${(e: Event) => { e.stopPropagation(); }}>
           <div class="action-menu-title">${displayName(a.item)}</div>
           ${actions.map((act) => html`
             <button class="action-menu-btn" @click=${act.handler}>${act.label}</button>
@@ -1675,8 +1676,9 @@ export class GameWorld extends LitElement {
       this.pushMessage(`HP: ${this.character.maxHitPoints} (+${hpPerLevel(this.character.stats)})  Mana: ${this.character.maxMana} (+${spPerLevel(this.character.stats)})`);
       // Check if new spell tier unlocked
       const maxSpell = maxSpellLevelAt(this.character.level);
+      const char = this.character;
       const available = LEARNABLE_SPELLS.filter(
-        (s) => s.level <= maxSpell && !this.character!.spells.includes(s.id),
+        (s) => s.level <= maxSpell && !char.spells.includes(s.id),
       );
       if (available.length > 0) {
         this.pendingSpellLearn = true;
@@ -1739,7 +1741,8 @@ export class GameWorld extends LitElement {
             const loot = rollMonsterLoot(spec, 1);
             for (const item of loot) dropItem(this.map, m.x, m.y, item);
             if (loot.length > 0) {
-              this.pushMessage(`The ${spec.name} drops ${loot.length === 1 ? displayName(loot[0]!) : `${loot.length} items`}.`);
+              const firstDrop = loot[0];
+              this.pushMessage(`The ${spec.name} drops ${loot.length === 1 && firstDrop ? displayName(firstDrop) : `${loot.length} items`}.`);
             }
           }
           this.monsters = this.monsters.filter((mon) => mon.instanceId !== instanceId);
@@ -1883,7 +1886,7 @@ export class GameWorld extends LitElement {
 
     return html`
       <div class="overlay" @click=${() => { this.overlay = 'none'; }}>
-        <div class="overlay-box inv-screen" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="overlay-box inv-screen" @click=${(e: Event) => { e.stopPropagation(); }}>
           <p class="overlay-title">${c.name} — Inventory</p>
           <div class="divider"></div>
 
@@ -1947,7 +1950,7 @@ export class GameWorld extends LitElement {
           <div class="inv-containers">
             ${beltSlots.length > 0 ? html`
               <div class="inv-container-block">
-                <div class="inv-container-label">Belt — ${c.belt!.name}</div>
+                <div class="inv-container-label">Belt — ${c.belt?.name ?? 'Belt'}</div>
                 <div class="belt-slots">
                   ${beltSlots.map((slot) => {
                     const it = slot.items[0] ?? null;
@@ -2006,11 +2009,11 @@ export class GameWorld extends LitElement {
   private renderSpellsOverlay(): TemplateResult {
     const c = this.character;
     if (!c) return html``;
-    const known = c.spells ?? [];
+    const known = c.spells;
 
     return html`
       <div class="overlay" @click=${() => { this.overlay = 'none'; }}>
-        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
           <p class="overlay-title">Spells Known</p>
           <div class="divider"></div>
 
@@ -2052,7 +2055,7 @@ export class GameWorld extends LitElement {
     }
     return html`
       <div class="overlay">
-        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
           <p class="overlay-title">Level ${c.level}! Choose a new spell:</p>
           <div class="divider"></div>
           ${available.map((sp) => html`
@@ -2076,7 +2079,7 @@ export class GameWorld extends LitElement {
     if (this.narrative === null) return html``;
     return html`
       <div class="overlay" @click=${() => { this.narrative = null; }}>
-        <div class="overlay-box" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
           <p class="overlay-text">${this.narrative}</p>
           <span class="overlay-close" @click=${() => { this.narrative = null; }}>
             [ Enter / Space to continue ]
@@ -2127,7 +2130,7 @@ export class GameWorld extends LitElement {
       'farm-map': 'Countryside',
     };
     const mapLabel = mapLabels[this.map.id] ?? (this.currentDungeonLevel > 0 ? `Mine — Floor ${this.currentDungeonLevel}` : this.map.id);
-    const known = c.spells ?? [];
+    const known = c.spells;
 
     return html`
       <aside class="sidebar">

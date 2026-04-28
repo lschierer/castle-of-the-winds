@@ -331,7 +331,7 @@ export class ShopScreen extends LitElement {
       }
     }
     // Try appending to a multi-item slot (packs typically have one large slot)
-    const firstDataSlot = newSlots.find((s) => s && !s.coinKind);
+    const firstDataSlot = newSlots.find((s) => !s.coinKind);
     if (firstDataSlot) {
       const idx = newSlots.indexOf(firstDataSlot);
       newSlots[idx] = { ...firstDataSlot, items: [...firstDataSlot.items, item] };
@@ -459,7 +459,7 @@ export class ShopScreen extends LitElement {
     const rep = this.reputation;
     const willBuy = shopWillBuy(item, this.shopState.spec, rep);
     const sellPrice = willBuy
-      ? shopSellPrice(item, item.identified, this.shopState.spec.kind === 'junk')
+      ? shopSellPrice(item, item.identified, this.shopState.spec.type === 'junkyard')
       : null;
 
     return html`
@@ -518,7 +518,7 @@ export class ShopScreen extends LitElement {
     void coinDisplay; // suppress unused warning
 
     return html`
-      <div class="shop-box" @click=${(e: Event) => e.stopPropagation()}>
+      <div class="shop-box" @click=${(e: Event) => { e.stopPropagation(); }}>
         <!-- Header -->
         <div class="shop-header">
           <p class="shop-title">${shop.name}</p>
@@ -545,7 +545,7 @@ export class ShopScreen extends LitElement {
               <button
                 class="btn primary"
                 ?disabled=${!canBuy}
-                @click=${() => this.handleBuy()}
+                @click=${() => { this.handleBuy(); }}
               >Buy${selectedEntry ? ` (${this.formatCp(selectedEntry.buyPrice)})` : ''}</button>
               <span class="coins-display">You have: ${coinStr}</span>
             </div>
@@ -579,9 +579,9 @@ export class ShopScreen extends LitElement {
               <button
                 class="btn primary"
                 ?disabled=${!canSell}
-                @click=${() => this.handleSell()}
+                @click=${() => { this.handleSell(); }}
               >Sell${selectedPi && shopWillBuy(selectedPi.item, shop, rep)
-                ? ` (${this.formatCp(shopSellPrice(selectedPi.item, selectedPi.item.identified, shop.kind === 'junk'))})`
+                ? ` (${this.formatCp(shopSellPrice(selectedPi.item, selectedPi.item.identified, shop.type === 'junkyard'))})`
                 : ''}</button>
             </div>
           </div>
