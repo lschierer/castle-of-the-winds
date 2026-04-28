@@ -370,6 +370,8 @@ export interface WeaponSpec {
   /** Weapon class (0-12). Higher = more damage. */
   weaponClass: number;
   weaponType: 'blade' | 'blunt' | 'polearm';
+  /** Item tier (1-5). Controls shop availability and loot depth. */
+  tier: number;
   /** Base buy price in copper. */
   baseBuyPrice?: number;
   /** Base sell price in copper. */
@@ -381,40 +383,36 @@ export interface WeaponSpec {
  * Weight and bulk in game units (not grams).
  */
 export const WEAPON_SPECS: readonly WeaponSpec[] = [
-  { name: 'Broken Sword',      weight:  1000, bulk:  5000, weaponClass:  0, weaponType: 'blade' },
-  { name: 'Club',              weight:  1500, bulk:  3000, weaponClass:  1, weaponType: 'blunt' },
-  { name: 'Normal Dagger',     weight:   500, bulk:   500, weaponClass:  2, weaponType: 'blade' },
-  { name: 'Hammer',            weight:  2000, bulk:  3000, weaponClass:  2, weaponType: 'blunt' },
-  { name: 'Hand Axe',          weight:  1000, bulk:  3000, weaponClass:  3, weaponType: 'blade' },
-  { name: 'Quarterstaff',      weight:   750, bulk:  5000, weaponClass:  3, weaponType: 'polearm' },
-  { name: 'Spear',             weight:  1500, bulk:  5000, weaponClass:  4, weaponType: 'polearm' },
-  { name: 'Short Sword',       weight:  1000, bulk:  5000, weaponClass:  5, weaponType: 'blade' },
-  { name: 'Mace',              weight:  2500, bulk:  4375, weaponClass:  5, weaponType: 'blunt' },
-  { name: 'Flail',             weight:  2000, bulk:  3250, weaponClass:  6, weaponType: 'blunt' },
-  { name: 'Axe',               weight:  2000, bulk:  5000, weaponClass:  6, weaponType: 'blade' },
-  { name: 'War Hammer',        weight:  1400, bulk:  7500, weaponClass:  7, weaponType: 'blunt' },
-  { name: 'Long Sword',        weight:  1500, bulk:  8000, weaponClass:  8, weaponType: 'blade' },
-  { name: 'Battle Axe',        weight:  3000, bulk:  6000, weaponClass:  8, weaponType: 'blade' },
-  { name: 'Broad Sword',       weight:  1600, bulk:  9000, weaponClass:  9, weaponType: 'blade' },
-  { name: 'Morning Star',      weight:  3000, bulk:  9000, weaponClass: 10, weaponType: 'blunt' },
-  { name: 'Bastard Sword',     weight:  3000, bulk: 10000, weaponClass: 11, weaponType: 'blade' },
-  { name: 'Two-Handed Sword',  weight:  5000, bulk: 12000, weaponClass: 12, weaponType: 'blade' },
+  { name: 'Broken Sword',      weight:  1000, bulk:  5000, weaponClass:  0, weaponType: 'blade', tier: 1 },
+  { name: 'Club',              weight:  1500, bulk:  3000, weaponClass:  1, weaponType: 'blunt', tier: 1 },
+  { name: 'Normal Dagger',     weight:   500, bulk:   500, weaponClass:  2, weaponType: 'blade', tier: 1 },
+  { name: 'Hammer',            weight:  2000, bulk:  3000, weaponClass:  2, weaponType: 'blunt', tier: 1 },
+  { name: 'Hand Axe',          weight:  1000, bulk:  3000, weaponClass:  3, weaponType: 'blade', tier: 1 },
+  { name: 'Quarterstaff',      weight:   750, bulk:  5000, weaponClass:  3, weaponType: 'polearm', tier: 1 },
+  { name: 'Spear',             weight:  1500, bulk:  5000, weaponClass:  4, weaponType: 'polearm', tier: 1 },
+  { name: 'Short Sword',       weight:  1000, bulk:  5000, weaponClass:  5, weaponType: 'blade', tier: 2 },
+  { name: 'Mace',              weight:  2500, bulk:  4375, weaponClass:  5, weaponType: 'blunt', tier: 2 },
+  { name: 'Flail',             weight:  2000, bulk:  3250, weaponClass:  6, weaponType: 'blunt', tier: 2 },
+  { name: 'Axe',               weight:  2000, bulk:  5000, weaponClass:  6, weaponType: 'blade', tier: 2 },
+  { name: 'War Hammer',        weight:  1400, bulk:  7500, weaponClass:  7, weaponType: 'blunt', tier: 3 },
+  { name: 'Long Sword',        weight:  1500, bulk:  8000, weaponClass:  8, weaponType: 'blade', tier: 3 },
+  { name: 'Battle Axe',        weight:  3000, bulk:  6000, weaponClass:  8, weaponType: 'blade', tier: 3 },
+  { name: 'Broad Sword',       weight:  1600, bulk:  9000, weaponClass:  9, weaponType: 'blade', tier: 3 },
+  { name: 'Morning Star',      weight:  3000, bulk:  9000, weaponClass: 10, weaponType: 'blunt', tier: 4 },
+  { name: 'Bastard Sword',     weight:  3000, bulk: 10000, weaponClass: 11, weaponType: 'blade', tier: 4 },
+  { name: 'Two-Handed Sword',  weight:  5000, bulk: 12000, weaponClass: 12, weaponType: 'blade', tier: 5 },
 ] as const;
 
-/** Weapon tiers for level-scaled drops. */
-const WEAPON_TIERS: Array<{ maxLevel: number; names: readonly string[] }> = [
-  { maxLevel:  4, names: ['Normal Dagger', 'Short Sword', 'Club', 'Hammer', 'Hand Axe', 'Quarterstaff'] },
-  { maxLevel:  8, names: ['Long Sword', 'Broad Sword', 'Mace', 'Morning Star', 'Axe'] },
-  { maxLevel: 13, names: ['Bastard Sword', 'War Hammer', 'Flail', 'Spear', 'Battle Axe'] },
-  { maxLevel: 99, names: ['Two-Handed Sword', 'Battle Axe', 'Flail', 'Bastard Sword'] },
-];
-
-/** Return a random weapon name appropriate to the dungeon level. */
-export function randomWeaponName(level: number): string {
-  for (const tier of WEAPON_TIERS) {
-    if (level <= tier.maxLevel) return pickRandom(tier.names);
-  }
-  return 'Normal Dagger'; // unreachable: last tier maxLevel is 99
+/** Return a random weapon name appropriate to the max tier allowed. */
+export function randomWeaponName(maxTier: number): string {
+  const eligible = WEAPON_SPECS.filter((s) => s.tier <= maxTier && s.weaponClass > 0);
+  if (eligible.length === 0) return 'Normal Dagger';
+  // Weight toward lower tiers: higher tier items are rarer
+  const weighted = eligible.flatMap((s) => {
+    const rarity = Math.max(1, 4 - (s.tier - 1)); // tier 1=4 copies, tier 2=3, tier 3=2, tier 4+=1
+    return Array.from({ length: rarity }, () => s.name);
+  });
+  return pickRandom(weighted);
 }
 
 /** Return a random element from a non-empty readonly array. */

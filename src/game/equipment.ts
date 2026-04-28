@@ -50,6 +50,8 @@ export interface EquipmentSpec {
   baseBuyPrice?: number;
   /** Base sell price in copper pieces (what shops pay). */
   baseSellPrice?: number;
+  /** Item tier (1-5). Controls shop availability and loot depth. */
+  tier?: number;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -67,98 +69,98 @@ export function specForItem(item: Item, catalog: readonly EquipmentSpec[]): Equi
 // ── Armor ─────────────────────────────────────────────────────────────────────
 
 export const ARMOR_SPECS: readonly EquipmentSpec[] = [
-  { name: 'Rusty Armour',           kind: 'armor', ac:  0, weight: 10000, bulk: 30000, icon: 'LARMOR.png', baseSellPrice: 25 },
-  { name: 'Leather Armour',         kind: 'armor', ac:  6, weight:  5000, bulk: 24000, icon: 'LARMOR.png', baseBuyPrice: 1080, baseSellPrice: 600 },
-  { name: 'Studded Leather Armour', kind: 'armor', ac: 12, weight:  7000, bulk: 25000, icon: 'LARMOR.png', baseBuyPrice: 3150, baseSellPrice: 1800 },
-  { name: 'Ring Mail',              kind: 'armor', ac: 18, weight:  8000, bulk: 30000, baseBuyPrice: 6300, baseSellPrice: 3600 },
-  { name: 'Scale Mail',             kind: 'armor', ac: 24, weight:  9000, bulk: 30000, baseBuyPrice: 10800, baseSellPrice: 6000 },
-  { name: 'Chain Mail',             kind: 'armor', ac: 30, weight: 10000, bulk: 30000, baseBuyPrice: 16200, baseSellPrice: 9000 },
-  { name: 'Splint Mail',            kind: 'armor', ac: 36, weight: 12000, bulk: 40000, baseBuyPrice: 27000, baseSellPrice: 15000 },
-  { name: 'Plate Mail',             kind: 'armor', ac: 42, weight: 15000, bulk: 40000, baseBuyPrice: 42000, baseSellPrice: 24000 },
-  { name: 'Plate Armour',           kind: 'armor', ac: 48, weight: 15000, bulk: 60000, baseBuyPrice: 42000, baseSellPrice: 24000 },
-  { name: 'Elven Chain Mail',       kind: 'armor', ac: 52, weight:  5000, bulk: 24000, baseBuyPrice: 162000, baseSellPrice: 90000 },
-  { name: 'Meteoric Steel Plate',   kind: 'armor', ac: 54, weight:  5000, bulk: 30000, baseBuyPrice: 105000, baseSellPrice: 60000 },
+  { name: 'Rusty Armour',           kind: 'armor', ac:  0, weight: 10000, bulk: 30000, icon: 'armor_r.png', baseSellPrice: 25, tier: 1 },
+  { name: 'Leather Armour',         kind: 'armor', ac:  6, weight:  5000, bulk: 24000, icon: 'LARMOR.png', baseBuyPrice: 1080, baseSellPrice: 600, tier: 1 },
+  { name: 'Studded Leather Armour', kind: 'armor', ac: 12, weight:  7000, bulk: 25000, icon: 'LARMOR.png', baseBuyPrice: 3150, baseSellPrice: 1800, tier: 1 },
+  { name: 'Ring Mail',              kind: 'armor', ac: 18, weight:  8000, bulk: 30000, icon: 'armor.png', baseBuyPrice: 6300, baseSellPrice: 3600, tier: 2 },
+  { name: 'Scale Mail',             kind: 'armor', ac: 24, weight:  9000, bulk: 30000, icon: 'armor.png', baseBuyPrice: 10800, baseSellPrice: 6000, tier: 2 },
+  { name: 'Chain Mail',             kind: 'armor', ac: 30, weight: 10000, bulk: 30000, icon: 'armor.png', baseBuyPrice: 16200, baseSellPrice: 9000, tier: 3 },
+  { name: 'Splint Mail',            kind: 'armor', ac: 36, weight: 12000, bulk: 40000, icon: 'armor.png', baseBuyPrice: 27000, baseSellPrice: 15000, tier: 3 },
+  { name: 'Plate Mail',             kind: 'armor', ac: 42, weight: 15000, bulk: 40000, icon: 'armor.png', baseBuyPrice: 42000, baseSellPrice: 24000, tier: 4 },
+  { name: 'Plate Armour',           kind: 'armor', ac: 48, weight: 15000, bulk: 60000, icon: 'armor.png', baseBuyPrice: 42000, baseSellPrice: 24000, tier: 4 },
+  { name: 'Elven Chain Mail',       kind: 'armor', ac: 52, weight:  5000, bulk: 24000, icon: 'armor_e2.png', baseBuyPrice: 162000, baseSellPrice: 90000, tier: 5 },
+  { name: 'Meteoric Steel Plate',   kind: 'armor', ac: 54, weight:  5000, bulk: 30000, icon: 'armor_e2.png', baseBuyPrice: 105000, baseSellPrice: 60000, tier: 5 },
 ];
 
 // ── Shields ───────────────────────────────────────────────────────────────────
 
 export const SHIELD_SPECS: readonly EquipmentSpec[] = [
   // Wooden
-  { name: 'Small Wooden Shield',    kind: 'shield', ac:  3, weight:  3000, bulk: 15000, baseBuyPrice: 525, baseSellPrice: 300 },
-  { name: 'Medium Wooden Shield',   kind: 'shield', ac:  6, weight:  4000, bulk: 35000, baseBuyPrice: 1050, baseSellPrice: 600 },
-  { name: 'Large Wooden Shield',    kind: 'shield', ac:  9, weight:  5000, bulk: 50000, baseBuyPrice: 2100, baseSellPrice: 1200 },
+  { name: 'Small Wooden Shield',    kind: 'shield', ac:  3, weight:  3000, bulk: 15000, icon: 'lshield.png', baseBuyPrice: 525, baseSellPrice: 300, tier: 1 },
+  { name: 'Medium Wooden Shield',   kind: 'shield', ac:  6, weight:  4000, bulk: 35000, icon: 'lshield.png', baseBuyPrice: 1050, baseSellPrice: 600, tier: 1 },
+  { name: 'Large Wooden Shield',    kind: 'shield', ac:  9, weight:  5000, bulk: 50000, icon: 'lshield.png', baseBuyPrice: 2100, baseSellPrice: 1200, tier: 1 },
   // Iron
-  { name: 'Small Iron Shield',      kind: 'shield', ac:  6, weight:  4000, bulk: 15000, baseBuyPrice: 1260, baseSellPrice: 720 },
-  { name: 'Medium Iron Shield',     kind: 'shield', ac:  9, weight:  5000, bulk: 35000, baseBuyPrice: 2592, baseSellPrice: 1440 },
-  { name: 'Large Iron Shield',      kind: 'shield', ac: 12, weight:  6000, bulk: 50000, baseBuyPrice: 3150, baseSellPrice: 1800 },
+  { name: 'Small Iron Shield',      kind: 'shield', ac:  6, weight:  4000, bulk: 15000, icon: 'shield.png', baseBuyPrice: 1260, baseSellPrice: 720, tier: 2 },
+  { name: 'Medium Iron Shield',     kind: 'shield', ac:  9, weight:  5000, bulk: 35000, icon: 'shield.png', baseBuyPrice: 2592, baseSellPrice: 1440, tier: 2 },
+  { name: 'Large Iron Shield',      kind: 'shield', ac: 12, weight:  6000, bulk: 50000, icon: 'shield.png', baseBuyPrice: 3150, baseSellPrice: 1800, tier: 2 },
   // Steel
-  { name: 'Small Steel Shield',     kind: 'shield', ac:  9, weight:  4000, bulk: 15000, baseBuyPrice: 2730, baseSellPrice: 1560 },
-  { name: 'Medium Steel Shield',    kind: 'shield', ac: 12, weight:  5000, bulk: 35000, baseBuyPrice: 3360, baseSellPrice: 1920 },
-  { name: 'Large Steel Shield',     kind: 'shield', ac: 15, weight:  6000, bulk: 50000, baseBuyPrice: 4200, baseSellPrice: 2400 },
+  { name: 'Small Steel Shield',     kind: 'shield', ac:  9, weight:  4000, bulk: 15000, icon: 'shield.png', baseBuyPrice: 2730, baseSellPrice: 1560, tier: 3 },
+  { name: 'Medium Steel Shield',    kind: 'shield', ac: 12, weight:  5000, bulk: 35000, icon: 'shield.png', baseBuyPrice: 3360, baseSellPrice: 1920, tier: 3 },
+  { name: 'Large Steel Shield',     kind: 'shield', ac: 15, weight:  6000, bulk: 50000, icon: 'shield.png', baseBuyPrice: 4200, baseSellPrice: 2400, tier: 3 },
   // Meteoric Steel
-  { name: 'Small Meteoric Shield',  kind: 'shield', ac: 15, weight: 2500, bulk: 10000, baseBuyPrice: 4620, baseSellPrice: 2640 },
-  { name: 'Medium Meteoric Shield', kind: 'shield', ac: 18, weight: 3500, bulk: 25000, baseBuyPrice: 5940, baseSellPrice: 3300 },
-  { name: 'Large Meteoric Shield',  kind: 'shield', ac: 21, weight: 4500, bulk: 35000, baseBuyPrice: 7560, baseSellPrice: 4200 },
+  { name: 'Small Meteoric Shield',  kind: 'shield', ac: 15, weight: 2500, bulk: 10000, icon: 'shield_2.png', baseBuyPrice: 4620, baseSellPrice: 2640, tier: 4 },
+  { name: 'Medium Meteoric Shield', kind: 'shield', ac: 18, weight: 3500, bulk: 25000, icon: 'shield_2.png', baseBuyPrice: 5940, baseSellPrice: 3300, tier: 4 },
+  { name: 'Large Meteoric Shield',  kind: 'shield', ac: 21, weight: 4500, bulk: 35000, icon: 'shield_2.png', baseBuyPrice: 7560, baseSellPrice: 4200, tier: 5 },
   // Broken
-  { name: 'Broken Shield',          kind: 'shield', ac:  0, weight: 4000, bulk: 35000, baseSellPrice: 25 },
+  { name: 'Broken Shield',          kind: 'shield', ac:  0, weight: 4000, bulk: 35000, icon: 'shield_b.png', baseSellPrice: 25, tier: 1 },
 ];
 
 // ── Helmets ───────────────────────────────────────────────────────────────────
 
 export const HELMET_SPECS: readonly EquipmentSpec[] = [
-  { name: 'Broken Helmet',             kind: 'helm', ac:  0, weight: 1000, bulk: 1000, baseSellPrice: 25 },
-  { name: 'Leather Helmet',            kind: 'helm', ac:  3, weight:  500, bulk:  500, baseBuyPrice: 525, baseSellPrice: 300 },
-  { name: 'Iron Helmet',               kind: 'helm', ac:  6, weight: 2000, bulk: 2000, baseBuyPrice: 1050, baseSellPrice: 600 },
-  { name: 'Steel Helmet',              kind: 'helm', ac:  9, weight: 2500, bulk: 2000, baseBuyPrice: 3150, baseSellPrice: 1800 },
-  { name: 'Meteoric Steel Helmet',     kind: 'helm', ac: 15, weight: 1000, bulk: 2000, baseBuyPrice: 10500, baseSellPrice: 6000 },
+  { name: 'Broken Helmet',             kind: 'helm', ac:  0, weight: 1000, bulk: 1000, icon: 'helm_b.png', baseSellPrice: 25, tier: 1 },
+  { name: 'Leather Helmet',            kind: 'helm', ac:  3, weight:  500, bulk:  500, icon: 'LHELMET.png', baseBuyPrice: 525, baseSellPrice: 300, tier: 1 },
+  { name: 'Iron Helmet',               kind: 'helm', ac:  6, weight: 2000, bulk: 2000, icon: 'helmet.png', baseBuyPrice: 1050, baseSellPrice: 600, tier: 2 },
+  { name: 'Steel Helmet',              kind: 'helm', ac:  9, weight: 2500, bulk: 2000, icon: 'helmet_s.png', baseBuyPrice: 3150, baseSellPrice: 1800, tier: 3 },
+  { name: 'Meteoric Steel Helmet',     kind: 'helm', ac: 15, weight: 1000, bulk: 2000, icon: 'helmet_v.png', baseBuyPrice: 10500, baseSellPrice: 6000, tier: 4 },
   {
     name: 'Helmet of Detect Monsters', kind: 'helm', ac: 9, weight: 2500, bulk: 2000,
-    alwaysIdentified: false, baseBuyPrice: 42000, baseSellPrice: 24000,
+    icon: 'helmet_e.png', alwaysIdentified: false, baseBuyPrice: 42000, baseSellPrice: 24000, tier: 5,
   },
   {
     name: 'Enchanted Helm of Storms',  kind: 'helm', ac: 25, weight: 1000, bulk: 2000,
-    affinities: [{ element: 'lightning', mod: 'resist' }],
-    baseBuyPrice: 1050000, baseSellPrice: 600000,
+    icon: 'helmet_e.png', affinities: [{ element: 'lightning', mod: 'resist' }],
+    baseBuyPrice: 1050000, baseSellPrice: 600000, tier: 5,
   },
 ];
 
 // ── Gauntlets ─────────────────────────────────────────────────────────────────
 
 export const GAUNTLET_SPECS: readonly EquipmentSpec[] = [
-  { name: 'Gauntlets',                          kind: 'gauntlets', ac:  5, weight: 500, bulk: 2000, baseBuyPrice: 105, baseSellPrice: 60 },
-  { name: 'Gauntlets of Protection',            kind: 'gauntlets', ac: 10, weight: 500, bulk: 2000, baseBuyPrice: 2625, baseSellPrice: 1500 },
-  { name: 'Gauntlets of Strong Protection',     kind: 'gauntlets', ac: 10, weight: 500, bulk: 2000, baseBuyPrice: 6300, baseSellPrice: 3600 },
-  { name: 'Gauntlets of Very Strong Protection',kind: 'gauntlets', ac: 10, weight: 500, bulk: 2000, baseBuyPrice: 12420, baseSellPrice: 6900 },
-  { name: 'Gauntlets of Slaying',               kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, baseBuyPrice: 3780, baseSellPrice: 2100 },
-  { name: 'Gauntlets of Strong Slaying',        kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, baseBuyPrice: 7560, baseSellPrice: 4200 },
-  { name: 'Gauntlets of Very Strong Slaying',   kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, baseBuyPrice: 13125, baseSellPrice: 7500 },
-  { name: 'Gauntlets of Dexterity',             kind: 'gauntlets', ac:  5, weight: 500, bulk: 2000, statBonus: { dexterity: 5 }, baseBuyPrice: 3240, baseSellPrice: 1800 },
-  { name: 'Gauntlets of Strength',              kind: 'gauntlets', ac:  5, weight: 500, bulk: 2000, statBonus: { strength: 5 }, baseBuyPrice: 3240, baseSellPrice: 1800 },
+  { name: 'Gauntlets',                          kind: 'gauntlets', ac:  5, weight: 500, bulk: 2000, icon: 'gauntlet.png', baseBuyPrice: 105, baseSellPrice: 60, tier: 1 },
+  { name: 'Gauntlets of Protection',            kind: 'gauntlets', ac: 10, weight: 500, bulk: 2000, icon: 'gaunt_p.png', baseBuyPrice: 2625, baseSellPrice: 1500, tier: 3 },
+  { name: 'Gauntlets of Strong Protection',     kind: 'gauntlets', ac: 10, weight: 500, bulk: 2000, icon: 'gaunt_p.png', baseBuyPrice: 6300, baseSellPrice: 3600, tier: 4 },
+  { name: 'Gauntlets of Very Strong Protection',kind: 'gauntlets', ac: 10, weight: 500, bulk: 2000, icon: 'gaunt_p.png', baseBuyPrice: 12420, baseSellPrice: 6900, tier: 5 },
+  { name: 'Gauntlets of Slaying',               kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, icon: 'gaunt_sl.png', baseBuyPrice: 3780, baseSellPrice: 2100, tier: 3 },
+  { name: 'Gauntlets of Strong Slaying',        kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, icon: 'gaunt_sl.png', baseBuyPrice: 7560, baseSellPrice: 4200, tier: 4 },
+  { name: 'Gauntlets of Very Strong Slaying',   kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, icon: 'gaunt_sl.png', baseBuyPrice: 13125, baseSellPrice: 7500, tier: 5 },
+  { name: 'Gauntlets of Dexterity',             kind: 'gauntlets', ac:  5, weight: 500, bulk: 2000, icon: 'gauntlet.png', statBonus: { dexterity: 5 }, baseBuyPrice: 3240, baseSellPrice: 1800, tier: 3 },
+  { name: 'Gauntlets of Strength',              kind: 'gauntlets', ac:  5, weight: 500, bulk: 2000, icon: 'gauntlet.png', statBonus: { strength: 5 }, baseBuyPrice: 3240, baseSellPrice: 1800, tier: 3 },
 ];
 
 // ── Bracers ───────────────────────────────────────────────────────────────────
 
 export const BRACER_SPECS: readonly EquipmentSpec[] = [
-  { name: 'Bracers',                        kind: 'bracers', ac:  3, weight: 500, bulk: 2000, baseBuyPrice: 108, baseSellPrice: 60 },
-  { name: 'Bracers of Defense',             kind: 'bracers', ac:  8, weight: 500, bulk: 2000, baseBuyPrice: 1836, baseSellPrice: 1020 },
-  { name: 'Bracers of Strong Defense',      kind: 'bracers', ac: 13, weight: 500, bulk: 2000, baseBuyPrice: 5616, baseSellPrice: 3120 },
-  { name: 'Bracers of Very Strong Defense', kind: 'bracers', ac: 18, weight: 500, bulk: 2000, baseBuyPrice: 11556, baseSellPrice: 6420 },
+  { name: 'Bracers',                        kind: 'bracers', ac:  3, weight: 500, bulk: 2000, icon: 'bracers.png', baseBuyPrice: 108, baseSellPrice: 60, tier: 1 },
+  { name: 'Bracers of Defense',             kind: 'bracers', ac:  8, weight: 500, bulk: 2000, icon: 'Bracer_e.png', baseBuyPrice: 1836, baseSellPrice: 1020, tier: 3 },
+  { name: 'Bracers of Strong Defense',      kind: 'bracers', ac: 13, weight: 500, bulk: 2000, icon: 'Bracer_e.png', baseBuyPrice: 5616, baseSellPrice: 3120, tier: 4 },
+  { name: 'Bracers of Very Strong Defense', kind: 'bracers', ac: 18, weight: 500, bulk: 2000, icon: 'Bracer_e.png', baseBuyPrice: 11556, baseSellPrice: 6420, tier: 5 },
 ];
 
 // ── Boots ─────────────────────────────────────────────────────────────────────
 
 export const BOOT_SPECS: readonly EquipmentSpec[] = [
-  { name: 'Boots',               kind: 'boots', ac: 0, weight: 1500, bulk: 4000 },
-  { name: 'Boots of Speed',      kind: 'boots', ac: 0, weight: 1500, bulk: 4000, statBonus: { dexterity: 8 } },
-  { name: 'Boots of Levitation', kind: 'boots', ac: 0, weight: 1500, bulk: 4000 },
+  { name: 'Boots',               kind: 'boots', ac: 0, weight: 1500, bulk: 4000, icon: 'boots.png', tier: 1 },
+  { name: 'Boots of Speed',      kind: 'boots', ac: 0, weight: 1500, bulk: 4000, icon: 'BOOtsspd.png', statBonus: { dexterity: 8 }, tier: 4 },
+  { name: 'Boots of Levitation', kind: 'boots', ac: 0, weight: 1500, bulk: 4000, icon: 'BOOtslev.png', tier: 5 },
 ];
 
 // ── Cloaks ────────────────────────────────────────────────────────────────────
 
 export const CLOAK_SPECS: readonly EquipmentSpec[] = [
-  { name: 'Cloak',               kind: 'cloak', ac: 0, weight: 500, bulk: 6000 },
-  { name: 'Cloak of Protection', kind: 'cloak', ac: 6, weight: 500, bulk: 6000 },
-  { name: 'Cloak of Resistance', kind: 'cloak', ac: 3, weight: 500, bulk: 6000,
+  { name: 'Cloak',               kind: 'cloak', ac: 0, weight: 500, bulk: 6000, icon: 'cloak.png', tier: 1 },
+  { name: 'Cloak of Protection', kind: 'cloak', ac: 6, weight: 500, bulk: 6000, icon: 'Cloak_e.png', tier: 3 },
+  { name: 'Cloak of Resistance', kind: 'cloak', ac: 3, weight: 500, bulk: 6000, icon: 'Cloak_e.png', tier: 5,
     affinities: [
       { element: 'fire',      mod: 'resist' },
       { element: 'cold',      mod: 'resist' },
@@ -214,13 +216,6 @@ export const CATALOG_BY_KIND: Partial<Record<ItemKind, readonly EquipmentSpec[]>
  * Armor tiers for level-scaled drops.
  * Low tier = weaker armor found in shallow dungeons.
  */
-const ARMOR_TIERS: Array<{ maxLevel: number; names: readonly string[] }> = [
-  { maxLevel:  4, names: ['Leather Armour', 'Studded Leather Armour', 'Ring Mail'] },
-  { maxLevel:  8, names: ['Scale Mail', 'Chain Mail', 'Splint Mail'] },
-  { maxLevel: 14, names: ['Plate Mail', 'Plate Armour', 'Elven Chain Mail'] },
-  { maxLevel: 99, names: ['Plate Armour', 'Elven Chain Mail', 'Meteoric Steel Plate'] },
-];
-
 /** Return a random element from a non-empty readonly array. */
 function pickRandom<T>(arr: readonly T[]): T {
   // Caller guarantees arr is non-empty; all our tier arrays are literal constants.
@@ -230,14 +225,28 @@ function pickRandom<T>(arr: readonly T[]): T {
 }
 
 /** Return a random armor spec name appropriate to the dungeon level. */
-function randomArmorName(level: number): string {
-  for (const tier of ARMOR_TIERS) {
-    if (level <= tier.maxLevel) return pickRandom(tier.names);
-  }
-  return 'Leather Armour'; // unreachable: last tier maxLevel is 99
+/** Pick a random spec from a catalog, filtered by max tier. Weights toward lower tiers. */
+function randomSpecByTier(catalog: readonly EquipmentSpec[], maxTier: number): EquipmentSpec {
+  const eligible = catalog.filter((s) =>
+    (s.tier ?? 1) <= maxTier &&
+    !s.name.startsWith('Broken') &&
+    !s.name.startsWith('Rusty'),
+  );
+  if (eligible.length === 0) return pickRandom(catalog);
+  // Weight toward lower tiers
+  const weighted = eligible.flatMap((s) => {
+    const t = s.tier ?? 1;
+    const copies = Math.max(1, 4 - (t - 1));
+    return Array.from({ length: copies }, () => s);
+  });
+  return pickRandom(weighted);
 }
 
-/** Return a random spec name from a catalog (unchanged by level). */
+function randomArmorName(level: number): string {
+  const maxTier = level <= 2 ? 1 : level <= 4 ? 2 : level <= 8 ? 3 : level <= 14 ? 4 : 5;
+  return randomSpecByTier(ARMOR_SPECS, maxTier).name;
+}
+
 function randomSpecName(catalog: readonly EquipmentSpec[]): string {
   return pickRandom(catalog).name;
 }
@@ -258,8 +267,8 @@ const DEFAULT_KIND_ICON: Partial<Record<ItemKind, string>> = {
 
 export function makeEquipmentItem(kind: ItemKind, dungeonLevel: number): Item {
   const catalog = CATALOG_BY_KIND[kind] ?? ARMOR_SPECS;
-  const name = kind === 'armor' ? randomArmorName(dungeonLevel) : randomSpecName(catalog);
-  const spec = catalog.find((s) => s.name === name) ?? pickRandom(catalog);
+  const maxTier = dungeonLevel <= 2 ? 1 : dungeonLevel <= 4 ? 2 : dungeonLevel <= 8 ? 3 : dungeonLevel <= 14 ? 4 : 5;
+  const spec = randomSpecByTier(catalog, maxTier);
   // Small enchantment bonus for deeper levels, with low probability of being cursed
   const enchRoll = Math.random();
   let enchantment = 0;
