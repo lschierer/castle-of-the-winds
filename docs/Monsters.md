@@ -1,39 +1,40 @@
-* Giant Bat
-  * no special affinity
-* Giant Rat
-  * no special affinity
-* Giant Scorpion 
-  * you get a bonus when using a cold spell
-  * resistant to fire spells
-  * has a poison attack 
-* Giant Trapdoor Spider
-  * no special affinity
-  * despite the claims of the in-game help, these do *not* have a poison attack.
-* Huge Lizard
-  * you get a bonus when using a cold spell
-  * resistant to fire spells
-  * extra constitution compaired to similar level monsters
-  * reduced attack strength compared to similar level monsters
-* Large Snake
-  * version of the snake without a poison attack. 
-  * no special affinity
-* Viper
-  * version of the snake with a poison attack
-  * more constituion than the large snake. 
-  * reduced melee attack compared to large snake
-* Wild Dog
-  * no special affinity
-  * attack/constituion comparable to a balanced player at level 3
-* Wolves
-  * Gray wolf
+* Animals
+  * Giant Bat
     * no special affinity
-    * significantly stronger than a wild dog
-    * less strong than a bear
-  * white wolf
-    * magical cold attack
-    * *does not* resist cold attacks
-    * you get a bonus when using fire spells
-    * stronger than a grey wolf
+  * Giant Rat
+    * no special affinity
+  * Giant Scorpion 
+    * you get a bonus when using a cold spell
+    * resistant to fire spells
+    * has a poison attack 
+  * Giant Trapdoor Spider
+    * no special affinity
+    * despite the claims of the in-game help, these do *not* have a poison attack.
+  * Huge Lizard
+    * you get a bonus when using a cold spell
+    * resistant to fire spells
+    * extra constitution compaired to similar level monsters
+    * reduced attack strength compared to similar level monsters
+  * Large Snake
+    * version of the snake without a poison attack. 
+    * no special affinity
+  * Viper
+    * version of the snake with a poison attack
+    * more constituion than the large snake. 
+    * reduced melee attack compared to large snake
+  * Wild Dog
+    * no special affinity
+    * attack/constituion comparable to a balanced player at level 3
+  * Wolves
+    * Gray wolf
+      * no special affinity
+      * significantly stronger than a wild dog
+      * less strong than a bear
+    * white wolf
+      * magical cold attack
+      * *does not* resist cold attacks
+      * you get a bonus when using fire spells
+      * stronger than a grey wolf
 * Dragons
   * from weakest to strongest: Young < Young Adult < Adult < Old < Very Old < Ancient
   * Each variety has a different constitution: Green < While < Blue < Red

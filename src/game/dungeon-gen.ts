@@ -142,15 +142,28 @@ function addWalls(grid: Tile[][], w: number, h: number): void {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (!isFloor(grid, x, y)) continue;
-      // Check all 8 neighbours — any void neighbour gets a wall
+      // Place walls at cardinal neighbours only — diagonals get walls
+      // only if they wouldn't block a diagonal passage between two floor tiles
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           if (dx === 0 && dy === 0) continue;
           const nx = x + dx, ny = y + dy;
-          if (ny >= 0 && ny < h && nx >= 0 && nx < w && isVoid(grid, nx, ny)) {
-            const wallRow = grid[ny];
-            if (wallRow) wallRow[nx] = { terrain: 'floor', walkable: false, feature: 'wall', items: [] };
+          if (ny < 0 || ny >= h || nx < 0 || nx >= w) continue;
+          if (!isVoid(grid, nx, ny)) continue;
+
+          // For diagonal positions, check if placing a wall here would
+          // block movement between two floor tiles that share this corner
+          if (dx !== 0 && dy !== 0) {
+            // The two cardinal tiles adjacent to this diagonal
+            const adjA = isFloor(grid, x + dx, y); // horizontal neighbour
+            const adjB = isFloor(grid, x, y + dy); // vertical neighbour
+            // If both cardinal neighbours are floor, this diagonal is a
+            // passage corner — don't wall it off
+            if (adjA && adjB) continue;
           }
+
+          const wallRow = grid[ny];
+          if (wallRow) wallRow[nx] = { terrain: 'floor', walkable: false, feature: 'wall', items: [] };
         }
       }
     }

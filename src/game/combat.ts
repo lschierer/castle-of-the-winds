@@ -177,15 +177,15 @@ export function playerMeleeAttack(
   if (weapon) {
     const spec = WEAPON_SPECS.find((s) => s.name === weapon.name);
     const wc = weapon.weaponClass ?? spec?.weaponClass ?? 2;
-    // Weapon class damage: base 1 + WC * 1.5, with some randomness
-    rawDamage = 1 + Math.floor(wc * 1.5) + Math.floor(rand() * (wc + 1));
+    // Weapon class damage: 1 + random(0..WC). A dagger (WC 2) does 1-3.
+    rawDamage = 1 + Math.floor(rand() * (wc + 1));
     weaponName = weapon.name;
-    // Enchantment bonus
+    // Enchantment adds flat damage
     rawDamage += weapon.enchantment;
   }
 
-  // Strength bonus
-  rawDamage += strDamageBonus(effectiveStr);
+  // Strength bonus (halved from raw — STR 70 gives +2, STR 40 gives 0)
+  rawDamage += Math.floor(strDamageBonus(effectiveStr) / 2);
 
   // AC reduction (net damage >= 1 on a connected hit)
   const netDamage = Math.max(1, rawDamage - monster.ac);

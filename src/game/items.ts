@@ -455,7 +455,7 @@ export function makeWeapon(name: string, weight?: number, dungeonLevel?: number)
     cursed: enchantment < 0,
     broken: false,
     enchantment,
-    icon: spec?.weaponType === 'blunt' ? 'mace.png' : spec?.weaponType === 'polearm' ? 'spear.png' : 'sword.png',
+    icon: spec?.weaponType === 'blunt' ? 'mace.png' : spec?.weaponType === 'polearm' ? 'spear.png' : (spec?.weaponClass ?? 2) <= 2 ? 'dagger.png' : 'sword.png',
     weaponClass: spec?.weaponClass ?? 2,
   };
 }

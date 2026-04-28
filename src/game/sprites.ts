@@ -222,6 +222,14 @@ const FALLBACK_ICON: Record<string, string> = {
 function itemIcon(item: Item): string {
   if (item.icon) return item.icon;
   if (item.kind === 'coin' && item.coinKind) return `${item.coinKind}.png`;
+  if (item.kind === 'weapon') {
+    // Check weapon spec for type-appropriate icon
+    const name = item.name.toLowerCase();
+    if (name.includes('staff') || name.includes('spear')) return 'spear.png';
+    if (name.includes('mace') || name.includes('hammer') || name.includes('flail') || name.includes('club') || name.includes('star')) return 'mace.png';
+    if (name.includes('dagger')) return 'dagger.png';
+    return 'sword.png';
+  }
   return FALLBACK_ICON[item.kind] ?? 'pile.png';
 }
 
