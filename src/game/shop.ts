@@ -12,7 +12,8 @@ import type { Item, ItemKind } from './items.ts';
 import { identifyItem, displayName } from './items.ts';
 import type { Character } from './character.ts';
 import { ALL_EQUIPMENT_SPECS, type EquipmentSpec, specForItem, makeEquipmentItem } from './equipment.ts';
-import { makeWeapon, randomWeaponName, addCoins, removeCoins, coinsIn, addToContainer, makeCoinStack } from './items.ts';
+import { makeWeapon, randomWeaponName, addCoins, removeCoins, coinsIn, addToContainer, makePack, makeBelt } from './items.ts';
+import { townStockLevel, type TownTier } from './progression.ts';
 
 // ── Pricing ───────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,8 @@ export function junkYardPrice(item: Item): number {
 
 export interface ShopDef {
   name: string;
+  townTier: TownTier;
+  stockLevel: number;
   /** Item kinds this shop buys from the player. */
   buys: ItemKind[];
   /** Item kinds this shop sells. */
@@ -89,30 +92,40 @@ export interface ShopDef {
 export const SHOPS: Record<string, ShopDef> = {
   'Weaponsmith': {
     name: 'Weaponsmith',
+    townTier: 'hamlet',
+    stockLevel: townStockLevel('hamlet'),
     buys: ['weapon', 'armor', 'helm', 'shield', 'bracers', 'gauntlets'],
     sells: ['weapon', 'armor', 'helm', 'shield', 'bracers', 'gauntlets'],
     type: 'trade',
   },
   'General Store': {
     name: 'General Store',
+    townTier: 'hamlet',
+    stockLevel: townStockLevel('hamlet'),
     buys: ['scroll', 'potion', 'spellbook', 'cloak', 'boots', 'container', 'belt'],
     sells: ['cloak', 'boots', 'container', 'belt'],
     type: 'trade',
   },
   "Kael's Scrolls": {
     name: "Kael's Scrolls",
+    townTier: 'hamlet',
+    stockLevel: townStockLevel('hamlet'),
     buys: [],
     sells: [],
     type: 'sage',
   },
   'Junk Yard': {
     name: 'Junk Yard',
+    townTier: 'hamlet',
+    stockLevel: townStockLevel('hamlet'),
     buys: [], // buys anything via special pricing
     sells: [],
     type: 'junkyard',
   },
   'Temple of Odin': {
     name: 'Temple of Odin',
+    townTier: 'hamlet',
+    stockLevel: townStockLevel('hamlet'),
     buys: [],
     sells: [],
     type: 'temple',
@@ -125,6 +138,130 @@ export interface ShopInventory {
   items: Item[];
 }
 
+const WEAPON_MAX_CLASS_BY_STOCK_LEVEL = [
+  { stockLevel: 2, maxClass: 5 },
+  { stockLevel: 8, maxClass: 10 },
+  { stockLevel: 14, maxClass: 12 },
+] as const;
+
+const PRICE_CAP_BY_STOCK_LEVEL = [
+  { stockLevel: 2, cap: 3_500 },
+  { stockLevel: 8, cap: 45_000 },
+  { stockLevel: 14, cap: 200_000 },
+] as const;
+
+const PACK_STOCK: Array<{ name: string; minStockLevel: number }> = [
+  { name: 'Small Pack', minStockLevel: 1 },
+  { name: 'Medium Pack', minStockLevel: 1 },
+  { name: 'Large Pack', minStockLevel: 5 },
+  { name: 'Giant Pack', minStockLevel: 8 },
+];
+
+const BELT_STOCK: Array<{ name: string; minStockLevel: number }> = [
+  { name: 'Belt', minStockLevel: 1 },
+  { name: 'Wide Belt', minStockLevel: 1 },
+  { name: 'War Belt', minStockLevel: 5 },
+  { name: 'Utility Belt', minStockLevel: 8 },
+  { name: 'Wand Quiver', minStockLevel: 8 },
+];
+
+const SPECIAL_MIN_STOCK_LEVEL: Record<string, number> = {
+  'Boots of Speed': 8,
+  'Boots of Levitation': 8,
+  'Cloak of Protection': 5,
+  'Cloak of Resistance': 10,
+  'Bracers of Defense': 5,
+  'Bracers of Strong Defense': 8,
+  'Bracers of Very Strong Defense': 12,
+  'Gauntlets of Protection': 5,
+  'Gauntlets of Strong Protection': 8,
+  'Gauntlets of Very Strong Protection': 12,
+  'Gauntlets of Slaying': 8,
+  'Gauntlets of Strong Slaying': 10,
+  'Gauntlets of Very Strong Slaying': 12,
+  'Gauntlets of Dexterity': 8,
+  'Gauntlets of Strength': 8,
+  'Helmet of Detect Monsters': 10,
+  'Enchanted Helm of Storms': 14,
+  'Elven Chain Mail': 12,
+  'Meteoric Steel Plate': 12,
+  'Small Meteoric Shield': 12,
+  'Medium Meteoric Shield': 12,
+  'Large Meteoric Shield': 12,
+  'Meteoric Steel Helmet': 12,
+};
+
+function pick<T>(items: readonly T[]): T {
+  return items[Math.floor(Math.random() * items.length)]!;
+}
+
+function priceCapForStockLevel(stockLevel: number): number {
+  return PRICE_CAP_BY_STOCK_LEVEL.find((b) => stockLevel <= b.stockLevel)?.cap ?? 200_000;
+}
+
+function maxWeaponClassForStockLevel(stockLevel: number): number {
+  return WEAPON_MAX_CLASS_BY_STOCK_LEVEL.find((b) => stockLevel <= b.stockLevel)?.maxClass ?? 12;
+}
+
+function minStockLevelForSpec(spec: EquipmentSpec): number {
+  return SPECIAL_MIN_STOCK_LEVEL[spec.name] ?? 1;
+}
+
+function makeStockItem(kind: ItemKind, stockLevel: number): Item {
+  if (kind === 'weapon') {
+    const maxClass = maxWeaponClassForStockLevel(stockLevel);
+    let name = randomWeaponName(stockLevel);
+    for (let tries = 0; tries < 12; tries++) {
+      const candidate = randomWeaponName(stockLevel);
+      const candidateClass = makeWeapon(candidate).weaponClass ?? 0;
+      if (candidateClass <= maxClass) {
+        name = candidate;
+        break;
+      }
+    }
+    const item = makeWeapon(name);
+    item.identified = true;
+    return item;
+  }
+
+  if (kind === 'container') {
+    const options = PACK_STOCK.filter((p) => p.minStockLevel <= stockLevel);
+    return makePack(pick(options).name);
+  }
+
+  if (kind === 'belt') {
+    const options = BELT_STOCK.filter((b) => b.minStockLevel <= stockLevel);
+    return makeBelt(pick(options).name);
+  }
+
+  const cap = priceCapForStockLevel(stockLevel);
+  const catalog = ALL_EQUIPMENT_SPECS.filter((spec) =>
+    spec.kind === kind &&
+    minStockLevelForSpec(spec) <= stockLevel &&
+    (spec.baseBuyPrice ?? BASE_PRICE[spec.kind] ?? 50) <= cap &&
+    !spec.name.startsWith('Broken') &&
+    !spec.name.startsWith('Rusty'),
+  );
+  if (catalog.length > 0) {
+    const spec = pick(catalog);
+    const item = makeEquipmentItem(spec.kind, stockLevel);
+    item.name = spec.name;
+    if (spec.icon !== undefined) item.icon = spec.icon;
+    item.weight = spec.weight;
+    item.bulk = spec.bulk;
+    item.identified = true;
+    item.cursed = false;
+    item.enchantment = 0;
+    return item;
+  }
+
+  const item = makeEquipmentItem(kind, Math.max(1, Math.min(stockLevel, 4)));
+  item.identified = true;
+  item.cursed = false;
+  item.enchantment = 0;
+  return item;
+}
+
 export function generateShopInventory(shop: ShopDef): ShopInventory {
   const items: Item[] = [];
   if (shop.type !== 'trade') return { items };
@@ -132,17 +269,7 @@ export function generateShopInventory(shop: ShopDef): ShopInventory {
   for (const kind of shop.sells) {
     const count = 2 + Math.floor(Math.random() * 3); // 2-4 items per kind
     for (let i = 0; i < count; i++) {
-      if (kind === 'weapon') {
-        const w = makeWeapon(randomWeaponName(1));
-        w.identified = true;
-        items.push(w);
-      } else {
-        const item = makeEquipmentItem(kind, 1);
-        item.identified = true;
-        item.cursed = false;
-        item.enchantment = 0;
-        items.push(item);
-      }
+      items.push(makeStockItem(kind, shop.stockLevel));
     }
   }
   return { items };

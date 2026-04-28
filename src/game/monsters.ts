@@ -22,6 +22,7 @@ import type { ElementType, ResistMod } from './equipment.ts';
 import { makeEquipmentItem } from './equipment.ts';
 import type { CoinKind, ItemKind, Item } from './items.ts';
 import { makeCoinStack, makeLootWeapon } from './items.ts';
+import { effectiveDangerLevel, monsterAllowedInStage, type GameStage } from './progression.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -1095,6 +1096,16 @@ export function monsterById(id: string): MonsterSpec | undefined {
 export function monstersForLevel(level: number): MonsterSpec[] {
   return MONSTERS.filter(
     (m) => !m.isBoss && m.minLevel <= level && (m.maxLevel === undefined || m.maxLevel >= level),
+  );
+}
+
+/** Return monsters appropriate to a game stage and depth within that stage. */
+export function monstersForDepth(stage: GameStage, localDepth: number): MonsterSpec[] {
+  const level = effectiveDangerLevel(stage, localDepth);
+  return MONSTERS.filter(
+    (m) => monsterAllowedInStage(m, stage) &&
+      m.minLevel <= level &&
+      (m.maxLevel === undefined || m.maxLevel >= level),
   );
 }
 

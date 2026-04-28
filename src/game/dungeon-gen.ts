@@ -11,10 +11,11 @@
 
 import type { Tile, TileMap, Vec2 } from './tile-map.ts';
 import type { MonsterInstance } from './combat.ts';
-import { monstersForLevel, type MonsterSpec } from './monsters.ts';
+import { monstersForDepth } from './monsters.ts';
 import { generateTileLoot } from './loot.ts';
 import type { Item } from './items.ts';
 import { ARMOR_SPECS } from './equipment.ts';
+import { itemQualityLevel, type GameStage } from './progression.ts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -204,11 +205,12 @@ function spawnMonsters(
   grid: Tile[][],
   w: number,
   h: number,
-  dungeonLevel: number,
+  stage: GameStage,
+  localDepth: number,
   stairsUp: Vec2,
   count: number,
 ): MonsterInstance[] {
-  const pool = monstersForLevel(dungeonLevel);
+  const pool = monstersForDepth(stage, localDepth);
   if (pool.length === 0) return [];
 
   const walkable: Vec2[] = [];
@@ -237,6 +239,7 @@ function spawnMonsters(
       x: pos.x,
       y: pos.y,
       alerted: false,
+      status: {},
     });
   }
   return monsters;
@@ -244,7 +247,7 @@ function spawnMonsters(
 
 // ── Floor loot ────────────────────────────────────────────────────────────────
 
-function placeLoot(grid: Tile[][], rooms: Room[], w: number, h: number, dungeonLevel: number): void {
+function placeLoot(grid: Tile[][], rooms: Room[], w: number, h: number, lootLevel: number): void {
   const roomSet = new Set<string>();
   for (const room of rooms) {
     for (let y = room.y; y < room.y + room.h; y++) {
@@ -258,7 +261,7 @@ function placeLoot(grid: Tile[][], rooms: Room[], w: number, h: number, dungeonL
     for (let x = 0; x < w; x++) {
       const t = grid[y]![x]!;
       if (t.terrain !== 'floor' || !t.walkable || t.feature) continue;
-      const items = generateTileLoot({ level: dungeonLevel, inRoom: roomSet.has(`${x},${y}`) });
+      const items = generateTileLoot({ level: lootLevel, inRoom: roomSet.has(`${x},${y}`) });
       t.items.push(...items);
     }
   }
@@ -303,7 +306,7 @@ function placeGuaranteedSpawns(
   grid[armorPos.y]![armorPos.x]!.items.push(armor);
   monsters.push({
     specId: 'kobold', instanceId: `m${monsterSeq++}`,
-    hp: 4, x: armorPos.x + 1, y: armorPos.y, alerted: false,
+    hp: 4, x: armorPos.x + 1, y: armorPos.y, alerted: false, status: {},
   });
 
   // Room 1: 2 Giant Rats
@@ -312,7 +315,7 @@ function placeGuaranteedSpawns(
     for (let i = 0; i < 2; i++) {
       monsters.push({
         specId: 'giant_rat', instanceId: `m${monsterSeq++}`,
-        hp: 3, x: r1.center.x + i, y: r1.center.y, alerted: false,
+        hp: 3, x: r1.center.x + i, y: r1.center.y, alerted: false, status: {},
       });
     }
   }
@@ -322,7 +325,7 @@ function placeGuaranteedSpawns(
     const r2 = sorted[2]!;
     monsters.push({
       specId: 'goblin', instanceId: `m${monsterSeq++}`,
-      hp: 6, x: r2.center.x, y: r2.center.y, alerted: false,
+      hp: 6, x: r2.center.x, y: r2.center.y, alerted: false, status: {},
     });
   }
 }
@@ -331,6 +334,7 @@ function placeGuaranteedSpawns(
 
 export interface GenerateFloorOptions {
   dungeonLevel: number;
+  stage?: GameStage;
   /** Total floors in this dungeon (determines if stairs-down is placed). */
   totalFloors: number;
   /** Map dimensions. */
@@ -343,6 +347,7 @@ export interface GenerateFloorOptions {
 export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   const {
     dungeonLevel,
+    stage = 'mine',
     totalFloors,
     width: w = 40 + dungeonLevel * 2,
     height: h = 30 + dungeonLevel * 2,
@@ -386,10 +391,10 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
 
   // Spawn monsters
   const monsterCount = 4 + dungeonLevel * 2;
-  const monsters = spawnMonsters(grid, w, h, dungeonLevel, stairsUp, monsterCount);
+  const monsters = spawnMonsters(grid, w, h, stage, dungeonLevel, stairsUp, monsterCount);
 
   // Place floor loot
-  placeLoot(grid, rooms, w, h, dungeonLevel);
+  placeLoot(grid, rooms, w, h, itemQualityLevel(stage, dungeonLevel));
 
   // Floor 1 guaranteed spawns
   if (dungeonLevel === 1) {
@@ -404,5 +409,7 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
     entryPosition: stairsUp,
   };
 
-  return { map, monsters, stairsUp, stairsDown };
+  return stairsDown === undefined
+    ? { map, monsters, stairsUp }
+    : { map, monsters, stairsUp, stairsDown };
 }

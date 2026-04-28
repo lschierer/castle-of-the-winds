@@ -607,8 +607,8 @@ export class GameWorld extends LitElement {
   private dungeonFloors = new Map<number, DungeonFloor>();
   /** Current dungeon level (0 = not in dungeon). */
   private currentDungeonLevel = 0;
-  /** Total floors in the mine dungeon. */
-  private readonly MINE_FLOORS = 4;
+  /** Total floors in the abandoned mine. Contemporary walkthroughs describe it as roughly 7-8 floors. */
+  private readonly MINE_FLOORS = 8;
 
 
   /** Set player position and reveal surrounding tiles. */
@@ -902,7 +902,7 @@ export class GameWorld extends LitElement {
   private enterDungeonFloor(level: number, position?: Vec2): void {
     let floor = this.dungeonFloors.get(level);
     if (!floor) {
-      floor = generateFloor({ dungeonLevel: level, totalFloors: this.MINE_FLOORS });
+      floor = generateFloor({ stage: 'mine', dungeonLevel: level, totalFloors: this.MINE_FLOORS });
       this.dungeonFloors.set(level, floor);
       logger.info(`Generated dungeon floor ${level}: ${floor.map.width}×${floor.map.height}`);
     }
