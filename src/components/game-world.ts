@@ -56,10 +56,19 @@ import { getLogger } from '../game/logging.ts';
 
 const logger = getLogger('game:world');
 
-const VP_COLS = 41;
-const VP_ROWS = 21;
-const VP_HALF_X = (VP_COLS - 1) / 2;
-const VP_HALF_Y = (VP_ROWS - 1) / 2;
+const TILE_PX = 32;
+const SIDEBAR_PX = 190;
+
+function viewportSize(): { cols: number; rows: number } {
+  const w = Math.max(640, window.innerWidth - SIDEBAR_PX - 20);
+  const h = Math.max(480, window.innerHeight - 20);
+  // Ensure odd numbers so player is centered
+  let cols = Math.floor(w / TILE_PX) | 1;
+  let rows = Math.floor(h / TILE_PX) | 1;
+  if (cols % 2 === 0) cols--;
+  if (rows % 2 === 0) rows--;
+  return { cols, rows };
+}
 
 type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn';
 
@@ -96,8 +105,8 @@ export class GameWorld extends LitElement {
 
     .map-grid {
       display: grid;
-      grid-template-columns: repeat(${VP_COLS}, 32px);
-      grid-template-rows: repeat(${VP_ROWS}, 32px);
+      grid-template-columns: repeat(var(--vp-cols, 41), 32px);
+      grid-template-rows: repeat(var(--vp-rows, 21), 32px);
       image-rendering: pixelated;
     }
 
@@ -1175,11 +1184,14 @@ export class GameWorld extends LitElement {
     const inDungeon = this.currentDungeonLevel > 0;
     // When the player is in a room, monsters in the same room are always visible
     const playerRoomId = inDungeon ? getTileAt(map, pos.x, pos.y).roomId : undefined;
+    const vp = viewportSize();
+    const halfX = (vp.cols - 1) / 2;
+    const halfY = (vp.rows - 1) / 2;
 
-    for (let row = 0; row < VP_ROWS; row++) {
-      for (let col = 0; col < VP_COLS; col++) {
-        const mx = pos.x - VP_HALF_X + col;
-        const my = pos.y - VP_HALF_Y + row;
+    for (let row = 0; row < vp.rows; row++) {
+      for (let col = 0; col < vp.cols; col++) {
+        const mx = pos.x - halfX + col;
+        const my = pos.y - halfY + row;
         const tile = getTileAt(map, mx, my);
         const isHero = mx === pos.x && my === pos.y;
 
@@ -1225,7 +1237,7 @@ export class GameWorld extends LitElement {
         }
       }
     }
-    return html`<div class="map-grid">${tiles}</div>`;
+    return html`<div class="map-grid" style="--vp-cols:${vp.cols};--vp-rows:${vp.rows}">${tiles}</div>`;
   }
 
   private renderBuildingOverlay(): TemplateResult {

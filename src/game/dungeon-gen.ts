@@ -74,7 +74,7 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
     grid.push(row);
   }
 
-  // Add walls around floor tiles (cardinal only to avoid blocking diagonals)
+  // Add walls around floor tiles (cardinal neighbours)
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (grid[y]![x]!.terrain !== 'floor' || !grid[y]![x]!.walkable) continue;
@@ -83,6 +83,20 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
         if (ny >= 0 && ny < h && nx >= 0 && nx < w && grid[ny]![nx]!.terrain === 'void') {
           grid[ny]![nx] = { terrain: 'floor', walkable: false, feature: 'wall', items: [] };
         }
+      }
+    }
+  }
+
+  // Fill diagonal corner voids — any void tile with walls on two adjacent cardinal sides
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      if (grid[y]![x]!.terrain !== 'void') continue;
+      const wN = grid[y-1]![x]!.feature === 'wall';
+      const wS = grid[y+1]![x]!.feature === 'wall';
+      const wE = grid[y]![x+1]!.feature === 'wall';
+      const wW = grid[y]![x-1]!.feature === 'wall';
+      if ((wN && wE) || (wN && wW) || (wS && wE) || (wS && wW)) {
+        grid[y]![x] = { terrain: 'floor', walkable: false, feature: 'wall', items: [] };
       }
     }
   }
