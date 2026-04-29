@@ -72,22 +72,6 @@ const DIAGONAL_ROAD: Record<string, string> = {
   SW: `${BITMAPS}/ULROCKRD.png`,
 };
 
-// ── Mine rock sprites by exposed floor side ──────────────────────────────────
-
-const CORRIDOR_ROCK_FLOOR: Record<string, string> = {
-  NE: `${BITMAPS}/LLROCKFL.png`,
-  NW: `${BITMAPS}/LRROCKFL.png`,
-  SE: `${BITMAPS}/URROCKFL.png`,
-  SW: `${BITMAPS}/ULROCKFL.png`,
-};
-
-const ROOM_ROCK_FLOOR: Record<string, string> = {
-  NE: `${BITMAPS}/LLROCKLF.png`,
-  NW: `${BITMAPS}/LRROCKLF.png`,
-  SE: `${BITMAPS}/URROCKLF.png`,
-  SW: `${BITMAPS}/ULROCKLF.png`,
-};
-
 // ── Mountain sprites by direction ─────────────────────────────────────────────
 
 const MOUNTAIN_SPRITE: Record<Direction, string> = {

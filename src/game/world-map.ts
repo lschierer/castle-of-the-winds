@@ -25,7 +25,6 @@ export {
   type Building,
   type MapExit,
   type Direction,
-  type RoomInfo,
   getTileAt,
   isWalkable,
   exitAt,
@@ -389,27 +388,28 @@ function charToTile(
 ): Tile {
   switch (c) {
     case ',':
-      return { terrain: 'grass', walkable: true };
+      return { terrain: 'grass', walkable: true, items: [] };
 
     case '.':
-      return { terrain: 'road', walkable: true };
+      return { terrain: 'road', walkable: true, items: [] };
 
     case '=':
       // Village: farmland border. Farm-map: impassable grass boundary.
       if (mapId === 'village') {
-        return { terrain: 'farmland', walkable: false };
+        return { terrain: 'farmland', walkable: false, items: [] };
       }
-      return { terrain: 'grass', walkable: false };
+      return { terrain: 'grass', walkable: false, items: [] };
 
     case '^':
       return {
         terrain: 'mountain',
         walkable: false,
         direction: detectMountainDirection(rows, x, y),
+        items: [],
       };
 
     case 'o':
-      return { terrain: 'floor', walkable: true };
+      return { terrain: 'floor', walkable: true, items: [] };
 
     case 'd':
       return {
@@ -417,21 +417,22 @@ function charToTile(
         walkable: false,
         feature: 'wall',
         direction: detectDungeonWallDirection(rows, x, y),
+        items: [],
       };
 
     case ';':
       if (mapId === 'village') {
-        return { terrain: 'farmland', walkable: false };
+        return { terrain: 'farmland', walkable: false, items: [] };
       }
       // Farm-map: the original outdoor paths stair-step with full path tiles.
-      // Rock/path split tiles are reserved for later mountain routes.
-      return { terrain: 'road', walkable: true };
+      return { terrain: 'road', walkable: true, items: [] };
 
     case '!':
       return {
         terrain: 'road',
         walkable: true,
         feature: 'door',
+        items: [],
       };
 
     case 'e':
@@ -439,6 +440,7 @@ function charToTile(
         terrain: 'grass',
         walkable: true,
         feature: 'stairs-up',
+        items: [],
       };
 
     case 'w':
@@ -446,16 +448,18 @@ function charToTile(
         terrain: 'grass',
         walkable: true,
         feature: 'well',
+        items: [],
       };
 
     case '#': {
       if (region) {
         // Multi-tile building — walkable only if it has an exit
         return {
-          terrain: mapId === 'village' ? 'grass' : 'grass',
+          terrain: 'grass',
           walkable: exit !== undefined,
           feature: 'wall',
           buildingId: region.id,
+          items: [],
         };
       }
       if (mapId === 'farm-map') {
@@ -465,6 +469,7 @@ function charToTile(
             walkable: true,
             feature: 'mine-entrance',
             direction: detectMountainDirection(rows, x, y),
+            items: [],
           };
         }
         if (exit?.targetMap === 'village') {
@@ -473,6 +478,7 @@ function charToTile(
             walkable: true,
             feature: 'gate',
             buildingId: 'village-gate',
+            items: [],
           };
         }
         if (exit?.narrative !== undefined) {
@@ -481,15 +487,16 @@ function charToTile(
             walkable: true,
             feature: 'burnt-ruin',
             buildingId: 'burnt-farm',
+            items: [],
           };
         }
       }
       // Generic wall
-      return { terrain: 'grass', walkable: false, feature: 'wall' };
+      return { terrain: 'grass', walkable: false, feature: 'wall', items: [] };
     }
 
     default:
-      return { terrain: 'void', walkable: false };
+      return { terrain: 'void', walkable: false, items: [] };
   }
 }
 

@@ -148,17 +148,20 @@ function castAttack(
 
   const params: SpellAttackParams = {
     baseDamage,
-    element,
+    ...(element !== undefined ? { element } : {}),
     isBolt,
     distance: target.distance ?? 1,
   };
 
   const result = playerSpellAttack(spec, params);
+  const monsterDamage = result.damage > 0
+    ? { instanceId: monster.instanceId, damage: result.damage }
+    : undefined;
 
   return {
     success: true,
     messages: [result.message],
-    monsterDamage: result.damage > 0 ? { instanceId: monster.instanceId, damage: result.damage } : undefined,
+    ...(monsterDamage !== undefined ? { monsterDamage } : {}),
     character: c,
   };
 }

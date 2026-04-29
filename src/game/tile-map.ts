@@ -69,24 +69,14 @@ export interface Tile {
   items: Item[];
   /** Whether the player has seen this tile. */
   explored?: boolean;
-  /** Room index (if this tile is part of a room, not a corridor). */
-  roomId?: number;
   /**
-   * Set on dungeon floor tiles that are inside a room (not a corridor).
-   * Used by sprites.ts to pick room vs. corridor wall sprites, and by the
-   * fog-of-war system to bulk-reveal the whole room on first entry.
-   * Secret passages and traps are NOT revealed by room entry even though
-   * they may share a roomId; those require explicit searching.
+   * Dungeon room index. Set on floor tiles inside a room (not corridors).
+   * Used by the sprite system (room vs corridor wall art) and fog-of-war
+   * (entering a room reveals the whole room instantly).
+   * Secret passages and traps on room tiles are NOT revealed by room entry —
+   * they require explicit searching.
    */
-  roomId?: string;
-}
-
-/** Bounding box for a dungeon room, stored in TileMap.rooms. */
-export interface RoomInfo {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+  roomId?: number;
 }
 
 /**
@@ -100,11 +90,6 @@ export interface TileMap {
   tiles: Tile[][];
   /** Where the hero spawns when first entering this map. */
   entryPosition: Vec2;
-  /**
-   * Dungeon rooms keyed by roomId. Present only on procedurally generated
-   * dungeon maps; undefined on village/farm-map.
-   */
-  rooms?: Record<string, RoomInfo>;
 }
 
 // ── Accessors ─────────────────────────────────────────────────────────────────
@@ -158,13 +143,8 @@ export function pickupAllItems(map: TileMap, x: number, y: number): Item[] {
 // ── Fog of war ────────────────────────────────────────────────────────────────
 
 /**
- * Reveal all tiles in the named room plus its surrounding wall ring.
- * Called when the player first steps onto any floor tile with that roomId.
- * Secret passages (feature === 'door' discovered via search) are NOT
- * affected here — they remain hidden until searched.
- */
-/**
  * Reveal tiles visible from (px, py) using simple raycasting.
+ * When the player is standing in a room, also reveals the entire room.
  * Walls block vision but are themselves revealed.
  */
 export function revealAround(map: TileMap, px: number, py: number, radius = 8): void {

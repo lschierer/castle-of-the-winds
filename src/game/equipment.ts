@@ -242,14 +242,6 @@ function randomSpecByTier(catalog: readonly EquipmentSpec[], maxTier: number): E
   return pickRandom(weighted);
 }
 
-function randomArmorName(level: number): string {
-  const maxTier = level <= 2 ? 1 : level <= 4 ? 2 : level <= 8 ? 3 : level <= 14 ? 4 : 5;
-  return randomSpecByTier(ARMOR_SPECS, maxTier).name;
-}
-
-function randomSpecName(catalog: readonly EquipmentSpec[]): string {
-  return pickRandom(catalog).name;
-}
 
 /**
  * Create an Item for the given equipment kind, scaled to dungeon level.

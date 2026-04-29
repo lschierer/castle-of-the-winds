@@ -54,8 +54,8 @@ export function buyPrice(item: Item): number {
   let base: number;
   if (spec?.baseBuyPrice) {
     base = spec.baseBuyPrice;
-  } else if (PACK_PRICES[item.name]) {
-    base = PACK_PRICES[item.name]!;
+  } else if (PACK_PRICES[item.name] !== undefined) {
+    base = PACK_PRICES[item.name] ?? 50;
   } else {
     base = BASE_PRICE[item.kind] ?? 50;
   }

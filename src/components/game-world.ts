@@ -625,7 +625,7 @@ export class GameWorld extends LitElement {
   private dungeonFloors = new Map<number, DungeonFloor>();
   /** Current dungeon level (0 = not in dungeon). */
   private currentDungeonLevel = 0;
-  /** Total floors in the abandoned mine. Contemporary walkthroughs describe it as roughly 7-8 floors. */
+  /** Mine has 8 floors (Castle of the Winds v3.11). */
   private readonly MINE_FLOORS = 8;
 
 
@@ -655,7 +655,6 @@ export class GameWorld extends LitElement {
     this.pos = { x, y };
     // Fog of war: only reveal in dungeons (village/farm-map are fully visible)
     if (this.currentDungeonLevel > 0) {
-      const tile = getTileAt(this.map, x, y);
       // revealAround handles room reveal internally when player is in a room
       revealAround(this.map, x, y);
     }
@@ -1106,6 +1105,7 @@ export class GameWorld extends LitElement {
 
     for (let i = 0; i < updatedMonsters.length; i++) {
       const m = updatedMonsters[i];
+      if (!m) continue;
       const spec = monsterById(m.specId);
       if (!spec || m.hp <= 0) continue;
 
@@ -1168,7 +1168,7 @@ export class GameWorld extends LitElement {
           (other, j) => j !== i && other.x === nx && other.y === ny,
         );
         if (!blocked && isWalkable(this.map, nx, ny)) {
-          updatedMonsters[i] = { ...updatedMonsters[i], x: nx, y: ny };
+          updatedMonsters[i] = { ...m, x: nx, y: ny };
           break;
         }
       }
@@ -1606,7 +1606,7 @@ export class GameWorld extends LitElement {
     }
     const charKey = this.EQUIP_SLOT_MAP[a.slotName];
     if (!charKey) return;
-    (c as Record<string, unknown>)[charKey] = null;
+    (c as unknown as Record<string, unknown>)[charKey] = null;
     if (c.pack && addToContainer(c.pack, a.item)) {
       this.pushMessage(`Unequipped ${displayName(a.item)} → pack.`);
     } else {
@@ -1633,7 +1633,7 @@ export class GameWorld extends LitElement {
     const removed = removeFromContainer(c.pack, item.id);
     if (!removed) return;
     // If slot occupied, swap to pack
-    const current = (c as Record<string, unknown>)[charKey] as Item | null;
+    const current = (c as unknown as Record<string, Item | null>)[charKey];
     if (current) {
       if (!addToContainer(c.pack, current)) {
         dropItem(this.map, this.pos.x, this.pos.y, current);
@@ -1642,7 +1642,7 @@ export class GameWorld extends LitElement {
     }
     // Equip (identifies the item)
     const result = equipItem(removed);
-    (c as Record<string, unknown>)[charKey] = result.item;
+    (c as unknown as Record<string, unknown>)[charKey] = result.item;
     if (result.stuck) {
       this.pushMessage(`You equip the ${displayName(result.item)}… it's cursed!`);
     } else {
@@ -1810,7 +1810,7 @@ export class GameWorld extends LitElement {
         return;
       }
       const charKey = this.EQUIP_SLOT_MAP[a.slotName];
-      if (charKey) (c as Record<string, unknown>)[charKey] = null;
+      if (charKey) (c as unknown as Record<string, unknown>)[charKey] = null;
     } else if (a.source === 'pack' && c.pack) {
       removeFromContainer(c.pack, a.item.id);
     } else if (a.source === 'belt' && c.belt) {
@@ -1836,18 +1836,19 @@ export class GameWorld extends LitElement {
         actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
       }
     } else if (a.source === 'pack' || a.source === 'belt') {
+      const src = a.source;
       if (a.item.kind === 'coin' && a.item.coinKind) {
-        actions.push({ label: 'To Purse', handler: () => { this.doCoinsToPurse(a.item, a.source); } });
+        actions.push({ label: 'To Purse', handler: () => { this.doCoinsToPurse(a.item, src); } });
       } else if (a.item.kind === 'container' && a.item.name.includes('Purse')) {
-        actions.push({ label: 'Consolidate Coins', handler: () => { this.doConsolidatePurse(a.item, a.source); } });
-        actions.push({ label: 'Swap Purse', handler: () => { this.doSwapPurse(a.item, a.source); } });
+        actions.push({ label: 'Consolidate Coins', handler: () => { this.doConsolidatePurse(a.item, src); } });
+        actions.push({ label: 'Swap Purse', handler: () => { this.doSwapPurse(a.item, src); } });
       } else if (a.item.kind === 'container' && a.item.name.includes('Pack')) {
-        actions.push({ label: 'Swap Pack', handler: () => { this.doSwapPack(a.item, a.source); } });
+        actions.push({ label: 'Swap Pack', handler: () => { this.doSwapPack(a.item, src); } });
       } else if (a.item.kind in this.KIND_TO_SLOT) {
         actions.push({ label: 'Equip', handler: () => { this.doEquipFromPack(a.item); } });
       }
       actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
-    } else if (a.source === 'ground') {
+    } else {
       if (a.item.kind === 'container' && a.item.name.includes('Purse')) {
         actions.push({ label: 'Consolidate Coins', handler: () => { this.doConsolidateGroundPurse(a.item); } });
         actions.push({ label: 'Swap Purse', handler: () => { this.doSwapGroundPurse(a.item); } });

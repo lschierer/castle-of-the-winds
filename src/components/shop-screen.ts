@@ -474,7 +474,7 @@ export class ShopScreen extends LitElement {
         <span class="item-name">
           ${displayName(item)}
           ${item.cursed  ? html`<span class="cursed-tag">(cursed)</span>` : ''}
-          ${item.uncursed ? html`<span class="cursed-tag">(uncursed)</span>` : ''}
+          ${item.identified && !item.cursed ? html`<span class="cursed-tag">(uncursed)</span>` : ''}
           ${!item.identified ? html`<span class="cursed-tag">(?)</span>` : ''}
         </span>
         ${sellPrice !== null
