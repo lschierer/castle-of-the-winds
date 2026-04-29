@@ -8,7 +8,7 @@ Compiled from the [Dopefish blog retrospective](https://dopefishblog.com/2022/09
 
 1. **Starting village** (small hamlet) — 7 buildings: Junk Yard, Farm House ×2, Sage (Kael's Scrolls), Barg's House, Weaponsmith, General Store, Temple of Odin. Village gate to the north, well in the center.
 2. **Overworld** (farm-map) — grass, mountains, diagonal road south to village, straight road north to mine. Burnt godparents' farm to the east (narrative event).
-3. **Mine** — 4 randomly-generated floors. Floor 1 always has: leather armor guarded by a Kobold, 2 Giant Rats, 1 Goblin. Floor 4 contains "A Scrap of Parchment."
+3. **Mine** — 8 randomly-generated floors. Floor 1 always has: leather armor guarded by a Kobold, 2 Giant Rats, 1 Goblin. Floor 4 contains "A Scrap of Parchment."
 4. **Village destruction** — triggered by exiting the mine while holding the Scrap of Parchment. All buildings become burned ruins. Clever players can drop the parchment to delay this.
 5. **Travel west** to Bjarnarhaven (larger town with bank).
 6. **Second dungeon** — 11 floors. Defeat Hrungnir (Hill Giant Lord) to recover the Enchanted Amulet.
