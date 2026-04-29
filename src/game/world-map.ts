@@ -84,6 +84,44 @@ export const ALL_BUILDING_REGIONS: Record<MapId, BuildingRegion[]> = {
   'dungeon-1': [],
 };
 
+// ── Hamlet destruction ────────────────────────────────────────────────────────
+
+const BURNT_VILLAGE_BUILDING_REGIONS: BuildingRegion[] = [
+  { id: 'junkyard',      originX: 3,  originY: 6,  cols: 3, rows: 3, sprite: `${BITMAPS}/bldbrnrt.png` },
+  { id: 'farmhouse-r',   originX: 16, originY: 5,  cols: 3, rows: 3, sprite: `${BITMAPS}/bldbrnlf.png` },
+  { id: 'kael',          originX: 7,  originY: 13, cols: 2, rows: 2, sprite: `${BITMAPS}/bldbrnrt.png` },
+  { id: 'barg',          originX: 14, originY: 12, cols: 3, rows: 3, sprite: `${BITMAPS}/bldbrnlf.png` },
+  { id: 'weaponsmith',   originX: 6,  originY: 17, cols: 3, rows: 3, sprite: `${BITMAPS}/bldbrnrt.png` },
+  { id: 'general-store', originX: 14, originY: 17, cols: 3, rows: 3, sprite: `${BITMAPS}/bldbrnlf.png` },
+  { id: 'temple',        originX: 9,  originY: 22, cols: 5, rows: 5, sprite: `${BITMAPS}/bldbrnrt.png` },
+  { id: 'gate',          originX: 10, originY: 0,  cols: 3, rows: 1, sprite: `${BITMAPS}/hamgate.png` },
+];
+
+/**
+ * Mutate the village map in-place to show burnt ruins.
+ * Swaps building region sprites and disables all building doors.
+ */
+export function destroyHamlet(): void {
+  ALL_BUILDING_REGIONS['village'] = BURNT_VILLAGE_BUILDING_REGIONS;
+
+  for (let y = 0; y < VILLAGE_MAP.height; y++) {
+    const row = VILLAGE_MAP.tiles[y];
+    if (!row) continue;
+    for (let x = 0; x < VILLAGE_MAP.width; x++) {
+      const tile = row[x];
+      if (!tile) continue;
+      // Disable building doors — make them non-walkable and remove building data
+      if (tile.feature === 'door' && tile.building) {
+        tile.walkable = false;
+        delete tile.building;
+        tile.feature = 'wall';
+      }
+      // Clear any ground items left in the village (they burned)
+      if (tile.items.length > 0) tile.items.length = 0;
+    }
+  }
+}
+
 function findBuildingRegion(regions: BuildingRegion[], x: number, y: number): BuildingRegion | undefined {
   return regions.find(
     (b) => x >= b.originX && x < b.originX + b.cols &&
@@ -91,24 +129,90 @@ function findBuildingRegion(regions: BuildingRegion[], x: number, y: number): Bu
   );
 }
 
-// ── Farm narrative ────────────────────────────────────────────────────────────
+// ── Story text ────────────────────────────────────────────────────────────────
 
-export const FARM_NARRATIVE =
+export interface StorySegment {
+  id: string;
+  title: string;
+  text: string;
+}
+
+export const STORY_SEGMENTS: Record<string, StorySegment> = {};
+function reg(id: string, title: string, text: string): string {
+  STORY_SEGMENTS[id] = { id, title, text };
+  return text;
+}
+
+/** Text shown when the player reads the Scrap of Parchment found on mine floor 4. */
+export const PARCHMENT_TEXT = reg('parchment', 'A Scrap of Parchment',
+  'You examine the scrap of paper carefully, which turns ' +
+  'out to be part of a message in a strange blood red script. ' +
+  'The top part is missing, but you can make out the following:\n\n' +
+  '          ...is dead, return to the fortress north of Bjarnarhaven and\n' +
+  '          await my orders.  I repeat, stop at NOTHING to ensure this\n' +
+  '          danger is removed!\n\n' +
+  'It is signed at the bottom with a single ornate \'S\', with ' +
+  'flames entwining the letter.  As you stare at the flames ' +
+  'they seem to flicker and dance, and you feel the paper grow ' +
+  'hot in your hands.  You hurriedly drop it as the paper bursts ' +
+  'into flames, and you watch in shock as the ashes fall to the ' +
+  'ground.  Your stomach feels a bit queasy with worry, ' +
+  'and you think maybe you should head back to the hamlet.');
+
+/** Narrative shown when the player enters the hamlet after reading the parchment. */
+export const HAMLET_DESTROYED_NARRATIVE = reg('hamlet-destroyed', 'The Hamlet Burns',
+  'You are almost home.  Ahead of you, the path winds another half ' +
+  'mile around the hills north of the hamlet.  Your pack rests heavily ' +
+  'on your shoulders, shifting slightly with each step you take.  The ' +
+  'enigmas of the mine still nag at you: why were those fell creatures ' +
+  'encamped therein?  From where did they come?  And what was the meaning ' +
+  'of the scrap of parchment you recovered at the bottom?\n\n' +
+  'As you round the last hill, a sharp smoky smell fills your nostrils. ' +
+  'Burning thatch?  Hastily, you drop your pack and jog to the wrecked ' +
+  'gate.  Heavy smoke hangs in the air; charred timbers still smolder from ' +
+  'the ruins of houses.  The air lies eerily quiet, missing the babble ' +
+  'of a living hamlet: the cries of children, the cackle of poultry.  A ' +
+  'wrecked wagon lies, overturned, in the middle of the road.  Two vultures ' +
+  'start at your intrusion, and flap away heavily.\n\n' +
+  'With horror, you suddenly understand part of the message fragment you ' +
+  'found in the mine:\n\n' +
+  '          ...is dead, return to the fortress north of Bjarnarhaven and\n' +
+  '          wait my orders.  I repeat: stop at nothing to ensure that\n' +
+  '          this danger is removed!\n\n' +
+  'This was no random act of destruction, and neither was the burning of ' +
+  'your farm.  Somebody ordered this, somebody who saw danger in this ' +
+  'humble hamlet... or in its inhabitants.\n\n' +
+  'Shocked, you realize that this savage act must have been aimed at you. ' +
+  'None of these villagers had traveled more than a league from home in ' +
+  'their entire lives.  You were not born here, but far away; you lost ' +
+  'your godparents in a similar horrific act of arson.  You must be the ' +
+  'danger!  You wonder again at your unknown past, which again has proven ' +
+  'deadly to those you loved; and you swear once again to exact vengeance ' +
+  'against those responsible.\n\n' +
+  'Once more you ponder the scrap of parchment.  The town of Bjarnarhaven lies ' +
+  'but a day\'s journey down the highway to the west; perhaps you should ' +
+  'exercise your growing skills against this "fortress."  You kick aside a ' +
+  'piece of broken gate, then, remembering your dropped pack, head back up ' +
+  'the path to recover it.  Bjarnarhaven awaits you.');
+
+export const FARM_NARRATIVE = reg('farm-ruins', 'The Ruined Farm',
   'You gaze once more at the charred ruins of the farm where you were raised. ' +
-  'You buried the blackened skeletons of your godparents in the remains of the ' +
-  'garden they loved; grimly, you vow that nothing will prevent you from avenging ' +
-  'their deaths.\n\n' +
-  'The marauders pillaged the farm quite thoroughly. Nowhere in the ruins can you ' +
-  'find the amulet left by your true father, whose dying words, whispered to your ' +
-  'godfather were supposedly of its importance to you: of how it could lead you to ' +
-  'your fortune and great glory, but only if you proved your worth. Your godparents ' +
-  'had promised it to you for your 18th birthday; now you have neither godparents ' +
-  'nor birthright, and your birthday just passed.\n\n' +
-  'A search for clues in the rubble finds only a confused train of footprints, ' +
-  'leading north, towards the mountains. Many of the footprints seem much too large ' +
-  'to have come from the boots of bandits or soldiers.\n\n' +
-  'You look north, wondering: Where might the amulet be by now? To whom must you ' +
-  'prove yourself, and how?';
+  'You buried the blackened skeletons of your godparents in the remains of ' +
+  'the garden they loved; but you can\'t bury the anger which still seethes at ' +
+  'the thought of how they died.  Grimly, you vow that nothing will prevent ' +
+  'you from avenging their deaths.\n\n' +
+  'The marauders pillaged the farm quite thoroughly.  Nowhere in the ruins ' +
+  'can you find the amulet left for you by your true father, whose ' +
+  'dying words, whispered to your godfather, were supposedly of its ' +
+  'importance to you: of how it could lead you to your fortune and great ' +
+  'glory, but only if you proved your worth.  Your godparents had promised it ' +
+  'to you for your 18th birthday; now you have neither godparents nor ' +
+  'birthright, and your birthday has just passed.\n\n' +
+  'A search for clues in the rubble finds only a confused trail of footprints, ' +
+  'leading north, towards the mountains.  Many of the footprints seem much ' +
+  'too large to have come from the boots of bandits or soldiers.\n\n' +
+  'You look north, wondering:  Where might the amulet be by now?  To whom ' +
+  'must you prove yourself, and how?');
 
 // ── Raw ASCII rows ────────────────────────────────────────────────────────────
 

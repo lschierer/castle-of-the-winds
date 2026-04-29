@@ -23,6 +23,10 @@ export interface GameState {
   /** Serialized dungeon floors (map + monsters per floor). */
   dungeonFloors: Array<{ level: number; floor: DungeonFloor }>;
   farmNarrativeShown: boolean;
+  parchmentRead: boolean;
+  hamletDestroyed: boolean;
+  /** Ordered list of story segment IDs the player has seen. */
+  storyLog: string[];
   /** ISO timestamp of when this save was created. */
   savedAt: string;
 }

@@ -6,6 +6,7 @@
  *   Home / End / PageUp / PageDown   — diagonal movement
  *   I                                — toggle inventory
  *   P                                — toggle powers/spells panel
+ *   ?                                — review story log
  *   Space / Enter (on narrative)     — dismiss overlay
  *   Escape                           — close any open overlay
  */
@@ -23,6 +24,10 @@ import {
   type MapExit,
   ALL_MAPS,
   VILLAGE_MAP,
+  PARCHMENT_TEXT,
+  HAMLET_DESTROYED_NARRATIVE,
+  STORY_SEGMENTS,
+  destroyHamlet,
   isWalkable,
   buildingAt,
   exitAt,
@@ -71,7 +76,7 @@ function viewportSize(): { cols: number; rows: number } {
   return { cols, rows };
 }
 
-type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn';
+type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story';
 
 @customElement('game-world')
 export class GameWorld extends LitElement {
@@ -324,6 +329,26 @@ export class GameWorld extends LitElement {
     }
 
     .overlay-close:hover { color: #d4a820; }
+    .overlay-close.disabled { cursor: default; color: #3d3020; }
+    .overlay-close.disabled:hover { color: #3d3020; }
+
+    .narrative-scroll {
+      width: 88%;
+      max-width: 520px;
+      max-height: 80vh;
+      padding: 1.5rem 2rem;
+      border: 1px solid #3d3020;
+      box-shadow: 0 0 0 4px #0e0c09, 0 0 0 5px #3d3020;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      overflow-y: auto;
+    }
+
+    .story-entry + .story-entry {
+      border-top: 1px solid #3d3020;
+      padding-top: 1rem;
+    }
 
     /* ── Item action menu ──────────────────────────── */
     .action-menu-backdrop {
@@ -584,11 +609,13 @@ export class GameWorld extends LitElement {
   @state() private pos: Vec2 = { ...VILLAGE_MAP.entryPosition };
   @state() private messages: Array<{ text: string; fresh: boolean }> = [
     { text: 'You stand in the village. Arrow keys, WASD, or numpad to move.', fresh: true },
-    { text: 'I = inventory · P = powers/spells · G = get · M = map', fresh: false },
+    { text: 'I = inventory · P = powers/spells · G = get · M = map · ? = story', fresh: false },
   ];
   @state() private locationName = '';
   @state() private overlay: Overlay = 'none';
   @state() private narrative: string | null = null;
+  /** Whether the narrative overlay has been scrolled to the bottom (or doesn't overflow). */
+  @state() private narrativeScrolled = false;
   @state() private activeBuilding: Building | null = null;
 
   /** Live monsters on the current map level. */
@@ -617,6 +644,9 @@ export class GameWorld extends LitElement {
   /** Counter used to generate unique monster instance IDs. */
   private monsterSeq = 0;
   private farmNarrativeShown = false;
+  private parchmentRead = false;
+  private hamletDestroyed = false;
+  private storyLog: string[] = [];
 
   /** Shop inventories, keyed by shop name. Generated on first visit. */
   private shopInventories = new Map<string, ShopInventory>();
@@ -680,6 +710,9 @@ export class GameWorld extends LitElement {
       monsters: this.monsters,
       dungeonFloors: Array.from(this.dungeonFloors.entries()).map(([level, floor]) => ({ level, floor })),
       farmNarrativeShown: this.farmNarrativeShown,
+      parchmentRead: this.parchmentRead,
+      hamletDestroyed: this.hamletDestroyed,
+      storyLog: this.storyLog,
       savedAt: new Date().toISOString(),
     };
   }
@@ -723,6 +756,9 @@ export class GameWorld extends LitElement {
       this.playerStatus = state.playerStatus;
       this.monsters = state.monsters;
       this.farmNarrativeShown = state.farmNarrativeShown;
+      this.parchmentRead = state.parchmentRead || false;
+      this.hamletDestroyed = state.hamletDestroyed || false;
+      this.storyLog = Array.isArray(state.storyLog) ? state.storyLog : [];
       // Restore dungeon floors
       for (const { level, floor } of state.dungeonFloors) {
         this.dungeonFloors.set(level, floor);
@@ -739,6 +775,8 @@ export class GameWorld extends LitElement {
       if (state.currentDungeonLevel > 0) {
         revealAround(this.map, state.pos.x, state.pos.y);
       }
+      // Re-apply hamlet destruction if it was already triggered
+      if (this.hamletDestroyed) destroyHamlet();
       return;
     }
     const character = loadCharacter();
@@ -751,6 +789,16 @@ export class GameWorld extends LitElement {
 
   override firstUpdated(): void {
     this.shadowRoot?.querySelector<HTMLElement>('.layout')?.focus();
+  }
+
+  override updated(): void {
+    // After render, check if narrative content fits without scrolling
+    if (this.narrative !== null && !this.narrativeScrolled) {
+      const el = this.shadowRoot?.querySelector('.narrative-scroll');
+      if (el && el.scrollHeight <= el.clientHeight) {
+        this.narrativeScrolled = true;
+      }
+    }
   }
 
   // ── Input ─────────────────────────────────────────────────────────────────
@@ -768,11 +816,11 @@ export class GameWorld extends LitElement {
       return;
     }
 
-    // Narrative overlay — any confirm key dismisses it
+    // Narrative overlay — any confirm key dismisses it (must scroll to bottom first)
     if (this.narrative !== null) {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
         e.preventDefault();
-        this.narrative = null;
+        if (this.narrativeScrolled) this.narrative = null;
       }
       return;
     }
@@ -787,7 +835,7 @@ export class GameWorld extends LitElement {
       return;
     }
 
-    // Toggle overlays  (use I for inventory, P for powers/spells)
+    // Toggle overlays  (use I for inventory, P for powers/spells, ? for story)
     if (e.key === 'i' || e.key === 'I') {
       e.preventDefault();
       this.toggleOverlay('inventory');
@@ -796,6 +844,11 @@ export class GameWorld extends LitElement {
     if (e.key === 'p' || e.key === 'P') {
       e.preventDefault();
       this.toggleOverlay('spells');
+      return;
+    }
+    if (e.key === '?') {
+      e.preventDefault();
+      this.toggleOverlay('story');
       return;
     }
     if ((e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey)) {
@@ -928,7 +981,7 @@ export class GameWorld extends LitElement {
     if (exit.narrative !== undefined && exit.targetMap === undefined) {
       if (!this.farmNarrativeShown) {
         this.farmNarrativeShown = true;
-        this.narrative = exit.narrative;
+        this.showNarrative(exit.narrative);
       } else {
         this.pushMessage('There is nothing more to find in the ruins.');
       }
@@ -956,6 +1009,13 @@ export class GameWorld extends LitElement {
       this.currentDungeonLevel = 0;
       // New visit: reset shop prices and inventories
       if (id === 'village') {
+        if (this.parchmentRead && !this.hamletDestroyed) {
+          this.hamletDestroyed = true;
+          destroyHamlet();
+          this.showNarrative(HAMLET_DESTROYED_NARRATIVE);
+        } else if (this.hamletDestroyed) {
+          this.pushMessage('The hamlet lies in ruins. There is nothing left for you here.');
+        }
         resetVisitPrices();
         this.shopInventories.clear();
       }
@@ -1023,7 +1083,14 @@ export class GameWorld extends LitElement {
     if (currentFloor) currentFloor.monsters = this.monsters;
 
     if (this.currentDungeonLevel <= 1) {
-      // Exit to surface
+      // Exit to surface — force-read parchment if carried and unread
+      if (!this.parchmentRead) {
+        const packItems: Item[] = this.character?.pack?.slots?.flatMap((s) => s.items) ?? [];
+        if (packItems.some((it) => it.name === 'Scrap of Parchment')) {
+          this.parchmentRead = true;
+          this.showNarrative(PARCHMENT_TEXT);
+        }
+      }
       this.pushMessage('You emerge from the mine into daylight.');
       this.enterMap('farm-map', { x: 24, y: 2 });
       return;
@@ -1837,7 +1904,9 @@ export class GameWorld extends LitElement {
       }
     } else if (a.source === 'pack' || a.source === 'belt') {
       const src = a.source;
-      if (a.item.kind === 'coin' && a.item.coinKind) {
+      if (a.item.name === 'Scrap of Parchment') {
+        actions.push({ label: 'Read', handler: () => { this.readParchment(); } });
+      } else if (a.item.kind === 'coin' && a.item.coinKind) {
         actions.push({ label: 'To Purse', handler: () => { this.doCoinsToPurse(a.item, src); } });
       } else if (a.item.kind === 'container' && a.item.name.includes('Purse')) {
         actions.push({ label: 'Consolidate Coins', handler: () => { this.doConsolidatePurse(a.item, src); } });
@@ -1849,6 +1918,9 @@ export class GameWorld extends LitElement {
       }
       actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
     } else {
+      if (a.item.name === 'Scrap of Parchment') {
+        actions.push({ label: 'Read', handler: () => { this.doPickup(a.item); this.readParchment(); } });
+      }
       if (a.item.kind === 'container' && a.item.name.includes('Purse')) {
         actions.push({ label: 'Consolidate Coins', handler: () => { this.doConsolidateGroundPurse(a.item); } });
         actions.push({ label: 'Swap Purse', handler: () => { this.doSwapGroundPurse(a.item); } });
@@ -1869,6 +1941,25 @@ export class GameWorld extends LitElement {
         </div>
       </div>
     `;
+  }
+
+  private readParchment(): void {
+    this.parchmentRead = true;
+    this.showNarrative(PARCHMENT_TEXT);
+    this.actionItem = null;
+    this.overlay = 'none';
+    this.autoSave();
+  }
+
+  /** Show a narrative overlay and record the segment in the story log. */
+  private showNarrative(text: string): void {
+    this.narrativeScrolled = false;
+    this.narrative = text;
+    // Find the segment ID by matching text and record it
+    const seg = Object.values(STORY_SEGMENTS).find((s) => s.text === text);
+    if (seg && !this.storyLog.includes(seg.id)) {
+      this.storyLog.push(seg.id);
+    }
   }
 
   private doPickup(item: Item): void {
@@ -2343,13 +2434,45 @@ export class GameWorld extends LitElement {
 
   private renderNarrativeOverlay(): TemplateResult {
     if (this.narrative === null) return html``;
+    const dismiss = () => { if (this.narrativeScrolled) this.narrative = null; };
+    const onScroll = (e: Event) => {
+      const el = e.target as HTMLElement;
+      this.narrativeScrolled = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+    };
     return html`
-      <div class="overlay" @click=${() => { this.narrative = null; }}>
-        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
+      <div class="overlay" @click=${dismiss}>
+        <div class="narrative-scroll" @click=${(e: Event) => { e.stopPropagation(); }}
+             @scroll=${onScroll}>
           <p class="overlay-text">${this.narrative}</p>
-          <span class="overlay-close" @click=${() => { this.narrative = null; }}>
-            [ Enter / Space to continue ]
+          <span class="overlay-close ${this.narrativeScrolled ? '' : 'disabled'}"
+                @click=${dismiss}>
+            ${this.narrativeScrolled
+              ? '[ Enter / Space to continue ]'
+              : '↓ Scroll to continue ↓'}
           </span>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderStoryOverlay(): TemplateResult {
+    const close = () => { this.overlay = 'none'; };
+    const segments = this.storyLog
+      .map((id) => STORY_SEGMENTS[id])
+      .filter((s): s is NonNullable<typeof s> => s !== undefined);
+    return html`
+      <div class="overlay" @click=${close}>
+        <div class="narrative-scroll" @click=${(e: Event) => { e.stopPropagation(); }}>
+          <p class="overlay-title">Review Story</p>
+          ${segments.length === 0
+            ? html`<p class="overlay-text" style="color:#6b5830">No story events yet.</p>`
+            : segments.map((seg) => html`
+              <div class="story-entry">
+                <p class="overlay-subtitle">${seg.title}</p>
+                <p class="overlay-text">${seg.text}</p>
+              </div>
+            `)}
+          <span class="overlay-close" @click=${close}>[ Esc to close ]</span>
         </div>
       </div>
     `;
@@ -2529,7 +2652,9 @@ export class GameWorld extends LitElement {
                   ? this.renderSpellsOverlay()
                   : this.overlay === 'spell-learn'
                     ? this.renderSpellLearnOverlay()
-                    : ''}
+                    : this.overlay === 'story'
+                      ? this.renderStoryOverlay()
+                      : ''}
         </div>
         ${this.renderSidebar()}
       </div>
