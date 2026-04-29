@@ -2,6 +2,8 @@
 
 Source: http://lkbm.ecritters.biz/cotw/armor.html, weapons.html
 
+ones marked with 'I get' rempresent empirical testing from selling in the internet archive emulated game. 
+
 Prices are in copper pieces. Buy/Sell ratio is consistently ~1.75:1.
 Prices vary per visit (enter town → leave for dungeon = one visit).
 Broken/rusty items sell for 25cp at junk yard only.
@@ -9,6 +11,7 @@ Broken/rusty items sell for 25cp at junk yard only.
 ## Armor (Buy/Sell)
 - Rusty Armor: NA/25
 - Leather Armor: 1080/600
+- I get 1500CP for a set of Enchanted Leather Armor with 'Increases Armor Value' in Hard mode
 - Studded Leather: 3150/1800
 - Ring Mail: 6300/3600
 - Scale Mail: 10800/6000
@@ -61,3 +64,15 @@ Broken/rusty items sell for 25cp at junk yard only.
 - Prices may vary by difficulty and store
 - Enchanted items: 2-10× base price
 - Prices regenerate per "visit" (enter town → leave for dungeon)
+
+
+## Potions  Scrolls Spell Books
+- I get 600CP for a scroll of Detect Traps in Hard mode
+- I get 240CP for a scroll of Sheild in Hard mode
+- I get 240CP for a potion of Levitation in Hard mode
+- I get *asking price* 1664CP for a Spell Book of Detect Monsters in Hard Mode.
+
+## Weapons
+- I get 240CP for a normal dagger in Hard mode
+- I get 80CP for an unidentified dagger in Hard mode
+- I get 1470 *asking price* for a normal flail in Hard mode.
