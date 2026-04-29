@@ -598,6 +598,9 @@ export class GameWorld extends LitElement {
   /** Player is dead — game over. */
   @state() private dead: { killedBy: string } | null = null;
 
+  /** Pending sell confirmation — click item once to select, again to confirm. */
+  @state() private pendingSellItem: Item | null = null;
+
   /** Counter used to generate unique monster instance IDs. */
   private monsterSeq = 0;
   private farmNarrativeShown = false;
@@ -1275,17 +1278,23 @@ export class GameWorld extends LitElement {
             </div>
           </div>
           <div class="inv-container-block">
-            <div class="inv-container-label">Sell from Pack</div>
+            <div class="inv-container-label">Sell Items</div>
             <div class="pack-items">
-              ${packItems.filter((it) => it.kind !== 'coin').length === 0 ? html`<div class="inv-empty">Nothing to sell.</div>` :
-                packItems.filter((it) => it.kind !== 'coin').map((it) => {
-                  const price = shop.type === 'junkyard' ? junkYardPrice(it) : sellPrice(it);
-                  const canSell = price > 0 || shop.type === 'junkyard';
-                  return html`
-                    <div class="inv-item ${canSell ? '' : 'no-mana'}" style="${canSell ? 'cursor:pointer' : 'opacity:0.5'}" @click=${canSell ? () => { this.shopSell(it, shop); } : undefined}>
-                      ${displayName(it)} — <span style="color:#4a7a20">${price} cp</span>
-                    </div>`;
-                })}
+              ${(() => {
+                const groundItems = getTileAt(this.map, this.pos.x, this.pos.y).items;
+                const sellable = [...packItems, ...groundItems].filter((it) =>
+                  it.kind !== 'coin' && (shop.buys.length === 0 || shop.buys.includes(it.kind)),
+                );
+                return sellable.length === 0 ? html`<div class="inv-empty">Nothing to sell.</div>` :
+                  sellable.map((it) => {
+                    const price = sellPrice(it);
+                    const canSell = price > 0;
+                    return html`
+                      <div class="inv-item ${canSell ? '' : 'no-mana'}" style="${canSell ? 'cursor:pointer' : 'opacity:0.5'}" @click=${canSell ? () => { this.shopSellAny(it, shop); } : undefined}>
+                        ${displayName(it)} — <span style="color:#4a7a20">${price} cp</span>
+                      </div>`;
+                  });
+              })()}
             </div>
           </div>
           <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
@@ -1334,6 +1343,13 @@ export class GameWorld extends LitElement {
 
   private renderJunkYard(name: string, c: Character, packItems: Item[], close: () => void): TemplateResult {
     const shop = SHOPS['Junk Yard'] ?? { id: 'Junk Yard', name: 'Junk Yard', townTier: 'hamlet' as const, stockLevel: 1, buys: [], sells: [], type: 'junkyard' as const };
+    const groundItems = getTileAt(this.map, this.pos.x, this.pos.y).items;
+    const sellable = [...packItems, ...groundItems].filter((it) => it.kind !== 'coin');
+    // If there's a replacement pack in inventory, offer to sell the equipped one too
+    const hasReplacementPack = packItems.some((it) => it.kind === 'container' && it.name.includes('Pack'));
+    if (c.pack && hasReplacementPack) {
+      sellable.unshift(c.pack); // add equipped pack at top of list
+    }
     return html`
       <div class="overlay" @click=${close}>
         <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
@@ -1341,9 +1357,9 @@ export class GameWorld extends LitElement {
           <p class="building-services">We buy anything. 25 cp flat.</p>
           <div class="divider"></div>
           <div class="pack-items">
-            ${packItems.filter((it) => it.kind !== 'coin').length === 0 ? html`<div class="inv-empty">Nothing to sell.</div>` :
-              packItems.filter((it) => it.kind !== 'coin').map((it) => html`
-                <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopSell(it, shop); }}>
+            ${sellable.length === 0 ? html`<div class="inv-empty">Nothing to sell.</div>` :
+              sellable.map((it) => html`
+                <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopSellAny(it, shop); }}>
                   ${displayName(it)} — <span style="color:#4a7a20">${junkYardPrice(it)} cp</span>
                 </div>`)}
           </div>
@@ -1363,22 +1379,47 @@ export class GameWorld extends LitElement {
     this.requestUpdate();
   }
 
-  private shopSell(item: Item, shop: ShopDef): void {
+  private shopSellAny(item: Item, shop: ShopDef): void {
     const c = this.character;
-    if (!c || !c.pack) return;
-    const price = shop.type === 'junkyard' ? junkYardPrice(item) : sellPrice(item);
-    if (!confirm(`Sell ${displayName(item)} for ${price} cp?`)) return;
+    if (!c) return;
+
+    // First click: select for confirmation
+    if (this.pendingSellItem?.id !== item.id) {
+      this.pendingSellItem = item;
+      const price = shop.type === 'junkyard' ? junkYardPrice(item) : sellPrice(item);
+      this.pushMessage(`Sell ${displayName(item)} for ${price} cp? Click again to confirm.`);
+      this.requestUpdate();
+      return;
+    }
+
+    // Second click: execute sale
+    this.pendingSellItem = null;
     const result = sellItem(c, item, shop);
     if (result.success) {
-      // Remove from pack
-      for (const slot of c.pack.slots ?? []) {
-        const idx = slot.items.findIndex((i) => i.id === item.id);
-        if (idx !== -1) { slot.items.splice(idx, 1); break; }
+      if (c.pack) {
+        for (const slot of c.pack.slots ?? []) {
+          const idx = slot.items.findIndex((i) => i.id === item.id);
+          if (idx !== -1) { slot.items.splice(idx, 1); break; }
+        }
       }
+      if (c.belt) {
+        for (const slot of c.belt.slots ?? []) {
+          const idx = slot.items.findIndex((i) => i.id === item.id);
+          if (idx !== -1) { slot.items.splice(idx, 1); break; }
+        }
+      }
+      const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+      const gIdx = tile.items.findIndex((i) => i.id === item.id);
+      if (gIdx !== -1) tile.items.splice(gIdx, 1);
       this.autoSave();
     }
     this.pushMessage(result.message);
     this.requestUpdate();
+  }
+
+  private shopSell(item: Item, shop: ShopDef): void {
+    // Delegate to shopSellAny which handles confirmation
+    this.shopSellAny(item, shop);
   }
 
   private shopIdentify(item: Item): void {

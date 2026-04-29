@@ -41,12 +41,21 @@ function visitVariance(): number {
   return 0.85 + (visitSeed * 0.3);
 }
 
+/** Pack base prices by name. */
+const PACK_PRICES: Record<string, number> = {
+  'Small Pack': 50, 'Medium Pack': 150, 'Large Pack': 350,
+  'Small Bag': 30, 'Medium Bag': 80, 'Large Bag': 180,
+  'Small Pack of Holding': 5000, 'Medium Pack of Holding': 10000, 'Large Pack of Holding': 20000,
+};
+
 /** Get the buy price for an item (what the shop charges). */
 export function buyPrice(item: Item): number {
   const spec = specForItem(item, ALL_EQUIPMENT_SPECS);
   let base: number;
   if (spec?.baseBuyPrice) {
     base = spec.baseBuyPrice;
+  } else if (PACK_PRICES[item.name]) {
+    base = PACK_PRICES[item.name]!;
   } else {
     base = BASE_PRICE[item.kind] ?? 50;
   }
