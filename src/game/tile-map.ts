@@ -208,7 +208,7 @@ function revealRoom(map: TileMap, roomId: number): void {
   }
 }
 
-function hasLineOfSight(map: TileMap, x0: number, y0: number, x1: number, y1: number): boolean {
+export function hasLineOfSight(map: TileMap, x0: number, y0: number, x1: number, y1: number): boolean {
   // Bresenham's line — stop if we hit a non-walkable tile (but mark it visible)
   let x = x0, y = y0;
   const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);

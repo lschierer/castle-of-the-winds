@@ -50,6 +50,7 @@ import {
 } from '../game/combat.ts';
 import { monsterById, healthDescription, rollMonsterLoot } from '../game/monsters.ts';
 import { castSpell, spellTargetKind, type SpellTarget } from '../game/spell-engine.ts';
+import { FOV } from 'rot-js';
 import { generateFloor, type DungeonFloor } from '../game/dungeon-gen.ts';
 import { type ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../game/equipment.ts';
 import { getLogger } from '../game/logging.ts';
@@ -1182,8 +1183,20 @@ export class GameWorld extends LitElement {
     }
 
     const inDungeon = this.currentDungeonLevel > 0;
-    // When the player is in a room, monsters in the same room are always visible
     const playerRoomId = inDungeon ? getTileAt(map, pos.x, pos.y).roomId : undefined;
+
+    // Compute visible tiles using rot.js FOV
+    const visibleSet = new Set<string>();
+    if (inDungeon) {
+      const fov = new FOV.PreciseShadowcasting((x, y) => {
+        const t = getTileAt(map, x, y);
+        return t.walkable || t.feature === 'door';
+      });
+      fov.compute(pos.x, pos.y, 10, (x, y, _r, visible) => {
+        if (visible) visibleSet.add(`${x},${y}`);
+      });
+    }
+
     const vp = viewportSize();
     const halfX = (vp.cols - 1) / 2;
     const halfY = (vp.rows - 1) / 2;
@@ -1203,10 +1216,10 @@ export class GameWorld extends LitElement {
 
         const s = getTileStyle(map, mx, my, isHero, heroGender);
 
-        // Monsters visible via LOS (distance check) or when in the same room as player
-        const dist = Math.abs(mx - pos.x) + Math.abs(my - pos.y);
-        const inLOS = !inDungeon || dist <= 10 ||
-          (playerRoomId !== undefined && tile.roomId === playerRoomId);
+        // Monsters only visible if player has line-of-sight (rot.js FOV) or same room
+        const detectMonsters = this.playerStatus.detectMonsters === true;
+        const sameRoom = playerRoomId !== undefined && tile.roomId === playerRoomId;
+        const inLOS = !inDungeon || detectMonsters || sameRoom || visibleSet.has(`${mx},${my}`);
         const monster = inLOS ? monsterAt.get(`${mx},${my}`) : undefined;
         if (monster) {
           const spec = monsterById(monster.specId);
