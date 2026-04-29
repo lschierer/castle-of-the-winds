@@ -13,7 +13,7 @@
 import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { Character } from '../game/character.ts';
-import { canLevelUp, levelUp, maxSpellLevelAt, hpPerLevel, spPerLevel } from '../game/character.ts';
+import { canLevelUp, levelUp, maxSpellLevelAt, hpPerLevel, spPerLevel, xpForLevel } from '../game/character.ts';
 import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
 import {
   type TileMap,
@@ -2376,7 +2376,7 @@ export class GameWorld extends LitElement {
 
         <div class="stat-block">
           <span class="stat-label">Experience</span>
-          <span class="stat-value">${c.experience} xp</span>
+          <span class="stat-value">${c.experience} / ${xpForLevel(c.level + 1, c.difficulty)} xp</span>
         </div>
 
         ${this.renderStatusEffects()}
