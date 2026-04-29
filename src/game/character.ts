@@ -12,11 +12,13 @@
  * Scale: 0–100 for all stats; 50 is "average human" baseline.
  * Monsters may exceed or fall below this range.
  *
- * Character creation mechanic (per Attributes.elm):
- *   - All four primary stats start at STAT_START (40)
- *   - Player distributes POINT_POOL (100) additional points in steps of POINT_STEP (5)
- *   - Stats may be decreased below 40 (down to STAT_MIN = 10) to reclaim points
+ * Character creation mechanic:
+ *   - All four primary stats start at STAT_START (50) — exactly the halfway mark
+ *   - Player distributes POINT_POOL (30) additional points in steps of POINT_STEP (1)
+ *   - Stats may be decreased below 50 (down to STAT_MIN = 10) to reclaim points
  *   - Stats cap at STAT_MAX (100)
+ *   - Pool of 30 means reaching the 3/4 mark (75) in one stat costs 25 points —
+ *     a meaningful investment; two stats at 75 requires sacrificing another stat
  *
  * References:
  *   https://castleofthewinds.com/characters.html
@@ -32,8 +34,8 @@ import { ALL_EQUIPMENT_SPECS, specForItem } from './equipment.ts';
 
 export const STAT_MIN = 10;
 export const STAT_MAX = 100;
-export const STAT_START = 49;
-export const POINT_POOL = 49;
+export const STAT_START = 50;
+export const POINT_POOL = 30;
 export const POINT_STEP = 1;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
