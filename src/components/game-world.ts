@@ -584,7 +584,7 @@ export class GameWorld extends LitElement {
   @state() private pos: Vec2 = { ...VILLAGE_MAP.entryPosition };
   @state() private messages: Array<{ text: string; fresh: boolean }> = [
     { text: 'You stand in the village. Arrow keys, WASD, or numpad to move.', fresh: true },
-    { text: 'I = inventory · P = powers/spells · Esc = close panels', fresh: false },
+    { text: 'I = inventory · P = powers/spells · G = get · M = map', fresh: false },
   ];
   @state() private locationName = '';
   @state() private overlay: Overlay = 'none';
@@ -611,6 +611,9 @@ export class GameWorld extends LitElement {
   /** Pending sell confirmation — click item once to select, again to confirm. */
   @state() private pendingSellItem: Item | null = null;
 
+  /** Map overview mode — zoomed out to show entire level. */
+  @state() private mapMode = false;
+
   /** Counter used to generate unique monster instance IDs. */
   private monsterSeq = 0;
   private farmNarrativeShown = false;
@@ -627,6 +630,27 @@ export class GameWorld extends LitElement {
 
 
   /** Set player position and reveal surrounding tiles. */
+
+  private onMapClick(e: MouseEvent, vp: { cols: number; rows: number }, halfX: number, halfY: number): void {
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const col = Math.floor((e.clientX - rect.left) / TILE_PX);
+    const row = Math.floor((e.clientY - rect.top) / TILE_PX);
+    const mx = this.pos.x - halfX + col;
+    const my = this.pos.y - halfY + row;
+
+    // Spell targeting mode: fire spell toward clicked tile
+    if (this.castingSpell) {
+      const dx = Math.sign(mx - this.pos.x);
+      const dy = Math.sign(my - this.pos.y);
+      if (dx !== 0 || dy !== 0) {
+        this.fireDirectionalSpell(this.castingSpell, dx, dy);
+        this.castingSpell = null;
+      }
+      return;
+    }
+  }
+
   private moveTo(x: number, y: number): void {
     this.pos = { x, y };
     // Fog of war: only reveal in dungeons (village/farm-map are fully visible)
@@ -801,6 +825,11 @@ export class GameWorld extends LitElement {
     if (e.key === 'g' || e.key === 'G') {
       e.preventDefault();
       this.pickupGround();
+      return;
+    }
+    if (e.key === 'm' || e.key === 'M') {
+      e.preventDefault();
+      this.mapMode = !this.mapMode;
       return;
     }
     if (e.key === 'r' && !e.shiftKey) {
@@ -1250,7 +1279,55 @@ export class GameWorld extends LitElement {
         }
       }
     }
-    return html`<div class="map-grid" style="--vp-cols:${vp.cols};--vp-rows:${vp.rows}">${tiles}</div>`;
+    return html`<div class="map-grid" style="--vp-cols:${vp.cols};--vp-rows:${vp.rows}" @click=${(e: MouseEvent) => { this.onMapClick(e, vp, halfX, halfY); }}>${tiles}</div>`;
+  }
+
+  private renderMiniMap(): TemplateResult {
+    const { map, pos } = this;
+    const { width: mw, height: mh } = map;
+
+    const panelW = Math.max(400, window.innerWidth - SIDEBAR_PX - 40);
+    const panelH = Math.max(300, window.innerHeight - 40);
+    const cellSize = Math.max(2, Math.min(Math.floor(panelW / mw), Math.floor(panelH / mh)));
+
+    const cells: TemplateResult[] = [];
+    for (let y = 0; y < mh; y++) {
+      for (let x = 0; x < mw; x++) {
+        const tile = getTileAt(map, x, y);
+        let color: string;
+        if (x === pos.x && y === pos.y) {
+          color = '#ff0';
+        } else if (!tile.explored) {
+          color = '#000';
+        } else if (tile.feature === 'stairs-up') {
+          color = '#0f0';
+        } else if (tile.feature === 'stairs-down') {
+          color = '#f00';
+        } else if (tile.feature === 'door') {
+          color = '#a86';
+        } else if (tile.feature === 'wall') {
+          color = '#555';
+        } else if (tile.terrain === 'floor' && tile.walkable) {
+          color = tile.roomId !== undefined ? '#338' : '#226';
+        } else {
+          color = '#000';
+        }
+        cells.push(html`<div style="background:${color}"></div>`);
+      }
+    }
+
+    return html`
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:#000;position:relative">
+        <div style="
+          display:grid;
+          grid-template-columns:repeat(${mw}, ${cellSize}px);
+          grid-template-rows:repeat(${mh}, ${cellSize}px);
+        ">${cells}</div>
+        <div class="location-banner" style="color:#f0e0a8;background:rgba(0,0,0,0.7);padding:4px 12px">
+          Map View — press M to return
+        </div>
+      </div>
+    `;
   }
 
   private renderBuildingOverlay(): TemplateResult {
@@ -2398,6 +2475,15 @@ export class GameWorld extends LitElement {
             @click=${() => { this.toggleOverlay('spells'); }}
           >[P] Spells</button>
         </div>
+        <div class="key-hint-row">
+          <button class="key-hint-btn" @click=${() => { this.pickupGround(); }}>[G] Get</button>
+          <button class="key-hint-btn ${this.mapMode ? 'active' : ''}" @click=${() => { this.mapMode = !this.mapMode; }}>[M] Map</button>
+        </div>
+        <div class="key-hint-row">
+          <button class="key-hint-btn" @click=${() => { this.doRest(); }}>[R] Rest</button>
+          <button class="key-hint-btn" @click=${() => { this.useStairs('up'); }}>[<] Up</button>
+          <button class="key-hint-btn" @click=${() => { this.useStairs('down'); }}>[>] Down</button>
+        </div>
 
         <div class="stat-block">
           <span class="stat-label">Experience</span>
@@ -2422,7 +2508,7 @@ export class GameWorld extends LitElement {
     return html`
       <div class="layout" tabindex="0" @keydown=${this.onKeyDown}>
         <div class="map-panel">
-          ${this.renderMap()}
+          ${this.mapMode ? this.renderMiniMap() : this.renderMap()}
 
           ${this.castingSpell
             ? html`<div class="location-banner" style="color:#f0e0a8;background:rgba(0,0,0,0.7);padding:4px 12px">⚡ Choose direction — arrow keys / numpad · Esc to cancel</div>`
