@@ -673,10 +673,20 @@ export class GameWorld extends LitElement {
 
     // Spell targeting mode: fire spell toward clicked tile
     if (this.castingSpell) {
-      const dx = Math.sign(mx - this.pos.x);
-      const dy = Math.sign(my - this.pos.y);
-      if (dx !== 0 || dy !== 0) {
-        this.fireDirectionalSpell(this.castingSpell, dx, dy);
+      const rawDx = mx - this.pos.x;
+      const rawDy = my - this.pos.y;
+      if (rawDx !== 0 || rawDy !== 0) {
+        // If the player clicked directly on a monster, target it regardless of angle
+        const clickedMonster = this.monsters.find((m) => m.hp > 0 && m.x === mx && m.y === my);
+        if (clickedMonster) {
+          const dist = Math.max(Math.abs(rawDx), Math.abs(rawDy));
+          this.executeCast(this.castingSpell, {
+            dx: Math.sign(rawDx), dy: Math.sign(rawDy),
+            monster: clickedMonster, distance: dist,
+          });
+        } else {
+          this.fireDirectionalSpell(this.castingSpell, Math.sign(rawDx), Math.sign(rawDy));
+        }
         this.castingSpell = null;
       }
       return;
