@@ -97,6 +97,8 @@ export interface TileMap {
   tiles: Tile[][];
   /** Where the hero spawns when first entering this map. */
   entryPosition: Vec2;
+  /** Room IDs that have already been fully revealed (avoids rescanning on re-entry). */
+  revealedRooms?: Set<number>;
 }
 
 // ── Accessors ─────────────────────────────────────────────────────────────────
@@ -154,11 +156,15 @@ export function pickupAllItems(map: TileMap, x: number, y: number): Item[] {
  * When the player is standing in a room, also reveals the entire room.
  * Walls block vision but are themselves revealed.
  */
-export function revealAround(map: TileMap, px: number, py: number, radius = 8): void {
-  // If player is in a room, reveal the entire room + its walls
+export function revealAround(map: TileMap, px: number, py: number, radius = 10): void {
+  // If player is in a room, reveal the entire room + its walls (once per room)
   const playerTile = getTileAt(map, px, py);
   if (playerTile.roomId !== undefined) {
-    revealRoom(map, playerTile.roomId);
+    if (!map.revealedRooms) map.revealedRooms = new Set();
+    if (!map.revealedRooms.has(playerTile.roomId)) {
+      revealRoom(map, playerTile.roomId);
+      map.revealedRooms.add(playerTile.roomId);
+    }
   }
 
   // Normal LOS reveal for corridors and nearby area
