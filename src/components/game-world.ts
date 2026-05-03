@@ -78,7 +78,7 @@ function viewportSize(): { cols: number; rows: number } {
   return { cols, rows };
 }
 
-type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story';
+type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells';
 
 @customElement('game-world')
 export class GameWorld extends LitElement {
@@ -95,9 +95,118 @@ export class GameWorld extends LitElement {
 
     .layout {
       display: flex;
+      flex-direction: column;
       width: 100%;
       height: 100%;
       outline: none;
+    }
+
+    .game-row {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Spell quick-bar ────────────────────────────── */
+    .spell-bar {
+      display: flex;
+      align-items: stretch;
+      gap: 2px;
+      padding: 3px 4px;
+      background: #0a0806;
+      border-bottom: 1px solid #2a2010;
+      flex-shrink: 0;
+    }
+
+    .spell-bar-actions {
+      display: flex;
+      gap: 2px;
+      margin-right: 6px;
+    }
+
+    .spell-bar-btn {
+      padding: 2px 7px;
+      background: #161208;
+      border: 1px solid #3d3020;
+      color: #8b7a50;
+      font-family: inherit;
+      font-size: 0.62rem;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.1s, color 0.1s;
+    }
+
+    .spell-bar-btn:hover {
+      background: #2a2010;
+      color: #c8b78e;
+    }
+
+    .spell-bar-btn.active {
+      background: #3d3020;
+      border-color: #8b6914;
+      color: #f0e0a8;
+    }
+
+    .spell-slots {
+      display: flex;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .spell-slot {
+      flex: 1;
+      min-width: 0;
+      padding: 2px 4px;
+      background: #0e0c09;
+      border: 1px solid #2a2010;
+      color: #4a3a20;
+      font-family: inherit;
+      font-size: 0.58rem;
+      text-align: center;
+      cursor: default;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.2;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+    }
+
+    .spell-slot.castable {
+      border-color: #3d3020;
+      color: #c8b78e;
+      cursor: pointer;
+    }
+
+    .spell-slot.castable:hover {
+      background: #2a2010;
+      border-color: #8b6914;
+      color: #f0e0a8;
+    }
+
+    .spell-slot.no-mana {
+      border-color: #2a2010;
+      color: #4a3a20;
+      cursor: default;
+    }
+
+    .spell-slot-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 100%;
+    }
+
+    .spell-slot-cost {
+      font-size: 0.52rem;
+      opacity: 0.7;
+    }
+
+    .spell-slot-num {
+      font-size: 0.48rem;
+      opacity: 0.4;
     }
 
     /* ── Map ────────────────────────────────────────── */
@@ -643,6 +752,12 @@ export class GameWorld extends LitElement {
   /** Map overview mode — zoomed out to show entire level. */
   @state() private mapMode = false;
 
+  /** Up to 10 spell IDs pinned to the quick-cast bar (null = empty slot). */
+  @state() private quickSpells: (string | null)[] = new Array(10).fill(null);
+
+  /** Which slot (0-9) is being reassigned in the customize overlay. */
+  @state() private customizingSlot: number | null = null;
+
   /** Counter used to generate unique monster instance IDs. */
   private monsterSeq = 0;
   private farmNarrativeShown = false;
@@ -726,6 +841,7 @@ export class GameWorld extends LitElement {
       parchmentRead: this.parchmentRead,
       hamletDestroyed: this.hamletDestroyed,
       storyLog: this.storyLog,
+      quickSpells: [...this.quickSpells],
       savedAt: new Date().toISOString(),
     };
   }
@@ -773,6 +889,7 @@ export class GameWorld extends LitElement {
       this.parchmentRead = state.parchmentRead || false;
       this.hamletDestroyed = state.hamletDestroyed || false;
       this.storyLog = Array.isArray(state.storyLog) ? state.storyLog : [];
+      this.quickSpells = Array.isArray(state.quickSpells) ? [...state.quickSpells] : new Array(10).fill(null);
       // Restore dungeon floors
       for (const { level, floor } of state.dungeonFloors) {
         this.dungeonFloors.set(level, floor);
@@ -2550,6 +2667,120 @@ export class GameWorld extends LitElement {
     `;
   }
 
+  private renderSpellBar(): TemplateResult {
+    const c = this.character;
+    if (!c) return html``;
+    return html`
+      <div class="spell-bar">
+        <div class="spell-bar-actions">
+          <button class="spell-bar-btn" @click=${() => { this.pickupGround(); }}>Get</button>
+          <button class="spell-bar-btn" @click=${() => { this.doRest(); }}>Rest</button>
+          <button class="spell-bar-btn ${this.overlay === 'inventory' ? 'active' : ''}" @click=${() => { this.toggleOverlay('inventory'); }}>Inventory</button>
+          <button class="spell-bar-btn ${this.overlay === 'spells' ? 'active' : ''}" @click=${() => { this.toggleOverlay('spells'); }}>Spells</button>
+        </div>
+        <div class="spell-slots">
+          ${this.quickSpells.map((spellId, i) => {
+            if (!spellId) {
+              return html`<div class="spell-slot" title="Slot ${i + 1} — empty (right-click to customize)">
+                <span class="spell-slot-num">${i + 1}</span>
+              </div>`;
+            }
+            const sp = spellById(spellId);
+            if (!sp) return html`<div class="spell-slot"><span class="spell-slot-num">${i + 1}</span></div>`;
+            const canCast = c.mana >= sp.baseMana;
+            return html`<div
+              class="spell-slot ${canCast ? 'castable' : 'no-mana'}"
+              title="${sp.name} (${sp.baseMana} mp)${canCast ? '' : ' — not enough mana'}"
+              @click=${canCast ? () => { this.tryCastSpell(sp.id); } : undefined}
+            >
+              <span class="spell-slot-num">${i + 1}</span>
+              <span class="spell-slot-name">${sp.name}</span>
+              <span class="spell-slot-cost">${sp.baseMana}mp</span>
+            </div>`;
+          })}
+        </div>
+        <button
+          class="spell-bar-btn"
+          title="Customize spell bar"
+          @click=${() => { this.customizingSlot = null; this.overlay = 'customize-spells'; }}
+        >⚙ Customize</button>
+      </div>
+    `;
+  }
+
+  private renderCustomizeSpellsOverlay(): TemplateResult {
+    const c = this.character;
+    if (!c) return html``;
+    const close = () => { this.overlay = 'none'; this.customizingSlot = null; };
+    return html`
+      <div class="overlay" @click=${close}>
+        <div class="overlay-box" style="min-width:340px" @click=${(e: Event) => { e.stopPropagation(); }}>
+          <p class="overlay-title">Customize Spell Bar</p>
+          <div class="divider"></div>
+          <p style="font-size:0.68rem;color:#8b7a50;margin:0 0 0.5rem">
+            Click a slot, then click a spell to assign it. Click a slot again to clear it.
+          </p>
+
+          <div style="display:flex;gap:1rem">
+            <!-- Slots column -->
+            <div style="display:flex;flex-direction:column;gap:3px;min-width:140px">
+              <span style="font-size:0.6rem;color:#6b5830;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2px">Slots</span>
+              ${this.quickSpells.map((spellId, i) => {
+                const sp = spellId ? spellById(spellId) : null;
+                const isSelected = this.customizingSlot === i;
+                return html`<div
+                  class="spell-row castable"
+                  style="cursor:pointer;${isSelected ? 'background:#2a2010;border-color:#8b6914;' : ''}"
+                  @click=${() => {
+                    if (this.customizingSlot === i) {
+                      // Second click on same slot = clear it
+                      this.quickSpells = this.quickSpells.map((s, j) => j === i ? null : s);
+                      this.customizingSlot = null;
+                      this.autoSave();
+                    } else {
+                      this.customizingSlot = i;
+                    }
+                  }}
+                >
+                  <span class="spell-row-name" style="min-width:1.2rem;color:#6b5830">${i + 1}.</span>
+                  <span class="spell-row-name">${sp ? sp.name : '—'}</span>
+                  ${isSelected ? html`<span style="font-size:0.58rem;color:#f0e0a8;margin-left:auto">← pick</span>` : ''}
+                </div>`;
+              })}
+            </div>
+
+            <!-- Known spells column -->
+            <div style="display:flex;flex-direction:column;gap:3px;flex:1">
+              <span style="font-size:0.6rem;color:#6b5830;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2px">Known Spells</span>
+              ${c.spells.length === 0
+                ? html`<div class="inv-empty">No spells learned.</div>`
+                : c.spells.map((id) => {
+                    const sp = spellById(id);
+                    if (!sp) return html``;
+                    const alreadySlotted = this.quickSpells.indexOf(id);
+                    return html`<div
+                      class="spell-row ${this.customizingSlot !== null ? 'castable' : ''}"
+                      style="${this.customizingSlot !== null ? 'cursor:pointer' : ''}"
+                      @click=${this.customizingSlot !== null ? () => {
+                        const slot = this.customizingSlot!;
+                        this.quickSpells = this.quickSpells.map((s, j) => j === slot ? id : s);
+                        this.customizingSlot = null;
+                        this.autoSave();
+                      } : undefined}
+                    >
+                      <span class="spell-row-name">${sp.name}</span>
+                      <span class="spell-row-cost" style="${alreadySlotted >= 0 ? 'color:#8b6914' : ''}">${alreadySlotted >= 0 ? `slot ${alreadySlotted + 1}` : `${sp.baseMana} mp`}</span>
+                    </div>`;
+                  })}
+            </div>
+          </div>
+
+          <span class="overlay-close" @click=${close}>[ Esc to close ]</span>
+        </div>
+      </div>
+    `;
+  }
+
   private renderSidebar(): TemplateResult {
     const c = this.character;
     if (!c) return html``;
@@ -2676,32 +2907,37 @@ export class GameWorld extends LitElement {
     if (!this.character) return html``;
     return html`
       <div class="layout" tabindex="0" @keydown=${this.onKeyDown}>
-        <div class="map-panel">
-          ${this.mapMode ? this.renderMiniMap() : this.renderMap()}
+        ${this.renderSpellBar()}
+        <div class="game-row">
+          <div class="map-panel">
+            ${this.mapMode ? this.renderMiniMap() : this.renderMap()}
 
-          ${this.castingSpell
-            ? html`<div class="location-banner" style="color:#f0e0a8;background:rgba(0,0,0,0.7);padding:4px 12px">⚡ Choose direction — arrow keys / numpad · Esc to cancel</div>`
-            : this.locationName
-            ? html`<div class="location-banner">${this.locationName}</div>`
-            : ''}
+            ${this.castingSpell
+              ? html`<div class="location-banner" style="color:#f0e0a8;background:rgba(0,0,0,0.7);padding:4px 12px">⚡ Choose direction — arrow keys / numpad · Esc to cancel</div>`
+              : this.locationName
+              ? html`<div class="location-banner">${this.locationName}</div>`
+              : ''}
 
-          ${this.dead
-            ? this.renderDeathOverlay()
-            : this.narrative !== null
-            ? this.renderNarrativeOverlay()
-            : this.overlay === 'building'
-              ? this.renderBuildingOverlay()
-              : this.overlay === 'inventory'
-                ? this.renderInventoryOverlay()
-                : this.overlay === 'spells'
-                  ? this.renderSpellsOverlay()
-                  : this.overlay === 'spell-learn'
-                    ? this.renderSpellLearnOverlay()
-                    : this.overlay === 'story'
-                      ? this.renderStoryOverlay()
-                      : ''}
+            ${this.dead
+              ? this.renderDeathOverlay()
+              : this.narrative !== null
+              ? this.renderNarrativeOverlay()
+              : this.overlay === 'building'
+                ? this.renderBuildingOverlay()
+                : this.overlay === 'inventory'
+                  ? this.renderInventoryOverlay()
+                  : this.overlay === 'spells'
+                    ? this.renderSpellsOverlay()
+                    : this.overlay === 'spell-learn'
+                      ? this.renderSpellLearnOverlay()
+                      : this.overlay === 'story'
+                        ? this.renderStoryOverlay()
+                        : this.overlay === 'customize-spells'
+                          ? this.renderCustomizeSpellsOverlay()
+                          : ''}
+          </div>
+          ${this.renderSidebar()}
         </div>
-        ${this.renderSidebar()}
       </div>
     `;
   }
