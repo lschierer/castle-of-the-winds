@@ -34,6 +34,7 @@ import {
   getTileAt,
   dropItem,
   revealAround,
+  hasLineOfSight,
 } from '../game/world-map.ts';
 import { getTileStyle } from '../game/sprites.ts';
 import { spellById } from '../game/spells.ts';
@@ -1191,18 +1192,36 @@ export class GameWorld extends LitElement {
       const spec = monsterById(m.specId);
       if (!spec || m.hp <= 0) continue;
 
-      const dist = Math.abs(m.x - this.pos.x) + Math.abs(m.y - this.pos.y);
+      const dx0 = this.pos.x - m.x;
+      const dy0 = this.pos.y - m.y;
+      const dist = Math.abs(dx0) + Math.abs(dy0);
 
-      // Alert if player is within 8 tiles (simplified LOS)
-      const alerted = m.alerted || dist <= 8;
+      // Alert when player is within 10 tiles AND has line of sight
+      const canSeePlayer = dist <= 10 && hasLineOfSight(this.map, m.x, m.y, this.pos.x, this.pos.y);
+      const alerted = m.alerted || canSeePlayer;
       if (alerted !== m.alerted) {
         updatedMonsters[i] = { ...m, alerted };
       }
 
-      if (!alerted) continue;
+      if (!alerted) {
+        // Unalerted monsters wander randomly (25% chance each turn)
+        if (Math.random() < 0.25) {
+          const dirs: [number, number][] = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+          const shuffled = dirs.sort(() => Math.random() - 0.5);
+          for (const [wx, wy] of shuffled) {
+            const nx = m.x + wx, ny = m.y + wy;
+            const blocked = updatedMonsters.some((o, j) => j !== i && o.x === nx && o.y === ny);
+            if (!blocked && isWalkable(this.map, nx, ny)) {
+              updatedMonsters[i] = { ...m, x: nx, y: ny };
+              break;
+            }
+          }
+        }
+        continue;
+      }
 
       // Adjacent to player → attack
-      if (dist === 1 || (Math.abs(m.x - this.pos.x) <= 1 && Math.abs(m.y - this.pos.y) <= 1 && dist <= 2)) {
+      if (dist === 1 || (Math.abs(dx0) <= 1 && Math.abs(dy0) <= 1 && dist <= 2)) {
         const result = monsterMeleeAttack(spec, 0, updatedChar, this.playerAC, updatedStatus);
         this.pushMessage(result.message);
 
@@ -1230,10 +1249,8 @@ export class GameWorld extends LitElement {
       }
 
       // Move toward player
-      const dx = this.pos.x - m.x;
-      const dy = this.pos.y - m.y;
-      const stepX = dx === 0 ? 0 : dx > 0 ? 1 : -1;
-      const stepY = dy === 0 ? 0 : dy > 0 ? 1 : -1;
+      const stepX = dx0 === 0 ? 0 : dx0 > 0 ? 1 : -1;
+      const stepY = dy0 === 0 ? 0 : dy0 > 0 ? 1 : -1;
 
       // Try diagonal, then cardinal directions
       const moves: [number, number][] = [

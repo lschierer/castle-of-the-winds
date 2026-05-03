@@ -224,9 +224,9 @@ export function monsterMeleeAttack(
     return { damage: 0, message: `You dodge the ${monster.name}'s attack.`, dodged: true };
   }
 
-  // Monster damage roll: attack + 1d6 base + enchantment
+  // Monster damage: attack/4 as base strength + 1d6 + enchantment
   const roll = 1 + Math.floor(rand() * 6);
-  const rawDamage = Math.max(1, monster.attack + monsterEnch + roll - 30);
+  const rawDamage = Math.floor(monster.attack / 4) + monsterEnch + roll;
 
   // Player AC reduction
   const netDamage = Math.max(1, rawDamage - playerAC);
