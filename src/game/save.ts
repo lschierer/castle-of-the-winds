@@ -10,6 +10,7 @@ import type { Character } from './character.ts';
 import type { Vec2 } from './tile-map.ts';
 import type { MonsterInstance, PlayerStatus } from './combat.ts';
 import type { DungeonFloor } from './dungeon-gen.ts';
+import type { GameStage } from './progression.ts';
 
 // ── Game state type ───────────────────────────────────────────────────────────
 
@@ -17,10 +18,12 @@ export interface GameState {
   character: Character;
   mapId: string;
   pos: Vec2;
+  /** Which of the three dungeon stages the player is currently in. */
+  currentStage: GameStage;
   currentDungeonLevel: number;
   playerStatus: PlayerStatus;
   monsters: MonsterInstance[];
-  /** Serialized dungeon floors (map + monsters per floor). */
+  /** Serialized dungeon floors (map + monsters per floor) for the current stage. */
   dungeonFloors: Array<{ level: number; floor: DungeonFloor }>;
   farmNarrativeShown: boolean;
   parchmentRead: boolean;

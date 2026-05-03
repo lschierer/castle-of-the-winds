@@ -31,7 +31,14 @@ export type Feature =
 /** Direction hint for features that need orientation (diagonal roads, walls). */
 export type Direction = 'N' | 'S' | 'E' | 'W' | 'NE' | 'NW' | 'SE' | 'SW';
 
-export type MapId = 'village' | 'farm-map' | 'dungeon-1' | `dungeon-${number}`;
+export type MapId =
+  | 'village'
+  | 'farm-map'
+  | 'dungeon-1'           // static first-floor reference kept for backward compat
+  | `dungeon-${number}`   // legacy generated-floor IDs
+  | `mine-${number}`      // mine floor N (1-8)
+  | `fortress-${number}`  // fortress floor N (1-11)
+  | `castle-${number}`;   // castle floor N (1-25)
 
 export interface Vec2 {
   x: number;

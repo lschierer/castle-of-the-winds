@@ -4,11 +4,14 @@
  * Uses the rot.js Digger algorithm for room-and-corridor generation,
  * then converts to our TileMap format with monsters and loot.
  *
- * Mine structure (Castle of the Winds canon):
- *   - 4 floors total
- *   - Floor 1: guaranteed Leather Armour + Kobold, 2 Giant Rats, 1 Goblin
- *   - Floor 4: guaranteed Scrap of Parchment (story trigger)
- *   - Floors 2-4 have two stairways down (one main + one secondary)
+ * Dungeon structure (Castle of the Winds canon):
+ *   Mine     — 8 floors  (floor 1 fixed spawn; floors 1-3 no upstairs)
+ *                          Scrap of Parchment on floor 8 (deepest)
+ *   Fortress — 11 floors (floor 1 fixed spawn; Hrungnir + ogre guards on floor 11)
+ *   Castle   — 25 floors (boss encounters at floors 16, 18, 20, 22, 25)
+ *
+ * Map grid: targets 64×64 (matching the original game's cell layout), growing
+ * from ~44×36 on the first floor of each stage and capping at 64×64.
  */
 
 import { Map as RotMap } from 'rot-js';
@@ -18,7 +21,14 @@ import { monstersForDepth } from './monsters.ts';
 import { generateTileLoot } from './loot.ts';
 import type { Item } from './items.ts';
 import { ARMOR_SPECS } from './equipment.ts';
-import { itemQualityLevel, type GameStage } from './progression.ts';
+import {
+  itemQualityLevel,
+  totalFloorsForStage,
+  MINE_UPSTAIRS_FROM_FLOOR,
+  MINE_PARCHMENT_FLOOR,
+  FORTRESS_BOSS_FLOOR,
+  type GameStage,
+} from './progression.ts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,8 +74,9 @@ let monsterSeq = 1000;
 export interface GenerateFloorOptions {
   dungeonLevel: number;
   stage?: GameStage;
-  totalFloors: number;
+  /** Override map width. Defaults to stage-appropriate size capped at 64. */
   width?: number;
+  /** Override map height. Defaults to stage-appropriate size capped at 64. */
   height?: number;
 }
 
@@ -73,10 +84,13 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   const {
     dungeonLevel,
     stage = 'mine',
-    totalFloors,
-    width: w = 40 + dungeonLevel * 2,
-    height: h = 30 + dungeonLevel * 2,
   } = opts;
+
+  const totalFloors = totalFloorsForStage(stage);
+
+  // Grow map size with depth within each stage, capping at the original game's 64×64 grid.
+  const w = opts.width  ?? Math.min(64, 40 + dungeonLevel * 3);
+  const h = opts.height ?? Math.min(64, 34 + dungeonLevel * 3);
 
   // Generate using rot.js Digger
   const digger = new RotMap.Digger(w, h, {
@@ -179,13 +193,23 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
     });
   }
 
-  // Stairs up in the first room
+  // ── Stairs up ────────────────────────────────────────────────────────────────
+  //
+  // Stairs-up position is always recorded (it's the player spawn when descending
+  // to this floor from above).  The tile feature is only set when the player can
+  // actually ascend — mine floors 1-3 are one-way downward level gating.
+
   const firstRoom = rooms[0];
   if (!firstRoom) throw new Error('rot.js produced no rooms');
   const stairsUp = roomCenter(firstRoom);
-  setTile(grid, stairsUp.x, stairsUp.y, { terrain: 'floor', walkable: true, feature: 'stairs-up', items: [] });
 
-  // Stairs down: place in the last room on every floor except the deepest
+  const canAscend = !(stage === 'mine' && dungeonLevel < MINE_UPSTAIRS_FROM_FLOOR);
+  if (canAscend) {
+    setTile(grid, stairsUp.x, stairsUp.y, { terrain: 'floor', walkable: true, feature: 'stairs-up', items: [] });
+  }
+
+  // ── Stairs down ───────────────────────────────────────────────────────────────
+
   let stairsDown: Vec2 | undefined;
   if (dungeonLevel < totalFloors && rooms.length > 1) {
     const lastRoom = rooms[rooms.length - 1];
@@ -198,7 +222,6 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
         const midRoom = rooms[Math.floor(rooms.length / 2)];
         if (midRoom) {
           const mid = roomCenter(midRoom);
-          // Only place if not already taken by stairs-up
           const existing = getTile(grid, mid.x, mid.y);
           if (existing && existing.feature === undefined) {
             setTile(grid, mid.x, mid.y, { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] });
@@ -214,16 +237,20 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
 
   placeLoot(grid, w, h, lootLevel, rooms);
 
-  if (dungeonLevel === 1) {
-    placeGuaranteedSpawns(grid, rooms, stairsUp, monsters);
+  if (stage === 'mine' && dungeonLevel === 1) {
+    placeGuaranteedMineSpawns(grid, rooms, stairsUp, monsters);
   }
 
-  if (dungeonLevel === 4) {
+  if (stage === 'mine' && dungeonLevel === MINE_PARCHMENT_FLOOR) {
     placeScrapOfParchment(grid, rooms, stairsUp);
   }
 
+  if (stage === 'fortress' && dungeonLevel === FORTRESS_BOSS_FLOOR) {
+    placeHrungnirBoss(grid, rooms, stairsUp, monsters);
+  }
+
   const map: TileMap = {
-    id: `dungeon-${dungeonLevel}` as TileMap['id'],
+    id: `${stage}-${dungeonLevel}` as TileMap['id'],
     width: w,
     height: h,
     tiles: grid,
@@ -302,9 +329,9 @@ function placeLoot(
   }
 }
 
-// ── Floor 1 guaranteed spawns ─────────────────────────────────────────────────
+// ── Mine floor 1 guaranteed spawns ────────────────────────────────────────────
 
-function placeGuaranteedSpawns(
+function placeGuaranteedMineSpawns(
   grid: Tile[][],
   rooms: RotRoom[],
   stairsUp: Vec2,
@@ -358,14 +385,13 @@ function placeGuaranteedSpawns(
   }
 }
 
-// ── Floor 4 (deepest mine floor): Scrap of Parchment ─────────────────────────
+// ── Mine floor 8: Scrap of Parchment ─────────────────────────────────────────
 
 function placeScrapOfParchment(
   grid: Tile[][],
   rooms: RotRoom[],
   stairsUp: Vec2,
 ): void {
-  // Place in the room farthest from the stairs up
   const farthest = rooms
     .map((r) => ({ ...roomCenter(r) }))
     .reduce<Vec2 | null>((best, pos) => {
@@ -393,4 +419,56 @@ function placeScrapOfParchment(
     enchantment: 0,
   };
   t.items.push(parchment);
+}
+
+// ── Fortress floor 11: Hrungnir boss encounter ────────────────────────────────
+
+function placeHrungnirBoss(
+  grid: Tile[][],
+  rooms: RotRoom[],
+  stairsUp: Vec2,
+  monsters: MonsterInstance[],
+): void {
+  // Boss in the room farthest from the entrance; ogre guards fill surrounding tiles.
+  const farthest = rooms
+    .map((r) => ({ room: r, center: roomCenter(r) }))
+    .reduce<{ room: RotRoom; center: Vec2 } | null>((best, cur) => {
+      const d = Math.abs(cur.center.x - stairsUp.x) + Math.abs(cur.center.y - stairsUp.y);
+      if (!best) return cur;
+      const db = Math.abs(best.center.x - stairsUp.x) + Math.abs(best.center.y - stairsUp.y);
+      return d > db ? cur : best;
+    }, null);
+
+  if (!farthest) return;
+  const { center } = farthest;
+
+  monsters.push({
+    specId: 'hrugnir',
+    instanceId: `m${monsterSeq++}`,
+    hp: 120,
+    x: center.x, y: center.y,
+    alerted: true,
+    status: {},
+  });
+
+  // Place ogre guards around Hrungnir
+  const guardOffsets: [number, number][] = [
+    [-2, 0], [2, 0], [0, -2], [0, 2],
+    [-1, -1], [1, -1], [-1, 1], [1, 1],
+  ];
+  for (const [dx, dy] of guardOffsets) {
+    const gx = center.x + dx;
+    const gy = center.y + dy;
+    const t = getTile(grid, gx, gy);
+    if (t && t.walkable && !t.feature) {
+      monsters.push({
+        specId: 'ogre',
+        instanceId: `m${monsterSeq++}`,
+        hp: 45,
+        x: gx, y: gy,
+        alerted: true,
+        status: {},
+      });
+    }
+  }
 }

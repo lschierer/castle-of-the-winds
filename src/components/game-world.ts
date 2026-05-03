@@ -57,6 +57,7 @@ import { monsterById, healthDescription, rollMonsterLoot } from '../game/monster
 import { castSpell, spellTargetKind, type SpellTarget } from '../game/spell-engine.ts';
 import { FOV } from 'rot-js';
 import { generateFloor, type DungeonFloor } from '../game/dungeon-gen.ts';
+import { type GameStage, totalFloorsForStage } from '../game/progression.ts';
 import { type ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../game/equipment.ts';
 import { getLogger } from '../game/logging.ts';
 
@@ -651,12 +652,12 @@ export class GameWorld extends LitElement {
   /** Shop inventories, keyed by shop name. Generated on first visit. */
   private shopInventories = new Map<string, ShopInventory>();
 
-  /** Generated dungeon floors, keyed by level number. */
+  /** Generated dungeon floors for the current stage, keyed by level number. */
   private dungeonFloors = new Map<number, DungeonFloor>();
-  /** Current dungeon level (0 = not in dungeon). */
+  /** Current dungeon level within the current stage (0 = not in dungeon). */
   private currentDungeonLevel = 0;
-  /** Mine has 8 floors (Castle of the Winds v3.11). */
-  private readonly MINE_FLOORS = 8;
+  /** Which of the three dungeon stages the player is currently in. */
+  private currentStage: GameStage = 'mine';
 
 
   /** Set player position and reveal surrounding tiles. */
@@ -705,6 +706,7 @@ export class GameWorld extends LitElement {
       character: this.character,
       mapId: this.map.id,
       pos: { ...this.pos },
+      currentStage: this.currentStage,
       currentDungeonLevel: this.currentDungeonLevel,
       playerStatus: { ...this.playerStatus },
       monsters: this.monsters,
@@ -752,6 +754,7 @@ export class GameWorld extends LitElement {
     if (state) {
       this.character = state.character;
       this.pos = state.pos;
+      this.currentStage = (state.currentStage as GameStage | undefined) ?? 'mine';
       this.currentDungeonLevel = state.currentDungeonLevel;
       this.playerStatus = state.playerStatus;
       this.monsters = state.monsters;
@@ -994,8 +997,17 @@ export class GameWorld extends LitElement {
   }
 
   private enterMap(id: MapId, position: Vec2): void {
-    if (id.startsWith('dungeon-')) {
-      const level = parseInt(id.split('-')[1] ?? '1', 10);
+    // Generated dungeon floor: mine-N, fortress-N, castle-N, or legacy dungeon-N
+    const dungeonMatch = (id as string).match(/^(mine|fortress|castle|dungeon)-(\d+)$/);
+    if (dungeonMatch) {
+      const stageStr = dungeonMatch[1]!;
+      const level = parseInt(dungeonMatch[2]!, 10);
+      // Map legacy 'dungeon' prefix to mine stage; clear floors when stage changes
+      const newStage: GameStage = stageStr === 'dungeon' ? 'mine' : stageStr as GameStage;
+      if (newStage !== this.currentStage) {
+        this.dungeonFloors.clear();
+        this.currentStage = newStage;
+      }
       // Don't use the exit's targetPosition for generated dungeons —
       // the generator places stairs-up at the correct spawn point.
       this.enterDungeonFloor(level);
@@ -1029,9 +1041,9 @@ export class GameWorld extends LitElement {
   private enterDungeonFloor(level: number, position?: Vec2): void {
     let floor = this.dungeonFloors.get(level);
     if (!floor) {
-      floor = generateFloor({ stage: 'mine', dungeonLevel: level, totalFloors: this.MINE_FLOORS });
+      floor = generateFloor({ stage: this.currentStage, dungeonLevel: level });
       this.dungeonFloors.set(level, floor);
-      logger.info(`Generated dungeon floor ${level}: ${floor.map.width}×${floor.map.height}`);
+      logger.info(`Generated ${this.currentStage} floor ${level}: ${floor.map.width}×${floor.map.height}`);
     }
     this.map = floor.map;
     this.moveTo(
@@ -1040,10 +1052,13 @@ export class GameWorld extends LitElement {
     );
     this.monsters = floor.monsters;
     this.currentDungeonLevel = level;
-    this.locationName = `Mine — Floor ${level}`;
+    const stageLabel = this.currentStage === 'mine' ? 'Mine'
+      : this.currentStage === 'fortress' ? 'Fortress'
+      : 'Castle';
+    this.locationName = `${stageLabel} — Floor ${level}`;
     this.overlay = 'none';
     this.activeBuilding = null;
-    this.pushMessage(`You are on floor ${level} of the mine.`);
+    this.pushMessage(`You are on floor ${level} of the ${this.currentStage}.`);
   }
 
   private useStairs(direction: 'up' | 'down'): void {
@@ -1065,7 +1080,7 @@ export class GameWorld extends LitElement {
 
   private descendStairs(): void {
     const nextLevel = this.currentDungeonLevel + 1;
-    if (nextLevel > this.MINE_FLOORS) {
+    if (nextLevel > totalFloorsForStage(this.currentStage)) {
       this.pushMessage('There is no way deeper.');
       return;
     }
@@ -2518,7 +2533,10 @@ export class GameWorld extends LitElement {
       village: 'Village',
       'farm-map': 'Countryside',
     };
-    const mapLabel = mapLabels[this.map.id] ?? (this.currentDungeonLevel > 0 ? `Mine — Floor ${this.currentDungeonLevel}` : this.map.id);
+    const stageNames: Record<GameStage, string> = { mine: 'Mine', fortress: 'Fortress', castle: 'Castle' };
+    const mapLabel = mapLabels[this.map.id] ?? (this.currentDungeonLevel > 0
+      ? `${stageNames[this.currentStage]} — Floor ${this.currentDungeonLevel}`
+      : this.map.id);
     const known = c.spells;
 
     return html`
