@@ -30,6 +30,8 @@ export interface GameState {
   hamletDestroyed: boolean;
   /** Ordered list of story segment IDs the player has seen. */
   storyLog: string[];
+  /** Up to 10 spell IDs pinned to the quick-cast bar (null = empty slot). */
+  quickSpells: (string | null)[];
   /** ISO timestamp of when this save was created. */
   savedAt: string;
 }

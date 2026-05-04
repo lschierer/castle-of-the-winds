@@ -78,7 +78,14 @@ function viewportSize(): { cols: number; rows: number } {
   return { cols, rows };
 }
 
-type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story';
+type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells';
+
+type DragSrc =
+  | { from: 'equip'; slotKey: string; item: Item }
+  | { from: 'pack'; item: Item }
+  | { from: 'belt'; slotIndex: number; item: Item }
+  | { from: 'ground'; item: Item }
+  | { from: 'shop'; item: Item; inv: ShopInventory };
 
 @customElement('game-world')
 export class GameWorld extends LitElement {
@@ -95,9 +102,151 @@ export class GameWorld extends LitElement {
 
     .layout {
       display: flex;
+      flex-direction: column;
       width: 100%;
       height: 100%;
       outline: none;
+    }
+
+    .game-row {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Spell quick-bar ────────────────────────────── */
+    .spell-bar {
+      display: flex;
+      align-items: stretch;
+      gap: 2px;
+      padding: 3px 4px;
+      background: #0a0806;
+      border-bottom: 1px solid #2a2010;
+      flex-shrink: 0;
+    }
+
+    .spell-bar-actions {
+      display: flex;
+      gap: 2px;
+      margin-right: 6px;
+    }
+
+    .spell-bar-btn {
+      padding: 2px 7px;
+      background: #161208;
+      border: 1px solid #3d3020;
+      color: #8b7a50;
+      font-family: inherit;
+      font-size: 0.62rem;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.1s, color 0.1s;
+    }
+
+    .spell-bar-btn:hover {
+      background: #2a2010;
+      color: #c8b78e;
+    }
+
+    .spell-bar-btn.active {
+      background: #3d3020;
+      border-color: #8b6914;
+      color: #f0e0a8;
+    }
+
+    .spell-slots {
+      display: flex;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .spell-slot {
+      flex: 1;
+      min-width: 0;
+      padding: 2px 4px;
+      background: #0e0c09;
+      border: 1px solid #2a2010;
+      color: #4a3a20;
+      font-family: inherit;
+      font-size: 0.58rem;
+      text-align: center;
+      cursor: default;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.2;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+    }
+
+    .spell-slot.castable {
+      border-color: #3d3020;
+      color: #c8b78e;
+      cursor: pointer;
+    }
+
+    .spell-slot.castable:hover {
+      background: #2a2010;
+      border-color: #8b6914;
+      color: #f0e0a8;
+    }
+
+    .spell-slot.no-mana {
+      border-color: #2a2010;
+      color: #4a3a20;
+      cursor: default;
+    }
+
+    .spell-slot-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 100%;
+    }
+
+    .spell-slot-cost {
+      font-size: 0.52rem;
+      opacity: 0.7;
+    }
+
+    .spell-slot-num {
+      font-size: 0.48rem;
+      opacity: 0.4;
+    }
+
+    /* ── Item icons ─────────────────────────────────── */
+    .inv-item-icon {
+      width: 20px;
+      height: 20px;
+      image-rendering: pixelated;
+      object-fit: contain;
+      flex-shrink: 0;
+      opacity: 0.85;
+    }
+
+    /* ── Drag and drop ──────────────────────────────── */
+    [draggable="true"] { cursor: grab; }
+    [draggable="true"]:active { cursor: grabbing; }
+
+    .drag-over {
+      outline: 2px solid #f0e0a8 !important;
+      background: #2a2010 !important;
+    }
+
+    .drop-zone {
+      border: 1px dashed #3d3020;
+      padding: 6px;
+      text-align: center;
+      font-size: 0.6rem;
+      color: #4a3a20;
+      margin-top: 4px;
+    }
+
+    .drop-zone.active {
+      border-color: #8b6914;
+      color: #8b7a50;
     }
 
     /* ── Map ────────────────────────────────────────── */
@@ -643,8 +792,16 @@ export class GameWorld extends LitElement {
   /** Map overview mode — zoomed out to show entire level. */
   @state() private mapMode = false;
 
+  /** Up to 10 spell IDs pinned to the quick-cast bar (null = empty slot). */
+  @state() private quickSpells: (string | null)[] = new Array(10).fill(null);
+
+  /** Which slot (0-9) is being reassigned in the customize overlay. */
+  @state() private customizingSlot: number | null = null;
+
   /** Counter used to generate unique monster instance IDs. */
   private monsterSeq = 0;
+  /** Non-reactive drag state — manipulate CSS classes directly for performance. */
+  private dragSrc: DragSrc | null = null;
   private farmNarrativeShown = false;
   private parchmentRead = false;
   private hamletDestroyed = false;
@@ -726,6 +883,7 @@ export class GameWorld extends LitElement {
       parchmentRead: this.parchmentRead,
       hamletDestroyed: this.hamletDestroyed,
       storyLog: this.storyLog,
+      quickSpells: [...this.quickSpells],
       savedAt: new Date().toISOString(),
     };
   }
@@ -773,6 +931,7 @@ export class GameWorld extends LitElement {
       this.parchmentRead = state.parchmentRead || false;
       this.hamletDestroyed = state.hamletDestroyed || false;
       this.storyLog = Array.isArray(state.storyLog) ? state.storyLog : [];
+      this.quickSpells = Array.isArray(state.quickSpells) ? [...state.quickSpells] : new Array(10).fill(null);
       // Restore dungeon floors
       for (const { level, floor } of state.dungeonFloors) {
         this.dungeonFloors.set(level, floor);
@@ -1473,39 +1632,64 @@ export class GameWorld extends LitElement {
   }
 
   private renderTradeShop(name: string, shop: ShopDef, inv: ShopInventory, c: Character, packItems: Item[], close: () => void): TemplateResult {
+    const groundItems = getTileAt(this.map, this.pos.x, this.pos.y).items;
+    const sellable = [...packItems, ...groundItems].filter((it) =>
+      it.kind !== 'coin' && (shop.buys.length === 0 || shop.buys.includes(it.kind)),
+    );
     return html`
       <div class="overlay" @click=${close}>
         <div class="overlay-box inv-screen" @click=${(e: Event) => { e.stopPropagation(); }}>
           <p class="overlay-title">${name}</p>
           <div class="divider"></div>
           <div class="inv-container-block">
-            <div class="inv-container-label">For Sale</div>
-            <div class="pack-items">
+            <div class="inv-container-label">For Sale — drag to "Sell Items" to buy</div>
+            <div class="pack-items"
+              @dragover=${this.onDropZoneDragOver.bind(this)}
+              @dragleave=${this.onDropZoneDragLeave.bind(this)}
+              @drop=${(e: DragEvent) => { this.onDropShopSell(shop, e); }}
+            >
               ${inv.items.length === 0 ? html`<div class="inv-empty">Nothing for sale.</div>` :
                 inv.items.map((it) => html`
-                  <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopBuy(inv, it.id); }}>
-                    ${displayName(it)} — <span style="color:#d4a820">${buyPrice(it)} cp</span>
+                  <div class="inv-item"
+                    style="cursor:grab;display:flex;align-items:center;gap:4px"
+                    draggable="true"
+                    @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'shop', item: it, inv }, e); }}
+                    @dragend=${this.onItemDragEnd.bind(this)}
+                    @click=${() => { this.shopBuy(inv, it.id); }}
+                  >
+                    ${it.icon ? html`<img class="inv-item-icon" src="/assets/sprites/icons/${it.icon}" alt="">` : ''}
+                    <span>${displayName(it)} — <span style="color:#d4a820">${buyPrice(it)} cp</span></span>
                   </div>`)}
             </div>
           </div>
           <div class="inv-container-block">
-            <div class="inv-container-label">Sell Items</div>
-            <div class="pack-items">
-              ${(() => {
-                const groundItems = getTileAt(this.map, this.pos.x, this.pos.y).items;
-                const sellable = [...packItems, ...groundItems].filter((it) =>
-                  it.kind !== 'coin' && (shop.buys.length === 0 || shop.buys.includes(it.kind)),
-                );
-                return sellable.length === 0 ? html`<div class="inv-empty">Nothing to sell.</div>` :
-                  sellable.map((it) => {
-                    const price = sellPrice(it);
-                    const canSell = price > 0;
-                    return html`
-                      <div class="inv-item ${canSell ? '' : 'no-mana'}" style="${canSell ? 'cursor:pointer' : 'opacity:0.5'}" @click=${canSell ? () => { this.shopSellAny(it, shop); } : undefined}>
-                        ${displayName(it)} — <span style="color:#4a7a20">${price} cp</span>
-                      </div>`;
-                  });
-              })()}
+            <div class="inv-container-label">Sell Items — drag to "For Sale" to sell</div>
+            <div class="pack-items"
+              @dragover=${this.onDropZoneDragOver.bind(this)}
+              @dragleave=${this.onDropZoneDragLeave.bind(this)}
+              @drop=${(e: DragEvent) => { this.onDropShopBuy(e); }}
+            >
+              ${sellable.length === 0 ? html`<div class="inv-empty">Nothing to sell.</div>` :
+                sellable.map((it) => {
+                  const price = sellPrice(it);
+                  const canSell = price > 0;
+                  return html`
+                    <div class="inv-item ${canSell ? '' : 'no-mana'}"
+                      style="${canSell ? 'cursor:pointer;' : 'opacity:0.5;'}display:flex;align-items:center;gap:4px"
+                      draggable="${canSell ? 'true' : 'false'}"
+                      @dragstart=${canSell ? (e: DragEvent) => {
+                        const fromGround = groundItems.some((g) => g.id === it.id);
+                        this.onItemDragStart(fromGround
+                          ? { from: 'ground', item: it }
+                          : { from: 'pack', item: it }, e);
+                      } : undefined}
+                      @dragend=${this.onItemDragEnd.bind(this)}
+                      @click=${canSell ? () => { this.shopSellAny(it, shop); } : undefined}
+                    >
+                      ${it.icon ? html`<img class="inv-item-icon" src="/assets/sprites/icons/${it.icon}" alt="">` : ''}
+                      <span>${displayName(it)} — <span style="color:#4a7a20">${price} cp</span></span>
+                    </div>`;
+                })}
             </div>
           </div>
           <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
@@ -1567,11 +1751,27 @@ export class GameWorld extends LitElement {
           <p class="overlay-title">${name}</p>
           <p class="building-services">We buy anything. 25 cp flat.</p>
           <div class="divider"></div>
-          <div class="pack-items">
+          <div class="pack-items"
+            @dragover=${this.onDropZoneDragOver.bind(this)}
+            @dragleave=${this.onDropZoneDragLeave.bind(this)}
+            @drop=${(e: DragEvent) => { this.onDropShopSell(shop, e); }}
+          >
             ${sellable.length === 0 ? html`<div class="inv-empty">Nothing to sell.</div>` :
               sellable.map((it) => html`
-                <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopSellAny(it, shop); }}>
-                  ${displayName(it)} — <span style="color:#4a7a20">${junkYardPrice(it)} cp</span>
+                <div class="inv-item"
+                  style="cursor:pointer;display:flex;align-items:center;gap:4px"
+                  draggable="true"
+                  @dragstart=${(e: DragEvent) => {
+                    const fromGround = groundItems.some((g) => g.id === it.id);
+                    this.onItemDragStart(fromGround
+                      ? { from: 'ground', item: it }
+                      : { from: 'pack', item: it }, e);
+                  }}
+                  @dragend=${this.onItemDragEnd.bind(this)}
+                  @click=${() => { this.shopSellAny(it, shop); }}
+                >
+                  ${it.icon ? html`<img class="inv-item-icon" src="/assets/sprites/icons/${it.icon}" alt="">` : ''}
+                  <span>${displayName(it)} — <span style="color:#4a7a20">${junkYardPrice(it)} cp</span></span>
                 </div>`)}
           </div>
           <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
@@ -1674,16 +1874,34 @@ export class GameWorld extends LitElement {
     gridArea: string,
     slotName?: string,
   ): TemplateResult {
+    const key = slotName ?? gridArea;
     const onClick = item ? (e: Event) => {
       e.stopPropagation();
-      this.actionItem = { item, source: 'equip', slotName: slotName ?? gridArea };
+      this.actionItem = { item, source: 'equip', slotName: key };
     } : undefined;
     return html`
-      <div class="equip-slot ${item ? 'filled' : ''}" style="grid-area:${gridArea};${item ? 'cursor:pointer' : ''}" @click=${onClick}>
-        <img class="equip-slot-icon" src="${iconSrc}" alt="${label}">
-        ${item
-          ? html`<span class="equip-slot-name">${displayName(item)}</span>`
-          : html`<span class="equip-slot-label">${label}</span>`}
+      <div
+        class="equip-slot ${item ? 'filled' : ''}"
+        style="grid-area:${gridArea};${item ? 'cursor:pointer' : ''}"
+        @click=${onClick}
+        @dragover=${this.onDropZoneDragOver.bind(this)}
+        @dragleave=${this.onDropZoneDragLeave.bind(this)}
+        @drop=${(e: DragEvent) => { this.onDropEquipSlot(key, e); }}
+      >
+        ${item ? html`
+          <img
+            class="equip-slot-icon"
+            src="${item.icon ? `/assets/sprites/icons/${item.icon}` : iconSrc}"
+            alt="${displayName(item)}"
+            draggable="true"
+            @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'equip', slotKey: key, item }, e); }}
+            @dragend=${this.onItemDragEnd.bind(this)}
+          >
+          <span class="equip-slot-name">${displayName(item)}</span>
+        ` : html`
+          <img class="equip-slot-icon" src="${iconSrc}" alt="${label}">
+          <span class="equip-slot-label">${label}</span>
+        `}
       </div>
     `;
   }
@@ -2311,13 +2529,24 @@ export class GameWorld extends LitElement {
               <div class="inv-container-block">
                 <div class="inv-container-label">Belt — ${c.belt?.name ?? 'Belt'}</div>
                 <div class="belt-slots">
-                  ${beltSlots.map((slot) => {
+                  ${beltSlots.map((slot, slotIndex) => {
                     const it = slot.items[0] ?? null;
                     return html`
-                      <div class="belt-slot ${it ? 'filled' : ''}" style="${it ? 'cursor:pointer' : ''}" @click=${it ? (e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'belt' }; } : undefined}>
-                        ${it
-                          ? html`<span style="font-size:0.5rem;color:#c8b78e;text-align:center;padding:2px">${displayName(it)}</span>`
-                          : html`<span style="font-size:0.5rem;color:#2a2010">—</span>`}
+                      <div
+                        class="belt-slot ${it ? 'filled' : ''}"
+                        @dragover=${this.onDropZoneDragOver.bind(this)}
+                        @dragleave=${this.onDropZoneDragLeave.bind(this)}
+                        @drop=${(e: DragEvent) => { this.onDropBeltSlot(slotIndex, e); }}
+                        @click=${it ? (e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'belt' }; } : undefined}
+                      >
+                        ${it ? html`
+                          <img class="inv-item-icon" src="/assets/sprites/icons/${it.icon ?? it.kind + '.png'}" alt=""
+                            draggable="true"
+                            @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'belt', slotIndex, item: it }, e); }}
+                            @dragend=${this.onItemDragEnd.bind(this)}
+                          >
+                          <span style="font-size:0.5rem;color:#c8b78e;text-align:center;padding:2px">${displayName(it)}</span>
+                        ` : html`<span style="font-size:0.5rem;color:#2a2010">—</span>`}
                       </div>
                     `;
                   })}
@@ -2328,12 +2557,24 @@ export class GameWorld extends LitElement {
             ${c.pack ? html`
               <div class="inv-container-block">
                 <div class="inv-container-label">${c.pack.name}</div>
-                <div class="pack-items">
+                <div class="pack-items"
+                  @dragover=${this.onDropZoneDragOver.bind(this)}
+                  @dragleave=${this.onDropZoneDragLeave.bind(this)}
+                  @drop=${this.onDropPack.bind(this)}
+                >
                   ${packItems.length === 0
                     ? html`<div class="inv-empty">Empty</div>`
                     : packItems.map((it) => html`
-                        <div class="inv-item" style="cursor:pointer" @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'pack' }; }}>
-                          ${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:#a04040">(cursed)</span>` : ''}
+                        <div
+                          class="inv-item"
+                          style="cursor:pointer;display:flex;align-items:center;gap:4px"
+                          draggable="true"
+                          @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'pack', item: it }, e); }}
+                          @dragend=${this.onItemDragEnd.bind(this)}
+                          @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'pack' }; }}
+                        >
+                          ${it.icon ? html`<img class="inv-item-icon" src="/assets/sprites/icons/${it.icon}" alt="">` : ''}
+                          <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:#a04040">(cursed)</span>` : ''}</span>
                         </div>
                       `)}
                 </div>
@@ -2347,10 +2588,22 @@ export class GameWorld extends LitElement {
             return tile.items.length > 0 ? html`
               <div class="inv-container-block">
                 <div class="inv-container-label">On the ground</div>
-                <div class="pack-items">
+                <div class="pack-items"
+                  @dragover=${this.onDropZoneDragOver.bind(this)}
+                  @dragleave=${this.onDropZoneDragLeave.bind(this)}
+                  @drop=${this.onDropGround.bind(this)}
+                >
                   ${tile.items.map((it) => html`
-                    <div class="inv-item" style="cursor:pointer" @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'ground' }; }}>
-                      ${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}
+                    <div
+                      class="inv-item"
+                      style="cursor:pointer;display:flex;align-items:center;gap:4px"
+                      draggable="true"
+                      @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'ground', item: it }, e); }}
+                      @dragend=${this.onItemDragEnd.bind(this)}
+                      @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'ground' }; }}
+                    >
+                      ${it.icon ? html`<img class="inv-item-icon" src="/assets/sprites/icons/${it.icon}" alt="">` : ''}
+                      <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}</span>
                     </div>
                   `)}
                 </div>
@@ -2550,6 +2803,341 @@ export class GameWorld extends LitElement {
     `;
   }
 
+  private renderSpellBar(): TemplateResult {
+    const c = this.character;
+    if (!c) return html``;
+    return html`
+      <div class="spell-bar">
+        <div class="spell-bar-actions">
+          <button class="spell-bar-btn" @click=${() => { this.pickupGround(); }}>Get</button>
+          <button class="spell-bar-btn" @click=${() => { this.doRest(); }}>Rest</button>
+          <button class="spell-bar-btn ${this.overlay === 'inventory' ? 'active' : ''}" @click=${() => { this.toggleOverlay('inventory'); }}>Inventory</button>
+          <button class="spell-bar-btn ${this.overlay === 'spells' ? 'active' : ''}" @click=${() => { this.toggleOverlay('spells'); }}>Spells</button>
+        </div>
+        <div class="spell-slots">
+          ${this.quickSpells.map((spellId, i) => {
+            if (!spellId) {
+              return html`<div class="spell-slot" title="Slot ${i + 1} — empty (right-click to customize)">
+                <span class="spell-slot-num">${i + 1}</span>
+              </div>`;
+            }
+            const sp = spellById(spellId);
+            if (!sp) return html`<div class="spell-slot"><span class="spell-slot-num">${i + 1}</span></div>`;
+            const canCast = c.mana >= sp.baseMana;
+            return html`<div
+              class="spell-slot ${canCast ? 'castable' : 'no-mana'}"
+              title="${sp.name} (${sp.baseMana} mp)${canCast ? '' : ' — not enough mana'}"
+              @click=${canCast ? () => { this.tryCastSpell(sp.id); } : undefined}
+            >
+              <span class="spell-slot-num">${i + 1}</span>
+              <span class="spell-slot-name">${sp.name}</span>
+              <span class="spell-slot-cost">${sp.baseMana}mp</span>
+            </div>`;
+          })}
+        </div>
+        <button
+          class="spell-bar-btn"
+          title="Customize spell bar"
+          @click=${() => { this.customizingSlot = null; this.overlay = 'customize-spells'; }}
+        >⚙ Customize</button>
+      </div>
+    `;
+  }
+
+  private renderCustomizeSpellsOverlay(): TemplateResult {
+    const c = this.character;
+    if (!c) return html``;
+    const close = () => { this.overlay = 'none'; this.customizingSlot = null; };
+    return html`
+      <div class="overlay" @click=${close}>
+        <div class="overlay-box" style="min-width:340px" @click=${(e: Event) => { e.stopPropagation(); }}>
+          <p class="overlay-title">Customize Spell Bar</p>
+          <div class="divider"></div>
+          <p style="font-size:0.68rem;color:#8b7a50;margin:0 0 0.5rem">
+            Click a slot, then click a spell to assign it. Click a slot again to clear it.
+          </p>
+
+          <div style="display:flex;gap:1rem">
+            <!-- Slots column -->
+            <div style="display:flex;flex-direction:column;gap:3px;min-width:140px">
+              <span style="font-size:0.6rem;color:#6b5830;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2px">Slots</span>
+              ${this.quickSpells.map((spellId, i) => {
+                const sp = spellId ? spellById(spellId) : null;
+                const isSelected = this.customizingSlot === i;
+                return html`<div
+                  class="spell-row castable"
+                  style="cursor:pointer;${isSelected ? 'background:#2a2010;border-color:#8b6914;' : ''}"
+                  @click=${() => {
+                    if (this.customizingSlot === i) {
+                      // Second click on same slot = clear it
+                      this.quickSpells = this.quickSpells.map((s, j) => j === i ? null : s);
+                      this.customizingSlot = null;
+                      this.autoSave();
+                    } else {
+                      this.customizingSlot = i;
+                    }
+                  }}
+                >
+                  <span class="spell-row-name" style="min-width:1.2rem;color:#6b5830">${i + 1}.</span>
+                  <span class="spell-row-name">${sp ? sp.name : '—'}</span>
+                  ${isSelected ? html`<span style="font-size:0.58rem;color:#f0e0a8;margin-left:auto">← pick</span>` : ''}
+                </div>`;
+              })}
+            </div>
+
+            <!-- Known spells column -->
+            <div style="display:flex;flex-direction:column;gap:3px;flex:1">
+              <span style="font-size:0.6rem;color:#6b5830;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2px">Known Spells</span>
+              ${c.spells.length === 0
+                ? html`<div class="inv-empty">No spells learned.</div>`
+                : c.spells.map((id) => {
+                    const sp = spellById(id);
+                    if (!sp) return html``;
+                    const alreadySlotted = this.quickSpells.indexOf(id);
+                    return html`<div
+                      class="spell-row ${this.customizingSlot !== null ? 'castable' : ''}"
+                      style="${this.customizingSlot !== null ? 'cursor:pointer' : ''}"
+                      @click=${this.customizingSlot !== null ? () => {
+                        const slot = this.customizingSlot!;
+                        this.quickSpells = this.quickSpells.map((s, j) => j === slot ? id : s);
+                        this.customizingSlot = null;
+                        this.autoSave();
+                      } : undefined}
+                    >
+                      <span class="spell-row-name">${sp.name}</span>
+                      <span class="spell-row-cost" style="${alreadySlotted >= 0 ? 'color:#8b6914' : ''}">${alreadySlotted >= 0 ? `slot ${alreadySlotted + 1}` : `${sp.baseMana} mp`}</span>
+                    </div>`;
+                  })}
+            </div>
+          </div>
+
+          <span class="overlay-close" @click=${close}>[ Esc to close ]</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Drag and drop ─────────────────────────────────────────────────────────
+
+  private onItemDragStart(src: DragSrc, e: DragEvent): void {
+    this.dragSrc = src;
+    e.dataTransfer!.effectAllowed = 'move';
+    e.dataTransfer!.setData('text/plain', 'drag');
+    (e.currentTarget as HTMLElement).style.opacity = '0.5';
+  }
+
+  private onItemDragEnd(e: DragEvent): void {
+    this.dragSrc = null;
+    (e.currentTarget as HTMLElement).style.opacity = '';
+  }
+
+  private onDropZoneDragOver(e: DragEvent): void {
+    if (!this.dragSrc) return;
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = 'move';
+    (e.currentTarget as HTMLElement).classList.add('drag-over');
+  }
+
+  private onDropZoneDragLeave(e: DragEvent): void {
+    (e.currentTarget as HTMLElement).classList.remove('drag-over');
+  }
+
+  /** Remove an item from wherever it was dragged from. */
+  private removeDragSrc(): boolean {
+    const src = this.dragSrc;
+    const c = this.character;
+    if (!src || !c) return false;
+    if (src.from === 'equip') {
+      const key = this.EQUIP_SLOT_MAP[src.slotKey];
+      if (!key) return false;
+      if (src.item.cursed && src.item.identified) {
+        this.pushMessage(`The ${displayName(src.item)} is cursed and cannot be removed!`);
+        return false;
+      }
+      (c as unknown as Record<string, unknown>)[key] = null;
+    } else if (src.from === 'pack' && c.pack) {
+      if (!removeFromContainer(c.pack, src.item.id)) return false;
+    } else if (src.from === 'belt' && c.belt) {
+      if (!removeFromContainer(c.belt, src.item.id)) return false;
+    } else if (src.from === 'ground') {
+      const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+      const idx = tile.items.findIndex((i) => i.id === src.item.id);
+      if (idx === -1) return false;
+      tile.items.splice(idx, 1);
+    }
+    return true;
+  }
+
+  /** Drag any item to an equip slot. */
+  private onDropEquipSlot(slotKey: string, e: DragEvent): void {
+    (e.currentTarget as HTMLElement).classList.remove('drag-over');
+    e.preventDefault();
+    const src = this.dragSrc;
+    const c = this.character;
+    if (!src || !c || src.from === 'shop') return;
+
+    // Validate kind compatibility via SLOT_TO_KIND
+    const SLOT_ACCEPTS: Record<string, string | null> = {
+      weapon: 'weapon', armor: 'armor', helm: 'helm', shield: 'shield',
+      boots: 'boots', cloak: 'cloak', bracers: 'bracers', gauntlets: 'gauntlets',
+      'ring-l': 'ring', 'ring-r': 'ring', amulet: 'amulet', belt: 'belt',
+      freeh: null, // anything
+      pack: 'container', purse: 'purse',
+    };
+    const expectedKind = SLOT_ACCEPTS[slotKey];
+    if (expectedKind !== undefined && expectedKind !== null && src.item.kind !== expectedKind) {
+      this.pushMessage(`${displayName(src.item)} cannot go in the ${slotKey} slot.`);
+      this.dragSrc = null;
+      return;
+    }
+
+    // Same slot, no-op
+    if (src.from === 'equip' && src.slotKey === slotKey) { this.dragSrc = null; return; }
+
+    const charKey = this.EQUIP_SLOT_MAP[slotKey];
+    if (!charKey) { this.dragSrc = null; return; }
+
+    const current = (c as unknown as Record<string, Item | null>)[charKey] as Item | null;
+
+    if (!this.removeDragSrc()) { this.dragSrc = null; return; }
+
+    // Displaced item → pack or ground
+    if (current) {
+      if (c.pack && addToContainer(c.pack, current)) {
+        this.pushMessage(`${displayName(current)} → pack.`);
+      } else {
+        dropItem(this.map, this.pos.x, this.pos.y, current);
+        this.pushMessage(`${displayName(current)} dropped (pack full).`);
+      }
+    }
+
+    const result = equipItem(src.item);
+    (c as unknown as Record<string, unknown>)[charKey] = result.item;
+    this.pushMessage(result.stuck
+      ? `You equip the ${displayName(result.item)}… it's cursed!`
+      : `Equipped ${displayName(result.item)}.`);
+    this.dragSrc = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  /** Drag any item to the pack. */
+  private onDropPack(e: DragEvent): void {
+    (e.currentTarget as HTMLElement).classList.remove('drag-over');
+    e.preventDefault();
+    const src = this.dragSrc;
+    const c = this.character;
+    if (!src || !c) return;
+    if (src.from === 'pack') { this.dragSrc = null; return; }
+    if (src.from === 'shop') { this.onDropShopBuy(e); return; }
+    if (!c.pack) { this.pushMessage('No pack equipped.'); this.dragSrc = null; return; }
+
+    if (!this.removeDragSrc()) { this.dragSrc = null; return; }
+
+    if (addToContainer(c.pack, src.item)) {
+      this.pushMessage(`${displayName(src.item)} → pack.`);
+    } else {
+      dropItem(this.map, this.pos.x, this.pos.y, src.item);
+      this.pushMessage(`Pack full — ${displayName(src.item)} dropped.`);
+    }
+    this.dragSrc = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  /** Drag any item to a specific belt slot. */
+  private onDropBeltSlot(slotIndex: number, e: DragEvent): void {
+    (e.currentTarget as HTMLElement).classList.remove('drag-over');
+    e.preventDefault();
+    const src = this.dragSrc;
+    const c = this.character;
+    if (!src || !c || !c.belt?.slots) return;
+    if (src.from === 'shop') { this.onDropShopBuy(e); return; }
+
+    const slot = c.belt.slots[slotIndex];
+    if (!slot) { this.dragSrc = null; return; }
+
+    // If slot has an item, swap it to pack
+    const existing = slot.items[0] ?? null;
+    if (existing) {
+      if (!c.pack || !addToContainer(c.pack, existing)) {
+        this.pushMessage(`Pack full — cannot swap with ${displayName(existing)}.`);
+        this.dragSrc = null;
+        return;
+      }
+      slot.items.splice(0, 1);
+    }
+
+    if (!this.removeDragSrc()) {
+      if (existing) slot.items.push(existing); // undo swap
+      this.dragSrc = null;
+      return;
+    }
+
+    slot.items.push(src.item);
+    this.pushMessage(`${displayName(src.item)} → belt slot ${slotIndex + 1}.`);
+    this.dragSrc = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  /** Drag player item to shop → sell it. */
+  private onDropShopSell(shop: ShopDef, e: DragEvent): void {
+    (e.currentTarget as HTMLElement).classList.remove('drag-over');
+    e.preventDefault();
+    const src = this.dragSrc;
+    const c = this.character;
+    if (!src || !c || src.from === 'shop') { this.dragSrc = null; return; }
+    if (src.from === 'equip' && src.item.cursed && src.item.identified) {
+      this.pushMessage(`The ${displayName(src.item)} is cursed and cannot be removed!`);
+      this.dragSrc = null;
+      return;
+    }
+
+    if (!this.removeDragSrc()) { this.dragSrc = null; return; }
+
+    const result = sellItem(c, src.item, shop);
+    this.pushMessage(result.message);
+    if (result.success) this.autoSave();
+    this.dragSrc = null;
+    this.requestUpdate();
+  }
+
+  /** Drag shop item → buy it (put in pack). */
+  private onDropShopBuy(e: DragEvent): void {
+    (e.currentTarget as HTMLElement).classList.remove('drag-over');
+    e.preventDefault();
+    const src = this.dragSrc;
+    const c = this.character;
+    if (!src || !c || src.from !== 'shop') { this.dragSrc = null; return; }
+
+    const result = buyItem(c, src.inv, src.item.id);
+    this.pushMessage(result.message);
+    if (result.success) this.autoSave();
+    this.dragSrc = null;
+    this.requestUpdate();
+  }
+
+  /** Drag item to ground (drop it). */
+  private onDropGround(e: DragEvent): void {
+    (e.currentTarget as HTMLElement).classList.remove('drag-over');
+    e.preventDefault();
+    const src = this.dragSrc;
+    const c = this.character;
+    if (!src || !c || src.from === 'ground' || src.from === 'shop') { this.dragSrc = null; return; }
+    if (src.from === 'equip' && src.item.cursed && src.item.identified) {
+      this.pushMessage(`The ${displayName(src.item)} is cursed!`);
+      this.dragSrc = null;
+      return;
+    }
+    if (!this.removeDragSrc()) { this.dragSrc = null; return; }
+    dropItem(this.map, this.pos.x, this.pos.y, src.item);
+    this.pushMessage(`Dropped ${displayName(src.item)}.`);
+    this.dragSrc = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
   private renderSidebar(): TemplateResult {
     const c = this.character;
     if (!c) return html``;
@@ -2676,32 +3264,37 @@ export class GameWorld extends LitElement {
     if (!this.character) return html``;
     return html`
       <div class="layout" tabindex="0" @keydown=${this.onKeyDown}>
-        <div class="map-panel">
-          ${this.mapMode ? this.renderMiniMap() : this.renderMap()}
+        ${this.renderSpellBar()}
+        <div class="game-row">
+          <div class="map-panel">
+            ${this.mapMode ? this.renderMiniMap() : this.renderMap()}
 
-          ${this.castingSpell
-            ? html`<div class="location-banner" style="color:#f0e0a8;background:rgba(0,0,0,0.7);padding:4px 12px">⚡ Choose direction — arrow keys / numpad · Esc to cancel</div>`
-            : this.locationName
-            ? html`<div class="location-banner">${this.locationName}</div>`
-            : ''}
+            ${this.castingSpell
+              ? html`<div class="location-banner" style="color:#f0e0a8;background:rgba(0,0,0,0.7);padding:4px 12px">⚡ Choose direction — arrow keys / numpad · Esc to cancel</div>`
+              : this.locationName
+              ? html`<div class="location-banner">${this.locationName}</div>`
+              : ''}
 
-          ${this.dead
-            ? this.renderDeathOverlay()
-            : this.narrative !== null
-            ? this.renderNarrativeOverlay()
-            : this.overlay === 'building'
-              ? this.renderBuildingOverlay()
-              : this.overlay === 'inventory'
-                ? this.renderInventoryOverlay()
-                : this.overlay === 'spells'
-                  ? this.renderSpellsOverlay()
-                  : this.overlay === 'spell-learn'
-                    ? this.renderSpellLearnOverlay()
-                    : this.overlay === 'story'
-                      ? this.renderStoryOverlay()
-                      : ''}
+            ${this.dead
+              ? this.renderDeathOverlay()
+              : this.narrative !== null
+              ? this.renderNarrativeOverlay()
+              : this.overlay === 'building'
+                ? this.renderBuildingOverlay()
+                : this.overlay === 'inventory'
+                  ? this.renderInventoryOverlay()
+                  : this.overlay === 'spells'
+                    ? this.renderSpellsOverlay()
+                    : this.overlay === 'spell-learn'
+                      ? this.renderSpellLearnOverlay()
+                      : this.overlay === 'story'
+                        ? this.renderStoryOverlay()
+                        : this.overlay === 'customize-spells'
+                          ? this.renderCustomizeSpellsOverlay()
+                          : ''}
+          </div>
+          ${this.renderSidebar()}
         </div>
-        ${this.renderSidebar()}
       </div>
     `;
   }
