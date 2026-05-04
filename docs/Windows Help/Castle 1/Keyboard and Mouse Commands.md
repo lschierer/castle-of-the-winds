@@ -40,3 +40,23 @@ Get Command	g
 	This command generally puts everything on the floor into the player's pack.  The special case is if the object is a pack, purse, or belt, and the player isn't wearing one, the object goes in the appropriate inventory slot.
 
 Several commands require a target or a direction.  In this case you'll get a command pending message in the description window, and the cursor will change to cross hairs.  Use the movement keys (or mouse) to target the cursor and hit return.  The view command allows you to use the movement keys to scroll the dungeon window from the keyboard.
+
+## Mouse Commands
+
+### Mouse Movement:
+You can left click and drag the player icon to move the character with the mouse.  Mouse movement will be aborted if the player is attacked or hits a trap.
+
+### Other Mouse Commands:
+
+| Verb | Mouse Command |
+| -------- | -------- |
+| Climb up and down stairs	| Double left clicking on the player. |
+| Open or close an adjacent door	| Left click on the door. |
+| Attack an adjacent monster 	| Left click on the monster. |
+
+### Popup Look Command:
+Right clicking on a site opens a popup window with a description of the site and its contents.  If there is a monster on the site, this window will also give the current status of the monster (uninjured, slightly injured...).  This description is currently limited to 10 lines.  If there is a large number of objects on the site, the text "more ..." will appear at the end of the last line.  In this case use the keyboard version (x), or the menu command Verbs-Look should be used to display the contents of the site in the description window. 
+
+### Other: 
+
+Commands not available via direct manipulation with the mouse can be executed using either the Button Bar or via the Verbs menu.
