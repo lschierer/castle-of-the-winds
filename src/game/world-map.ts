@@ -545,9 +545,17 @@ const FARM_MAP_SPEC: MapSpec = {
 };
 
 // ── Constructed maps ──────────────────────────────────────────────────────────
+//
+// The terrain layer comes from CASTLE1.EXE seg25 (alive hamlet) and seg28
+// (burned farm) — byte-exact from the 1993 binary.  The interactive
+// overlay (exits, building names, doors, signposts) comes from the
+// constructive specs above; those are not encoded in the binary.  See
+// src/game/binary-map-overlay.ts for the merge logic.
 
-export const VILLAGE_MAP: TileMap = buildMap(VILLAGE_SPEC);
-export const FARM_MAP:    TileMap = buildMap(FARM_MAP_SPEC);
+import { overlayBinaryTerrain } from './binary-map-overlay.ts';
+
+export const VILLAGE_MAP: TileMap = overlayBinaryTerrain(buildMap(VILLAGE_SPEC), 'hamlet-alive');
+export const FARM_MAP:    TileMap = overlayBinaryTerrain(buildMap(FARM_MAP_SPEC), 'burned-farm');
 
 // Dungeon maps are generated procedurally by dungeon-gen.ts.
 // DUNGEON_1_MAP is a static fallback kept for save-state backward compat.
