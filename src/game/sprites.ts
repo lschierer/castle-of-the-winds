@@ -197,6 +197,99 @@ function buildingRegionStyle(region: BuildingRegion, x: number, y: number, base:
   };
 }
 
+// ── Monster sprite map ────────────────────────────────────────────────────────
+
+/**
+ * Maps monster spec IDs to icon resource IDs extracted from CASTLE1.EXE.
+ * Sprites are stored as public/assets/sprites/icons/icon_NNN.png.
+ * IDs were identified by visual inspection; entries marked ~approximate.
+ */
+const MONSTER_ICON_ID: Record<string, number> = {
+  // Animals
+  giant_bat:              405,
+  giant_rat:              381,
+  wild_dog:               387,
+  gray_wolf:              431,
+  white_wolf:             433,
+  bear:                   435,
+  // Reptiles / arthropods
+  large_snake:            383,
+  viper:                  151,
+  giant_scorpion:         409,
+  giant_trapdoor_spider:  391,
+  huge_lizard:            393,
+  // Humanoids
+  kobold:                 363,
+  goblin:                 427,
+  goblin_fighter:         429,
+  hobgoblin:              395,
+  bandit:                 421,
+  thief:                  415,
+  evil_warrior:           439,
+  ogre:                   443,
+  troll:                  413,
+  wizard:                 403,
+  rat_man:                397,
+  wolf_man:               399,
+  bear_man:               401,
+  // Giants
+  hill_giant:             401,
+  stone_giant:            441,
+  frost_giant:            451,
+  fire_giant:             449,
+  // Undead
+  skeleton:               457,
+  walking_corpse:         447,
+  ghost:                  407,
+  shadow:                 355,
+  shade:                  355,
+  spectre:                445,
+  barrow_wight:           445,
+  tunnel_wight:           445,
+  castle_wight:           445,
+  pale_wraith:            355,
+  dark_wraith:            355,
+  abyss_wraith:           355,
+  vampire:                453,
+  // Devils
+  spiked_devil:           425,
+  horned_devil:           425,
+  ice_devil:              425,
+  abyss_fiend:            453,
+  // Elementals
+  air_elemental:          357,
+  earth_elemental:        357,
+  fire_elemental:         357,
+  water_elemental:        351,
+  // Dragons
+  young_green_dragon:     417,
+  old_green_dragon:       417,
+  young_white_dragon:     417,
+  young_blue_dragon:      417,
+  young_red_dragon:       417,
+  ancient_red_dragon:     417,
+  // Other creatures
+  carrion_creeper:        361,
+  gelatinous_glob:        419,
+  manticore:              437,
+  slime:                  411,
+  // Statues
+  wooden_statue:           18,
+  bronze_statue:           18,
+  iron_statue:             18,
+  marble_statue:           18,
+  // Boss monsters
+  hrugnir:                401,
+  utgardhalok:            401,
+  surtur:                 449,
+};
+
+/** Returns the img src for a monster's sprite, or undefined if not mapped. */
+export function monsterSpriteSrc(monsterId: string): string | undefined {
+  const id = MONSTER_ICON_ID[monsterId];
+  return id !== undefined ? `${ICONS}/icon_${id}.png` : undefined;
+}
+
 // ── Ground item icons ─────────────────────────────────────────────────────────
 
 import type { Item } from './items.ts';

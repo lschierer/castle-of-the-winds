@@ -36,7 +36,7 @@ import {
   revealAround,
   hasLineOfSight,
 } from '../game/world-map.ts';
-import { getTileStyle } from '../game/sprites.ts';
+import { getTileStyle, monsterSpriteSrc } from '../game/sprites.ts';
 import { spellById } from '../game/spells.ts';
 import { LEARNABLE_SPELLS } from '../game/spells.ts';
 import {
@@ -1520,7 +1520,8 @@ export class GameWorld extends LitElement {
         const monster = inLOS ? monsterAt.get(`${mx},${my}`) : undefined;
         if (monster) {
           const spec = monsterById(monster.specId);
-          const iconSrc = spec ? `/assets/sprites/icons/${spec.icon}` : '';
+          const iconSrc = monsterSpriteSrc(monster.specId)
+            ?? (spec ? `/assets/sprites/icons/${spec.icon}` : '');
           tiles.push(html`<div class="tile" style="
             background-color: ${s.backgroundColor ?? 'transparent'};
             background-image: ${s.backgroundImage};
