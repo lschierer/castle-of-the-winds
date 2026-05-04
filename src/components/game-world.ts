@@ -36,7 +36,7 @@ import {
   revealAround,
   hasLineOfSight,
 } from '../game/world-map.ts';
-import { getTileStyle, monsterSpriteSrc } from '../game/sprites.ts';
+import { getTileStyle, monsterSpriteSrc, resolveItemIcon } from '../game/sprites.ts';
 import { spellById } from '../game/spells.ts';
 import { LEARNABLE_SPELLS } from '../game/spells.ts';
 import {
@@ -1658,7 +1658,7 @@ export class GameWorld extends LitElement {
                     @dragend=${this.onItemDragEnd.bind(this)}
                     @click=${() => { this.shopBuy(inv, it.id); }}
                   >
-                    ${it.icon ? html`<img class="inv-item-icon" src="/assets/sprites/icons/${it.icon}" alt="">` : ''}
+                    <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
                     <span>${displayName(it)} — <span style="color:#d4a820">${buyPrice(it)} cp</span></span>
                   </div>`)}
             </div>
@@ -1687,7 +1687,7 @@ export class GameWorld extends LitElement {
                       @dragend=${this.onItemDragEnd.bind(this)}
                       @click=${canSell ? () => { this.shopSellAny(it, shop); } : undefined}
                     >
-                      ${it.icon ? html`<img class="inv-item-icon" src="/assets/sprites/icons/${it.icon}" alt="">` : ''}
+                      <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
                       <span>${displayName(it)} — <span style="color:#4a7a20">${price} cp</span></span>
                     </div>`;
                 })}
@@ -1771,7 +1771,7 @@ export class GameWorld extends LitElement {
                   @dragend=${this.onItemDragEnd.bind(this)}
                   @click=${() => { this.shopSellAny(it, shop); }}
                 >
-                  ${it.icon ? html`<img class="inv-item-icon" src="/assets/sprites/icons/${it.icon}" alt="">` : ''}
+                  <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
                   <span>${displayName(it)} — <span style="color:#4a7a20">${junkYardPrice(it)} cp</span></span>
                 </div>`)}
           </div>
@@ -1892,7 +1892,7 @@ export class GameWorld extends LitElement {
         ${item ? html`
           <img
             class="equip-slot-icon"
-            src="${item.icon ? `/assets/sprites/icons/${item.icon}` : iconSrc}"
+            src="${item.icon ? resolveItemIcon(item.icon) : iconSrc}"
             alt="${displayName(item)}"
             draggable="true"
             @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'equip', slotKey: key, item }, e); }}
@@ -2541,7 +2541,7 @@ export class GameWorld extends LitElement {
                         @click=${it ? (e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'belt' }; } : undefined}
                       >
                         ${it ? html`
-                          <img class="inv-item-icon" src="/assets/sprites/icons/${it.icon ?? it.kind + '.png'}" alt=""
+                          <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt=""
                             draggable="true"
                             @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'belt', slotIndex, item: it }, e); }}
                             @dragend=${this.onItemDragEnd.bind(this)}
@@ -2574,7 +2574,7 @@ export class GameWorld extends LitElement {
                           @dragend=${this.onItemDragEnd.bind(this)}
                           @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'pack' }; }}
                         >
-                          ${it.icon ? html`<img class="inv-item-icon" src="/assets/sprites/icons/${it.icon}" alt="">` : ''}
+                          <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
                           <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:#a04040">(cursed)</span>` : ''}</span>
                         </div>
                       `)}
@@ -2603,7 +2603,7 @@ export class GameWorld extends LitElement {
                       @dragend=${this.onItemDragEnd.bind(this)}
                       @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'ground' }; }}
                     >
-                      ${it.icon ? html`<img class="inv-item-icon" src="/assets/sprites/icons/${it.icon}" alt="">` : ''}
+                      <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
                       <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}</span>
                     </div>
                   `)}

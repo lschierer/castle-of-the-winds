@@ -301,11 +301,73 @@ const FALLBACK_ICON: Record<string, string> = {
   scroll: 'scroll.png', wand: 'wand.png', container: 'BAG.png', belt: 'belt.png',
 };
 
+/**
+ * Maps hand-drawn fallback icon filenames to extracted CotW sprite IDs.
+ * When an icon filename appears here, the extracted sprite is preferred.
+ */
+const ICON_TO_EXTRACTED: Record<string, number> = {
+  // Armor
+  'armor_r.png':    215,
+  'LARMOR.png':     215,
+  'armor.png':      115,
+  'armor_e2.png':   169,
+  // Shields
+  'lshield.png':    119,
+  'shield.png':     119,
+  'shield_2.png':   239,
+  'shield_b.png':   119,
+  // Helms
+  'helm_b.png':     123,
+  'LHELMET.png':    123,
+  'helmet.png':     123,
+  'helmet_s.png':   125,
+  'helmet_v.png':   207,
+  'helmet_e.png':   209,
+  // Gauntlets
+  'gauntlet.png':   129,
+  'gaunt_p.png':    203,
+  'gaunt_sl.png':   279,
+  // Bracers
+  'bracers.png':    181,
+  'Bracer_e.png':   281,
+  // Boots
+  'boots.png':      185,
+  'BOOtsspd.png':   193,
+  'BOOtslev.png':   187,
+  // Cloaks
+  'cloak.png':      131,
+  'Cloak_e.png':    195,
+  // Weapons
+  'dagger.png':      36,
+  'sword.png':      243,
+  'mace.png':       113,
+  'spear.png':      273,
+  // Coins
+  'copper.png':     325,
+  'silver.png':     325,
+  'gold.png':       323,
+  'platinum.png':   323,
+  // Consumables / misc
+  'potion.png':      93,
+  'scroll.png':      99,
+  'wand.png':       255,
+  'BAG.png':        157,
+  'pile.png':       149,
+  // Rings & amulets
+  'ring.png':       133,
+  'amulet.png':     161,
+};
+
+/** Returns the full icon URL for a named icon file, preferring extracted CotW sprites. */
+export function resolveItemIcon(filename: string): string {
+  const id = ICON_TO_EXTRACTED[filename];
+  return id !== undefined ? `${ICONS}/icon_${id}.png` : `${ICONS}/${filename}`;
+}
+
 function itemIcon(item: Item): string {
   if (item.icon) return item.icon;
   if (item.kind === 'coin' && item.coinKind) return `${item.coinKind}.png`;
   if (item.kind === 'weapon') {
-    // Check weapon spec for type-appropriate icon
     const name = item.name.toLowerCase();
     if (name.includes('staff') || name.includes('spear')) return 'spear.png';
     if (name.includes('mace') || name.includes('hammer') || name.includes('flail') || name.includes('club') || name.includes('star')) return 'mace.png';
@@ -320,16 +382,16 @@ function groundItemIcon(items: Item[]): string | undefined {
   if (items.length === 1) {
     const it = items[0];
     if (!it) return undefined;
-    return `${ICONS}/${itemIcon(it)}`;
+    return resolveItemIcon(itemIcon(it));
   }
   // 2+ items: if all coins, show best denomination
   if (items.every((i) => i.kind === 'coin')) {
     const order: string[] = ['platinum', 'gold', 'silver', 'copper'];
     for (const kind of order) {
-      if (items.some((i) => i.coinKind === kind)) return `${ICONS}/${kind}.png`;
+      if (items.some((i) => i.coinKind === kind)) return resolveItemIcon(`${kind}.png`);
     }
   }
-  return `${ICONS}/pile.png`;
+  return resolveItemIcon('pile.png');
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
