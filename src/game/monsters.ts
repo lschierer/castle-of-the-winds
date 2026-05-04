@@ -1154,3 +1154,22 @@ export function healthDescription(currentHp: number, maxHp: number): string {
   if (pct < 5/6)  return 'barely scratched';
   return 'uninjured';
 }
+
+// ── Binary-data overrides ────────────────────────────────────────────────────
+//
+// Override hp / ac / xp on MONSTERS with the canonical 1993 binary values
+// from CASTLE1.EXE.  See src/game/binary-data/ for the source data and
+// REPORT_PHASE7.md in the reverse-engineering repository for the full
+// extraction methodology.
+//
+// Binary values supersede the tuned values defined above.  Where the binary
+// value is 0 (e.g. some Animals — the HP appears to be computed elsewhere
+// by the engine in those cases), the tuned value is kept as a fallback.
+//
+// This call has a side effect at module load: it mutates the entries of
+// the MONSTERS array.  Because TypeScript's `readonly` on an array only
+// guards against reassignment of the array slot, not against mutation of
+// the elements themselves, the cast inside applyBinaryStatsToMonsters is
+// safe.
+import { applyBinaryStatsToMonsters } from './binary-data/apply-overrides.ts';
+applyBinaryStatsToMonsters(MONSTERS);
