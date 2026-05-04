@@ -462,8 +462,8 @@ const FARM_MAP_SPEC: MapSpec = {
   entryPosition: { x: 11, y: 31 },
 
   layers: [
-    // ── Base: walkable farmland ───────────────────────────────────────────
-    { kind: 'fill', x: 0, y: 0, w: 49, h: 33, terrain: 'farmland', walkable: true },
+    // ── Base: walkable grass ─────────────────────────────────────────────
+    { kind: 'fill', x: 0, y: 0, w: 49, h: 33, terrain: 'grass', walkable: true },
 
     // ── Mountains (north and east edges) ─────────────────────────────────
     // Top band
@@ -475,9 +475,9 @@ const FARM_MAP_SPEC: MapSpec = {
     // Pocket of mountains at road entry from village (left edge)
     { kind: 'fill', x: 0, y: 29, w: 8, h: 4, terrain: 'mountain', walkable: false },
 
-    // ── Impassable grass walls (east, south, left borders) ───────────────
-    { kind: 'fill', x: 0,  y: 7, w: 3,  h: 22, terrain: 'grass', walkable: false },
-    { kind: 'fill', x: 0,  y: 29,w: 8,  h: 4,  terrain: 'grass', walkable: false },
+    // ── Impassable farmland borders ──────────────────────────────────────
+    { kind: 'fill', x: 0,  y: 7, w: 3,  h: 22, terrain: 'farmland', walkable: false },
+    { kind: 'fill', x: 0,  y: 29,w: 8,  h: 4,  terrain: 'farmland', walkable: false },
 
     // ── Mine entrance (x=24, y=1) in the mountains ───────────────────────
     { kind: 'feature', x: 24, y: 1, feature: 'mine-entrance',

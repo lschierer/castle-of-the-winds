@@ -47,28 +47,21 @@ export function overlayBinaryTerrain(
       const t = targetRow[x];
       const b = binRow[x];
       if (!t || !b) continue;
-      // Only override when the binary has real content (terrain != void).
       if (b.terrain === 'void') continue;
-      // Preserve gameplay overlays from the constructive spec.
-      const preservedExit = t.exit;
-      const preservedBuilding = t.building;
-      const preservedBuildingId = t.buildingId;
-      const preservedItems = t.items;
-      // Apply binary terrain.
-      t.terrain = b.terrain;
+      // Preserve spec roads — the binary doesn't encode them.
+      if (t.terrain === 'road') continue;
+      // Preserve spec buildings and interactive tiles.
+      if (t.buildingId || t.exit || t.building) continue;
+      // Skip binary wall/gate/mountain and diagonal-road tiles — they are
+      // offset or context-dependent in the binary data.
+      if (b.feature === 'wall' || b.feature === 'gate') continue;
+      if (b.feature === 'diagonal-road') continue;
+      if (b.terrain === 'mountain') continue;
+      // Don't change terrain type between grass/farmland/mountain — the spec
+      // has the correct layout; the binary's coordinate system doesn't match.
+      if (b.terrain !== t.terrain) continue;
       t.walkable = b.walkable;
       if (b.feature) t.feature = b.feature;
-      // Restore preserved fields.
-      if (preservedExit) t.exit = preservedExit;
-      if (preservedBuilding) t.building = preservedBuilding;
-      if (preservedBuildingId) t.buildingId = preservedBuildingId;
-      t.items = preservedItems;
-      // Where the spec had a door (an exit-like opening), keep walkable=true
-      // even if the binary tile says wall.  This protects the interaction
-      // points the gameplay relies on.
-      if (preservedBuildingId && t.feature === 'wall') {
-        // Keep wall — spec already set walkable=false.
-      }
     }
   }
 
