@@ -194,6 +194,7 @@ function buildingRegionStyle(region: BuildingRegion, x: number, y: number, base:
     backgroundSize: `${sw}px ${sh}px, ${base.backgroundSize}`,
     backgroundPosition: `-${dx * 32 + b}px -${dy * 32 + b}px, ${base.backgroundPosition}`,
     backgroundRepeat: `${REPEAT_NO}, ${base.backgroundRepeat}`,
+    backgroundColor: '#20ff00',
   };
 }
 
