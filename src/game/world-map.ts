@@ -1,13 +1,21 @@
 /**
  * Static world map data.
  *
- * Maps are constructed as typed TileMap grids. The ASCII rows from the
- * original Elm port are converted at module load time — all context-dependent
- * tile interpretation happens here, not at render time.
+ * Maps are defined as declarative layer specs — a sequence of paint operations
+ * applied in order to a blank grid. No ASCII art, no character lookup table.
+ *
+ * Layer kinds (applied top-to-bottom, later layers win):
+ *   fill     — fill a rectangle with terrain
+ *   road     — draw a horizontal or vertical road segment
+ *   building — place a multi-tile building with doors and sprite
+ *   feature  — set a single tile's feature/terrain
+ *   exit     — attach an exit to a tile
  */
 
 import {
   type Tile,
+  type Terrain,
+  type Feature,
   type TileMap,
   type MapId,
   type Vec2,
@@ -36,19 +44,7 @@ export {
   hasLineOfSight,
 } from './tile-map.ts';
 
-// ── Signpost positions (village only) ─────────────────────────────────────────
-
-const SIGNPOST_POSITIONS = new Set([
-  '7,7',    // Junk Yard
-  '14,6',   // Farm House
-  '10,13',  // Kael's Scrolls
-  '12,12',  // Barg's House
-  '10,18',  // Weaponsmith
-  '12,18',  // General Store
-  '12,21',  // Temple of Odin
-]);
-
-// ── Building region metadata (for sprite rendering) ───────────────────────────
+// ── Building region metadata (consumed by sprites.ts) ─────────────────────────
 
 export interface BuildingRegion {
   id: string;
@@ -62,88 +58,188 @@ export interface BuildingRegion {
 
 const BITMAPS = '/assets/sprites/bitmaps';
 
-export const VILLAGE_BUILDING_REGIONS: BuildingRegion[] = [
-  { id: 'junkyard',      originX: 3,  originY: 6,  cols: 3, rows: 3, sprite: `${BITMAPS}/bldhchrt.png` },
-  { id: 'farmhouse-r',   originX: 16, originY: 5,  cols: 3, rows: 3, sprite: `${BITMAPS}/bldhchlf.png` },
-  { id: 'kael',          originX: 7,  originY: 13, cols: 2, rows: 2, sprite: `${BITMAPS}/bldrdhur.png` },
-  { id: 'barg',          originX: 14, originY: 12, cols: 3, rows: 3, sprite: `${BITMAPS}/bldhchlf.png` },
-  { id: 'weaponsmith',   originX: 6,  originY: 17, cols: 3, rows: 3, sprite: `${BITMAPS}/bldhchrt.png` },
-  { id: 'general-store', originX: 14, originY: 17, cols: 3, rows: 3, sprite: `${BITMAPS}/bldhchlf.png` },
-  { id: 'temple',        originX: 9,  originY: 22, cols: 5, rows: 5, sprite: `${BITMAPS}/blrto.png`, borderPx: 2 },
-  { id: 'gate',          originX: 10, originY: 0,  cols: 3, rows: 1, sprite: `${BITMAPS}/hamgate.png` },
-];
+export const ALL_BUILDING_REGIONS: Record<string, BuildingRegion[]> = {};
 
-export const FARM_BUILDING_REGIONS: BuildingRegion[] = [
-  { id: 'burnt-farm',    originX: 41, originY: 23, cols: 3, rows: 3, sprite: `${BITMAPS}/bldbrnrt.png` },
-  { id: 'village-gate',  originX: 10, originY: 32, cols: 3, rows: 1, sprite: `${BITMAPS}/hamgate.png` },
-];
+// ── Map layer types ───────────────────────────────────────────────────────────
 
-export const ALL_BUILDING_REGIONS: Record<MapId, BuildingRegion[]> = {
-  'village': VILLAGE_BUILDING_REGIONS,
-  'farm-map': FARM_BUILDING_REGIONS,
-  'dungeon-1': [],
-};
-
-// ── Hamlet destruction ────────────────────────────────────────────────────────
-
-const BURNT_VILLAGE_BUILDING_REGIONS: BuildingRegion[] = [
-  { id: 'junkyard',      originX: 3,  originY: 6,  cols: 3, rows: 3, sprite: `${BITMAPS}/bldbrnrt.png` },
-  { id: 'farmhouse-r',   originX: 16, originY: 5,  cols: 3, rows: 3, sprite: `${BITMAPS}/bldbrnlf.png` },
-  { id: 'kael',          originX: 7,  originY: 13, cols: 2, rows: 2, sprite: `${BITMAPS}/bldbrnrt.png` },
-  { id: 'barg',          originX: 14, originY: 12, cols: 3, rows: 3, sprite: `${BITMAPS}/bldbrnlf.png` },
-  { id: 'weaponsmith',   originX: 6,  originY: 17, cols: 3, rows: 3, sprite: `${BITMAPS}/bldbrnrt.png` },
-  { id: 'general-store', originX: 14, originY: 17, cols: 3, rows: 3, sprite: `${BITMAPS}/bldbrnlf.png` },
-  { id: 'temple',        originX: 9,  originY: 22, cols: 5, rows: 5, sprite: `${BITMAPS}/bldbrnrt.png` },
-  { id: 'gate',          originX: 10, originY: 0,  cols: 3, rows: 1, sprite: `${BITMAPS}/hamgate.png` },
-];
-
-/**
- * Mutate the village map in-place to show burnt ruins.
- * Swaps building region sprites and disables all building doors.
- */
-export function destroyHamlet(): void {
-  ALL_BUILDING_REGIONS['village'] = BURNT_VILLAGE_BUILDING_REGIONS;
-
-  for (let y = 0; y < VILLAGE_MAP.height; y++) {
-    const row = VILLAGE_MAP.tiles[y];
-    if (!row) continue;
-    for (let x = 0; x < VILLAGE_MAP.width; x++) {
-      const tile = row[x];
-      if (!tile) continue;
-      // Disable building doors — make them non-walkable and remove building data
-      if (tile.feature === 'door' && tile.building) {
-        tile.walkable = false;
-        delete tile.building;
-        tile.feature = 'wall';
-      }
-      // Clear any ground items left in the village (they burned)
-      if (tile.items.length > 0) tile.items.length = 0;
-    }
-  }
+interface FillLayer {
+  kind: 'fill';
+  x: number; y: number; w: number; h: number;
+  terrain: Terrain;
+  walkable: boolean;
 }
 
-function findBuildingRegion(regions: BuildingRegion[], x: number, y: number): BuildingRegion | undefined {
-  return regions.find(
-    (b) => x >= b.originX && x < b.originX + b.cols &&
-           y >= b.originY && y < b.originY + b.rows,
+interface RoadLayer {
+  kind: 'road';
+  /** Must be axis-aligned: either x1===x2 (vertical) or y1===y2 (horizontal). */
+  x1: number; y1: number; x2: number; y2: number;
+}
+
+interface BuildingDoor {
+  x: number;
+  y: number;
+  /** Interactive building info attached to this door tile. */
+  info?: Building;
+}
+
+interface BuildingLayer {
+  kind: 'building';
+  id: string;
+  x: number; y: number; cols: number; rows: number;
+  sprite: string;
+  borderPx?: number;
+  doors: BuildingDoor[];
+}
+
+interface FeatureLayer {
+  kind: 'feature';
+  x: number; y: number;
+  terrain?: Terrain;
+  walkable?: boolean;
+  feature: Feature;
+  direction?: Direction;
+  buildingId?: string;
+}
+
+interface ExitLayer {
+  kind: 'exit';
+  x: number; y: number;
+  exit: MapExit;
+}
+
+type MapLayer = FillLayer | RoadLayer | BuildingLayer | FeatureLayer | ExitLayer;
+
+interface MapSpec {
+  id: MapId;
+  width: number;
+  height: number;
+  entryPosition: Vec2;
+  layers: MapLayer[];
+  /** Positions (as "x,y") that get a sign feature. */
+  signposts?: string[];
+}
+
+// ── Builder ───────────────────────────────────────────────────────────────────
+
+function buildMap(spec: MapSpec): TileMap {
+  const tiles: Tile[][] = Array.from({ length: spec.height }, () =>
+    Array.from({ length: spec.width }, (): Tile => ({
+      terrain: 'void', walkable: false, items: [],
+    }))
   );
+
+  const set = (x: number, y: number, patch: Partial<Tile>) => {
+    const t = tiles[y]?.[x];
+    if (t) Object.assign(t, patch);
+  };
+
+  const regions: BuildingRegion[] = [];
+
+  for (const layer of spec.layers) {
+    switch (layer.kind) {
+
+      case 'fill': {
+        for (let dy = 0; dy < layer.h; dy++)
+          for (let dx = 0; dx < layer.w; dx++)
+            set(layer.x + dx, layer.y + dy, { terrain: layer.terrain, walkable: layer.walkable });
+        break;
+      }
+
+      case 'road': {
+        const [x1, x2] = [Math.min(layer.x1, layer.x2), Math.max(layer.x1, layer.x2)];
+        const [y1, y2] = [Math.min(layer.y1, layer.y2), Math.max(layer.y1, layer.y2)];
+        for (let y = y1; y <= y2; y++)
+          for (let x = x1; x <= x2; x++) {
+            const rt = tiles[y]?.[x];
+            if (rt) { rt.terrain = 'road'; rt.walkable = true; delete rt.feature; }
+          }
+        break;
+      }
+
+      case 'building': {
+        regions.push({
+          id: layer.id,
+          originX: layer.x, originY: layer.y,
+          cols: layer.cols, rows: layer.rows,
+          sprite: layer.sprite,
+          ...(layer.borderPx !== undefined && { borderPx: layer.borderPx }),
+        });
+        // Fill footprint with wall tiles
+        for (let dy = 0; dy < layer.rows; dy++)
+          for (let dx = 0; dx < layer.cols; dx++)
+            set(layer.x + dx, layer.y + dy, {
+              terrain: 'grass', walkable: false, feature: 'wall', buildingId: layer.id,
+            });
+        // Place doors
+        for (const door of layer.doors) {
+          const dt = tiles[door.y]?.[door.x];
+          if (dt) {
+            dt.terrain = 'road'; dt.walkable = true; dt.feature = 'door';
+            delete dt.buildingId;
+            if (door.info) dt.building = door.info;
+          }
+        }
+        break;
+      }
+
+      case 'feature': {
+        const patch: Partial<Tile> = { feature: layer.feature };
+        if (layer.terrain !== undefined) patch.terrain = layer.terrain;
+        if (layer.walkable !== undefined) patch.walkable = layer.walkable;
+        if (layer.direction !== undefined) patch.direction = layer.direction;
+        if (layer.buildingId !== undefined) patch.buildingId = layer.buildingId;
+        set(layer.x, layer.y, patch);
+        break;
+      }
+
+      case 'exit': {
+        set(layer.x, layer.y, { exit: layer.exit });
+        break;
+      }
+    }
+  }
+
+  // Signposts
+  for (const key of spec.signposts ?? []) {
+    const parts = key.split(',');
+    const sx = parseInt(parts[0] ?? '0', 10);
+    const sy = parseInt(parts[1] ?? '0', 10);
+    set(sx, sy, { feature: 'sign' });
+  }
+
+  // Detect mountain directions (requires full grid to be painted first)
+  for (let y = 0; y < spec.height; y++) {
+    for (let x = 0; x < spec.width; x++) {
+      const t = tiles[y]?.[x];
+      if (t?.terrain === 'mountain' && !t.direction) {
+        t.direction = detectMountainDir(tiles, x, y);
+      }
+    }
+  }
+
+  ALL_BUILDING_REGIONS[spec.id] = regions;
+  return { id: spec.id, width: spec.width, height: spec.height, tiles, entryPosition: spec.entryPosition };
+}
+
+function detectMountainDir(tiles: Tile[][], x: number, y: number): Direction {
+  const isMtn = (tx: number, ty: number) => tiles[ty]?.[tx]?.terrain === 'mountain';
+  const mN = isMtn(x, y - 1), mS = isMtn(x, y + 1), mE = isMtn(x + 1, y), mW = isMtn(x - 1, y);
+  if (!mN) { if (!mW) return 'NW'; if (!mE) return 'NE'; return 'N'; }
+  if (!mS) { if (!mW) return 'SW'; if (!mE) return 'SE'; return 'S'; }
+  if (!mW) return 'W';
+  if (!mE) return 'E';
+  return 'N';
 }
 
 // ── Story text ────────────────────────────────────────────────────────────────
 
-export interface StorySegment {
-  id: string;
-  title: string;
-  text: string;
-}
-
+export interface StorySegment { id: string; title: string; text: string; }
 export const STORY_SEGMENTS: Record<string, StorySegment> = {};
 function reg(id: string, title: string, text: string): string {
   STORY_SEGMENTS[id] = { id, title, text };
   return text;
 }
 
-/** Text shown when the player reads the Scrap of Parchment found on mine floor 4. */
 export const PARCHMENT_TEXT = reg('parchment', 'A Scrap of Parchment',
   'You examine the scrap of paper carefully, which turns ' +
   'out to be part of a message in a strange blood red script. ' +
@@ -159,7 +255,6 @@ export const PARCHMENT_TEXT = reg('parchment', 'A Scrap of Parchment',
   'ground.  Your stomach feels a bit queasy with worry, ' +
   'and you think maybe you should head back to the hamlet.');
 
-/** Narrative shown when the player enters the hamlet after reading the parchment. */
 export const HAMLET_DESTROYED_NARRATIVE = reg('hamlet-destroyed', 'The Hamlet Burns',
   'You are almost home.  Ahead of you, the path winds another half ' +
   'mile around the hills north of the hamlet.  Your pack rests heavily ' +
@@ -214,415 +309,257 @@ export const FARM_NARRATIVE = reg('farm-ruins', 'The Ruined Farm',
   'You look north, wondering:  Where might the amulet be by now?  To whom ' +
   'must you prove yourself, and how?');
 
-// ── Raw ASCII rows ────────────────────────────────────────────────────────────
+// ── Hamlet destruction ────────────────────────────────────────────────────────
 
-const VILLAGE_ROWS: string[] = [
-  '========,,###,,,========',
-  '========,,,.,,,,========',
-  '========,,,.,,,,========',
-  '========,,,.,,,,========',
-  '========,,,.,,,,========',
-  '===,,,,,;...,,,,###=====',
-  '===###.;.;,.,,;!###=====',
-  '===###!.;,,.,;.;###=====',
-  '===###,,,,,...;,,,,,,===',
-  '===,,,,,,,,.,,,,,,,,,===',
-  '====,,,,,,,.,,,,,,,,,===',
-  '====,,,,,,,.,,,,,,,,,===',
-  '====,,,,,,,.,!###,,,,===',
-  '====,,,##!....###,,,,===',
-  '====,,,##,,.,,###,,,,===',
-  '====,,,,,,,.,,,,,,,,,===',
-  '====,,,,,,,.,,,,,,,,,===',
-  '====,,###.....###,======',
-  '====,,###!.w.!###,======',
-  '====,,###,...,###,======',
-  '====,,,,,,,.,,,,,,======',
-  '====,,,,,,,!,,,,,,======',
-  '======,,,#####,=========',
-  '======,,,#####,=========',
-  '======,,,#####,=========',
-  '======,,,#####,=========',
-  '======,,,#####,=========',
-  '========================',
-];
+const BURNT_SPRITES: Record<string, string> = {
+  junkyard:       `${BITMAPS}/bldbrnrt.png`,
+  'farmhouse-r':  `${BITMAPS}/bldbrnlf.png`,
+  kael:           `${BITMAPS}/bldbrnrt.png`,
+  barg:           `${BITMAPS}/bldbrnlf.png`,
+  weaponsmith:    `${BITMAPS}/bldbrnrt.png`,
+  'general-store':`${BITMAPS}/bldbrnlf.png`,
+  temple:         `${BITMAPS}/bldbrnrt.png`,
+  gate:           `${BITMAPS}/hamgate.png`,
+};
 
-const FARM_MAP_ROWS: string[] = [
-  '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^^^^^#^^^^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^^^^^.^^^^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^^^^^.,,,^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^^^,,.,,,,,^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^,,,,,,,.,,,,,,^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^,,,,,,,,.,,,,,,,,,^^^^^^^^^^^^^^^',
-  ',,,,,,,,,,,,,,,,,,,,,,,,.,,,,,,,,,,,,,,,,,,,,,,,,',
-  ',,,,,,,,,,,,,,,,,,,,,,,,.,,,,,,,,,,,,,,,,,,,,,,,,',
-  ',,,,,,,,,,,,,,,,,,,,,,,,.,,,,,,,,,,,,,,,,,,,,,,,,',
-  ',,,,,,,,,,,,,,,,,,,,,,,,.,,,,,,,,,,,,,,,,,,,,,,,,',
-  ',,,,,,,,,,,,,,,,,,,,,,,,.,,,,,,,,,,,,,,,,,,,,,,,,',
-  ',,,,,,,,,,,,,,,,,,,,,,,,.,,,,,,,,,,,,,,,,,,,,,,,,',
-  ',,,,,,,,,,,,,,,,,,,,,,,,.,,,,,,,,,,,,,,,,,,,,,,,,',
-  ',,,,,,,,,,,,,,,,,,,,,,,,.,,,,,,,,,,,,,,,,,,,,,,,,',
-  '.................................................',
-  '.................................................',
-  ',,,,,,,,,,,,,,,,,,,,,,,..;,,,,,,,,,,,,,,,,,,,,,,,',
-  ',,,,,,,,,,,,,,,,,,,,,,;.;,,,,,,,,,,,,,,,,,,,,,,,',
-  ',,,,,,,,,,,,,,,,,,,,,;.;,,,,,,,,,,,,,,,,,,,,,,,,=',
-  ',,,,,,,,,,,,,,,,,,,,;.;,,,,,,,,,,,,,,,,,,,,,,,,,=',
-  ',,,,,,,,,,,,,,,,,,,;.;,,,,,,,,,,,,,,,,,,,,,,,,,,=',
-  ',,,,,,,,,,,,,,,,,,;.;,,,,,,,,,,,,,,,,,,,,,,,,,,,=',
-  ',,,,,,,,,,,,,,,,,;.;,,,,,,,,,,,,,,,,,,,,,###,,,,=',
-  ',,,,,,,,,,,,,,,,;........................###,,,,=',
-  ',,,,,,,,,,,,,,,;.;,,,,,,,,,,,,,,,,,,,,,,,###,,,,=',
-  ',,,,,,,,,,,,,,;.;,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,=',
-  ',,,,,,,,,,,,,;.;,,,,,,,,,,,,,,,,,,,,,,,,,,=======',
-  ',,,,,,,,,,,,;.;,,,,,,,,,,,,,,,,,,,,,,,,,,,=======',
-  '========,,,;.;,,,,,,,,,,,,,,,,,,,,,,,,,,,,=======',
-  '========,,,.;,,,,,,,,,,,,,,,,,,,,,,,,,,,,,=======',
-  '========,,,.,,,,,=======,,,,,,,,,,,,,,,,,,=======',
-  '========,,###,,,,=======,,,,,,,,,,,,,,,,,,,,,,,,',
-];
-
-const DUNGEON_1_ROWS: string[] = [
-  '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^dooo^^ood^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^doooooddooo^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^doddoooooooo^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^dod^^oooo^ooo^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^od^^^oooo^ooo^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^o^^^^dooo^ooo^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^o^^^^^dod^dod^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^od^^^^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^dod^^^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^dod^^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^do^^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^o^^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^od^^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^dod^^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^dod^^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^dod^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^^do^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^dood^^^^^^o^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^ooood^^^^^o^^^^^^^^^^doood^^^',
-  '^^^^^^^^^^^^oooooo^^^^o^^^^^^^^^^ooooo^^^',
-  '^^^^^^^^^^^^dooooo^^^^o^^^^^^^^^^ooooo^^^',
-  '^^^^^^^^^^^^^o^^^^^^^^o^^^^^^^^^dooooo^^^',
-  '^^^^^^^^^^^^^o^^^^^^^^o^^^^^dooooooooo^^^',
-  '^^^^^^^^^^^^^o^^^^^^^^o^^^^dod^^^doooo^^^',
-  '^^^^^^^^^^^^^od^^^^^^^od^^dod^^^^^^^oo^^^',
-  '^^^^^^^^^^^^^dod^^^^^^doddod^^^^^^^ood^^^',
-  '^^^^^^^^^^^^^^dod^^^^^^dood^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^do^^^^^^^o^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^od^^^^^^o^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^dod^^^^^o^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^dod^^^do^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^dod^^od^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^doddo^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^dood^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^^do^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^^^o^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^^^o^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^^^o^^^^^^^^^^^^^^^^^^',
-  '^^^^^^^^^^^^^^^^^^^^^^.^^^^^^^^^^^^^^^^^^',
-];
-
-// ── Exits ─────────────────────────────────────────────────────────────────────
-
-function clusterExits(
-  cols: number[],
-  rows: number[],
-  partial: Omit<MapExit, 'position'>,
-): MapExit[] {
-  const exits: MapExit[] = [];
-  for (const y of rows) {
-    for (const x of cols) {
-      exits.push({ position: { x, y }, ...partial });
+export function destroyHamlet(): void {
+  const regions = ALL_BUILDING_REGIONS['village'] ?? [];
+  for (const r of regions) {
+    const s = BURNT_SPRITES[r.id];
+    if (s) r.sprite = s;
+  }
+  // Seal all doors
+  for (let y = 0; y < VILLAGE_MAP.height; y++) {
+    for (let x = 0; x < VILLAGE_MAP.width; x++) {
+      const t = VILLAGE_MAP.tiles[y]?.[x];
+      if (!t) continue;
+      if (t.feature === 'door' && t.building) {
+        t.walkable = false;
+        delete t.building;
+        t.feature = 'wall';
+      }
+      if (t.items.length > 0) t.items.length = 0;
     }
   }
-  return exits;
 }
 
-const VILLAGE_EXITS: MapExit[] = [
-  { position: { x: 10, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' },
-  { position: { x: 11, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' },
-  { position: { x: 12, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' },
-];
+// ── Village (Hamlet) map ──────────────────────────────────────────────────────
+//
+// Layout (24 × 28 tiles, origin top-left):
+//
+//   Gate:          x=10–12, y=0   (3×1)
+//   Main N–S road: x=11,    y=1–21
+//   Junkyard:      x=3–5,   y=6–8   (3×3), door E at x=6, y=7
+//   Farmhouse:     x=16–18, y=5–7  (3×3), door W at x=15, y=6
+//   Kael's:        x=7–8,   y=13–14 (2×2), door E at x=9, y=13
+//   Barg's:        x=14–16, y=12–14 (3×3), door W at x=13, y=13
+//   Weaponsmith:   x=6–8,   y=17–19 (3×3), door E at x=9, y=18
+//   General Store: x=14–16, y=17–19 (3×3), door W at x=13, y=18
+//   Temple:        x=9–13,  y=22–26 (5×5), door N at x=11, y=21
+//   Well:          x=11, y=18 (on main road)
 
-const FARM_EXITS: MapExit[] = [
-  ...clusterExits([10, 11, 12], [32], {
-    targetMap: 'village',
-    targetPosition: { x: 11, y: 1 },
-    message: 'You enter the village.',
-  }),
-  {
-    position: { x: 24, y: 1 },
-    targetMap: 'dungeon-1',
-    targetPosition: { x: 22, y: 39 },
-    message: 'You descend into the darkness of the mine…',
-  },
-  ...clusterExits([41, 42, 43], [23, 24, 25], {
-    narrative: FARM_NARRATIVE,
-  }),
-];
+const VILLAGE_SPEC: MapSpec = {
+  id: 'village',
+  width: 24,
+  height: 28,
+  entryPosition: { x: 11, y: 18 },
+  signposts: ['7,7', '14,6', '10,13', '12,12', '10,18', '12,18', '12,21'],
 
-const DUNGEON_1_EXITS: MapExit[] = [
-  {
-    position: { x: 22, y: 40 },
-    targetMap: 'farm-map',
-    targetPosition: { x: 24, y: 2 },
-    message: 'You emerge from the mine into daylight.',
-  },
-];
+  layers: [
+    // ── Base: walkable grass everywhere ──────────────────────────────────
+    { kind: 'fill', x: 0, y: 0, w: 24, h: 28, terrain: 'grass', walkable: true },
 
-// ── Buildings ─────────────────────────────────────────────────────────────────
+    // ── Farmland border (impassable frame around the hamlet) ──────────────
+    // Top strip (above road entrance)
+    { kind: 'fill', x: 0,  y: 0, w: 10, h: 5, terrain: 'farmland', walkable: false },
+    { kind: 'fill', x: 13, y: 0, w: 11, h: 5, terrain: 'farmland', walkable: false },
+    // Left border
+    { kind: 'fill', x: 0,  y: 5, w: 3,  h: 17, terrain: 'farmland', walkable: false },
+    // Right border
+    { kind: 'fill', x: 21, y: 5, w: 3,  h: 17, terrain: 'farmland', walkable: false },
+    // Bottom strip
+    { kind: 'fill', x: 0,  y: 22, w: 9,  h: 6, terrain: 'farmland', walkable: false },
+    { kind: 'fill', x: 14, y: 22, w: 10, h: 6, terrain: 'farmland', walkable: false },
+    { kind: 'fill', x: 0,  y: 27, w: 24, h: 1, terrain: 'farmland', walkable: false },
 
-const VILLAGE_BUILDINGS: Building[] = [
-  { position: { x: 6, y: 7 },  name: 'Junk Yard',       description: "We buy things you don't want." },
-  { position: { x: 15, y: 6 }, name: 'Farm House',       description: 'A locked farmhouse. No one answers.' },
-  { position: { x: 9, y: 13 }, name: "Kael's Scrolls",   description: "Kael's scholarly scrolls and identification services." },
-  { position: { x: 13, y: 12 },name: "Barg's House",     description: 'Private property. No one answers.' },
-  { position: { x: 9, y: 18 }, name: 'Weaponsmith',      description: "If anyone's seen Barg, he still owes me 5 silvers for the daggers!" },
-  { position: { x: 13, y: 18 },name: 'General Store',    description: 'Get ye supplies here, best prices in town!' },
-  { position: { x: 11, y: 21 },name: 'Temple of Odin',   description: 'Wise Old Odin, healer of ailments.' },
-];
+    // ── Roads ─────────────────────────────────────────────────────────────
+    // Main N–S road
+    { kind: 'road', x1: 11, y1: 1, x2: 11, y2: 21 },
+    // Branch to junkyard (door at x=6, y=7)
+    { kind: 'road', x1: 6, y1: 7, x2: 11, y2: 7 },
+    // Branch to farmhouse (door at x=15, y=6)
+    { kind: 'road', x1: 11, y1: 6, x2: 15, y2: 6 },
+    // Branch to Kael's (door at x=9, y=13)
+    { kind: 'road', x1: 9, y1: 13, x2: 11, y2: 13 },
+    // Branch to Barg's (door at x=13, y=13)
+    { kind: 'road', x1: 11, y1: 13, x2: 13, y2: 13 },
+    // Branch to weaponsmith (door at x=9, y=18)
+    { kind: 'road', x1: 9, y1: 18, x2: 11, y2: 18 },
+    // Branch to general store (door at x=13, y=18)
+    { kind: 'road', x1: 11, y1: 18, x2: 13, y2: 18 },
 
-// ── Dungeon wall direction detection ──────────────────────────────────────────
+    // ── Gate (3×1, top of map) ────────────────────────────────────────────
+    { kind: 'building', id: 'gate', x: 10, y: 0, cols: 3, rows: 1,
+      sprite: `${BITMAPS}/hamgate.png`,
+      doors: [] },
+    // Gate exits — the three gate tiles are all exits to farm-map
+    { kind: 'exit', x: 10, y: 0, exit: { position: { x: 10, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' } },
+    { kind: 'exit', x: 11, y: 0, exit: { position: { x: 11, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' } },
+    { kind: 'exit', x: 12, y: 0, exit: { position: { x: 12, y: 0 }, targetMap: 'farm-map', targetPosition: { x: 11, y: 31 }, message: 'You leave the village.' } },
 
-function detectDungeonWallDirection(rows: string[], x: number, y: number): Direction {
-  const ch = (tx: number, ty: number): string => rows[ty]?.[tx] ?? '^';
-  const isFloor = (tx: number, ty: number): boolean => { const c = ch(tx, ty); return c === 'o' || c === '.'; };
-  const isWall = (tx: number, ty: number): boolean => ch(tx, ty) === 'd';
+    // ── Buildings ─────────────────────────────────────────────────────────
+    { kind: 'building', id: 'junkyard', x: 3, y: 6, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchrt.png`,
+      doors: [{ x: 6, y: 7, info: { position: { x: 6, y: 7 }, name: 'Junk Yard', description: "We buy things you don't want." } }] },
 
-  const oN = isFloor(x, y - 1), oS = isFloor(x, y + 1), oE = isFloor(x + 1, y), oW = isFloor(x - 1, y);
-  const wN = isWall(x, y - 1), wS = isWall(x, y + 1), wE = isWall(x + 1, y), wW = isWall(x - 1, y);
+    { kind: 'building', id: 'farmhouse-r', x: 16, y: 5, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchlf.png`,
+      doors: [{ x: 15, y: 6, info: { position: { x: 15, y: 6 }, name: 'Farm House', description: 'A locked farmhouse. No one answers.' } }] },
 
-  if (oN && oE && wS && wW) return 'NE';
-  if (oN && oW && wS && wE) return 'NW';
-  if (oS && oE && wN && wW) return 'SE';
-  if (oS && oW && wN && wE) return 'SW';
-  if (oN && oE) return 'NE';
-  if (oN && oW) return 'NW';
-  if (oS && oE) return 'SE';
-  if (oS && oW) return 'SW';
-  if (oN) return 'NE';
-  if (oS) return 'SW';
-  if (oE) return 'NE';
-  if (oW) return 'NW';
-  return 'NW';
-}
+    { kind: 'building', id: 'kael', x: 7, y: 13, cols: 2, rows: 2,
+      sprite: `${BITMAPS}/bldrdhur.png`,
+      doors: [{ x: 9, y: 13, info: { position: { x: 9, y: 13 }, name: "Kael's Scrolls", description: "Kael's scholarly scrolls and identification services." } }] },
 
-// ── Mountain edge direction detection ─────────────────────────────────────────
+    { kind: 'building', id: 'barg', x: 14, y: 12, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchlf.png`,
+      doors: [{ x: 13, y: 13, info: { position: { x: 13, y: 13 }, name: "Barg's House", description: 'Private property. No one answers.' } }] },
 
-function detectMountainDirection(rows: string[], x: number, y: number): Direction {
-  const isMtn = (tx: number, ty: number): boolean => (rows[ty]?.[tx] ?? '') === '^';
-  const mN = isMtn(x, y - 1), mS = isMtn(x, y + 1), mE = isMtn(x + 1, y), mW = isMtn(x - 1, y);
+    { kind: 'building', id: 'weaponsmith', x: 6, y: 17, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchrt.png`,
+      doors: [{ x: 9, y: 18, info: { position: { x: 9, y: 18 }, name: 'Weaponsmith', description: "If anyone's seen Barg, he still owes me 5 silvers for the daggers!" } }] },
 
-  if (!mN) {
-    if (!mW) return 'NW';
-    if (!mE) return 'NE';
-    return 'N';
-  }
-  if (!mS) {
-    if (!mW) return 'SW';
-    if (!mE) return 'SE';
-    return 'S';
-  }
-  if (!mW) return 'W';
-  if (!mE) return 'E';
-  return 'N'; // deep interior
-}
+    { kind: 'building', id: 'general-store', x: 14, y: 17, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchlf.png`,
+      doors: [{ x: 13, y: 18, info: { position: { x: 13, y: 18 }, name: 'General Store', description: 'Get ye supplies here, best prices in town!' } }] },
 
-// ── ASCII → TileMap converter ─────────────────────────────────────────────────
+    { kind: 'building', id: 'temple', x: 9, y: 22, cols: 5, rows: 5,
+      sprite: `${BITMAPS}/blrto.png`, borderPx: 2,
+      doors: [{ x: 11, y: 21, info: { position: { x: 11, y: 21 }, name: 'Temple of Odin', description: 'Wise Old Odin, healer of ailments.' } }] },
 
-function convertMap(
-  id: MapId,
-  rows: string[],
-  exits: MapExit[],
-  buildings: Building[],
-  buildingRegions: BuildingRegion[],
-  entryPosition: Vec2,
-): TileMap {
-  const height = rows.length;
-  const width = Math.max(...rows.map((r) => r.length));
+    // ── Well ──────────────────────────────────────────────────────────────
+    { kind: 'feature', x: 11, y: 18, feature: 'well', terrain: 'grass', walkable: true },
+  ],
+};
 
-  // Index exits and buildings by position for O(1) lookup
-  const exitIndex = new Map<string, MapExit>();
-  for (const e of exits) exitIndex.set(`${e.position.x},${e.position.y}`, e);
-  const buildingIndex = new Map<string, Building>();
-  for (const b of buildings) buildingIndex.set(`${b.position.x},${b.position.y}`, b);
+// ── Farm map ──────────────────────────────────────────────────────────────────
+//
+// The farm map connects the mine entrance (mountains, upper right) to the
+// hamlet gate (lower left) via a long diagonal road that stair-steps NW–SE.
+// The ruined farm is in the lower right quadrant.
+//
+// Layout (49 × 33 tiles):
+//   Mountains:      north edge and right side
+//   Mine entrance:  x=24, y=1 (in the mountains)
+//   Diagonal road:  stair-steps from mine exit (x=24, y=2) to hamlet gate area
+//   Hamlet gate:    x=10–12, y=32  (3×1)
+//   Farmland:       broad central band, left/south areas
+//   Ruined farm:    x=41–43, y=23–25
 
-  const tiles: Tile[][] = [];
+const FARM_MAP_SPEC: MapSpec = {
+  id: 'farm-map',
+  width: 49,
+  height: 33,
+  entryPosition: { x: 11, y: 31 },
 
-  for (let y = 0; y < height; y++) {
-    const row: Tile[] = [];
-    for (let x = 0; x < width; x++) {
-      const c = rows[y]?.[x] ?? '';
-      const key = `${x},${y}`;
-      const exit = exitIndex.get(key);
-      const building = buildingIndex.get(key);
-      const region = findBuildingRegion(buildingRegions, x, y);
+  layers: [
+    // ── Base: walkable farmland ───────────────────────────────────────────
+    { kind: 'fill', x: 0, y: 0, w: 49, h: 33, terrain: 'farmland', walkable: true },
 
-      const tile = charToTile(id, c, x, y, rows, exit, region);
-      tile.items = [];
-      if (building) tile.building = building;
-      if (exit) tile.exit = exit;
+    // ── Mountains (north and east edges) ─────────────────────────────────
+    // Top band
+    { kind: 'fill', x: 0,  y: 0, w: 49, h: 7,  terrain: 'mountain', walkable: false },
+    // Right edge taper
+    { kind: 'fill', x: 46, y: 7, w: 3,  h: 4,  terrain: 'mountain', walkable: false },
+    { kind: 'fill', x: 47, y: 11,w: 2,  h: 5,  terrain: 'mountain', walkable: false },
+    { kind: 'fill', x: 48, y: 16,w: 1,  h: 5,  terrain: 'mountain', walkable: false },
+    // Pocket of mountains at road entry from village (left edge)
+    { kind: 'fill', x: 0, y: 29, w: 8, h: 4, terrain: 'mountain', walkable: false },
 
-      // Signposts in village
-      if (id === 'village' && SIGNPOST_POSITIONS.has(key)) {
-        tile.feature = 'sign';
-      }
+    // ── Impassable grass walls (east, south, left borders) ───────────────
+    { kind: 'fill', x: 0,  y: 7, w: 3,  h: 22, terrain: 'grass', walkable: false },
+    { kind: 'fill', x: 0,  y: 29,w: 8,  h: 4,  terrain: 'grass', walkable: false },
 
-      row.push(tile);
-    }
-    tiles.push(row);
-  }
+    // ── Mine entrance (x=24, y=1) in the mountains ───────────────────────
+    { kind: 'feature', x: 24, y: 1, feature: 'mine-entrance',
+      terrain: 'mountain', walkable: true },
 
-  return { id, width, height, tiles, entryPosition };
-}
+    // ── Road from mine exit southward then diagonally SW to hamlet gate ───
+    // Short vertical stretch from mine (y=2–7)
+    { kind: 'road', x1: 24, y1: 2, x2: 24, y2: 7 },
+    // Long horizontal stretch (y=15–16, full width to connect diagonal)
+    { kind: 'road', x1: 0, y1: 15, x2: 48, y2: 15 },
+    { kind: 'road', x1: 0, y1: 16, x2: 48, y2: 16 },
+    // Diagonal stair-step from mine road (x=24, y=7) down to hamlet area:
+    // Each step goes one left, one down
+    { kind: 'road', x1: 23, y1: 8,  x2: 24, y2: 8  },
+    { kind: 'road', x1: 22, y1: 9,  x2: 23, y2: 9  },
+    { kind: 'road', x1: 21, y1: 10, x2: 22, y2: 10 },
+    { kind: 'road', x1: 20, y1: 11, x2: 21, y2: 11 },
+    { kind: 'road', x1: 19, y1: 12, x2: 20, y2: 12 },
+    { kind: 'road', x1: 18, y1: 13, x2: 19, y2: 13 },
+    { kind: 'road', x1: 17, y1: 14, x2: 18, y2: 14 },
+    // Continue diagonally below the horizontal road (y=17–30)
+    { kind: 'road', x1: 15, y1: 17, x2: 16, y2: 17 },
+    { kind: 'road', x1: 14, y1: 18, x2: 15, y2: 18 },
+    { kind: 'road', x1: 13, y1: 19, x2: 14, y2: 19 },
+    { kind: 'road', x1: 12, y1: 20, x2: 13, y2: 20 },
+    { kind: 'road', x1: 11, y1: 21, x2: 12, y2: 21 },
+    { kind: 'road', x1: 10, y1: 22, x2: 11, y2: 22 },
+    { kind: 'road', x1: 11, y1: 23, x2: 24, y2: 23 },  // horizontal to ruined farm area
+    { kind: 'road', x1: 9,  y1: 24, x2: 10, y2: 24 },
+    { kind: 'road', x1: 8,  y1: 25, x2: 9,  y2: 25 },
+    { kind: 'road', x1: 8,  y1: 26, x2: 24, y2: 26 },  // horizontal branch
+    { kind: 'road', x1: 8,  y1: 27, x2: 9,  y2: 27 },
+    { kind: 'road', x1: 9,  y1: 28, x2: 10, y2: 28 },
+    { kind: 'road', x1: 10, y1: 29, x2: 11, y2: 29 },
+    { kind: 'road', x1: 11, y1: 30, x2: 12, y2: 30 },
+    // Final approach to hamlet gate (x=10–12, y=31–32)
+    { kind: 'road', x1: 10, y1: 31, x2: 12, y2: 31 },
 
-function charToTile(
-  mapId: MapId,
-  c: string,
-  x: number,
-  y: number,
-  rows: string[],
-  exit: MapExit | undefined,
-  region: BuildingRegion | undefined,
-): Tile {
-  switch (c) {
-    case ',':
-      return { terrain: 'grass', walkable: true, items: [] };
+    // ── Hamlet gate (3×1 at bottom) ───────────────────────────────────────
+    { kind: 'building', id: 'village-gate', x: 10, y: 32, cols: 3, rows: 1,
+      sprite: `${BITMAPS}/hamgate.png`,
+      doors: [] },
+    { kind: 'exit', x: 10, y: 32, exit: { position: { x: 10, y: 32 }, targetMap: 'village', targetPosition: { x: 11, y: 1 }, message: 'You enter the village.' } },
+    { kind: 'exit', x: 11, y: 32, exit: { position: { x: 11, y: 32 }, targetMap: 'village', targetPosition: { x: 11, y: 1 }, message: 'You enter the village.' } },
+    { kind: 'exit', x: 12, y: 32, exit: { position: { x: 12, y: 32 }, targetMap: 'village', targetPosition: { x: 11, y: 1 }, message: 'You enter the village.' } },
 
-    case '.':
-      return { terrain: 'road', walkable: true, items: [] };
+    // ── Mine exit on farm-map surface ────────────────────────────────────
+    { kind: 'exit', x: 24, y: 1, exit: { position: { x: 24, y: 1 }, targetMap: 'dungeon-1', targetPosition: { x: 22, y: 39 }, message: 'You descend into the darkness of the mine…' } },
 
-    case '=':
-      // Village: farmland border. Farm-map: impassable grass boundary.
-      if (mapId === 'village') {
-        return { terrain: 'farmland', walkable: false, items: [] };
-      }
-      return { terrain: 'grass', walkable: false, items: [] };
-
-    case '^':
-      return {
-        terrain: 'mountain',
-        walkable: false,
-        direction: detectMountainDirection(rows, x, y),
-        items: [],
-      };
-
-    case 'o':
-      return { terrain: 'floor', walkable: true, items: [] };
-
-    case 'd':
-      return {
-        terrain: 'floor',
-        walkable: false,
-        feature: 'wall',
-        direction: detectDungeonWallDirection(rows, x, y),
-        items: [],
-      };
-
-    case ';':
-      if (mapId === 'village') {
-        return { terrain: 'farmland', walkable: false, items: [] };
-      }
-      // Farm-map: the original outdoor paths stair-step with full path tiles.
-      return { terrain: 'road', walkable: true, items: [] };
-
-    case '!':
-      return {
-        terrain: 'road',
-        walkable: true,
-        feature: 'door',
-        items: [],
-      };
-
-    case 'e':
-      return {
-        terrain: 'grass',
-        walkable: true,
-        feature: 'stairs-up',
-        items: [],
-      };
-
-    case 'w':
-      return {
-        terrain: 'grass',
-        walkable: true,
-        feature: 'well',
-        items: [],
-      };
-
-    case '#': {
-      if (region) {
-        // Multi-tile building — walkable only if it has an exit
-        return {
-          terrain: 'grass',
-          walkable: exit !== undefined,
-          feature: 'wall',
-          buildingId: region.id,
-          items: [],
-        };
-      }
-      if (mapId === 'farm-map') {
-        if (exit?.targetMap === 'dungeon-1') {
-          return {
-            terrain: 'mountain',
-            walkable: true,
-            feature: 'mine-entrance',
-            direction: detectMountainDirection(rows, x, y),
-            items: [],
-          };
-        }
-        if (exit?.targetMap === 'village') {
-          return {
-            terrain: 'grass',
-            walkable: true,
-            feature: 'gate',
-            buildingId: 'village-gate',
-            items: [],
-          };
-        }
-        if (exit?.narrative !== undefined) {
-          return {
-            terrain: 'grass',
-            walkable: true,
-            feature: 'burnt-ruin',
-            buildingId: 'burnt-farm',
-            items: [],
-          };
-        }
-      }
-      // Generic wall
-      return { terrain: 'grass', walkable: false, feature: 'wall', items: [] };
-    }
-
-    default:
-      return { terrain: 'void', walkable: false, items: [] };
-  }
-}
+    // ── Ruined farm (3×3 burnt ruin, x=41–43, y=23–25) ──────────────────
+    { kind: 'building', id: 'burnt-farm', x: 41, y: 23, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldbrnrt.png`,
+      doors: [] },
+    // Ruin trigger tiles (walking through shows narrative)
+    { kind: 'exit', x: 41, y: 23, exit: { position: { x: 41, y: 23 }, narrative: FARM_NARRATIVE } },
+    { kind: 'exit', x: 42, y: 23, exit: { position: { x: 42, y: 23 }, narrative: FARM_NARRATIVE } },
+    { kind: 'exit', x: 43, y: 23, exit: { position: { x: 43, y: 23 }, narrative: FARM_NARRATIVE } },
+    { kind: 'exit', x: 41, y: 24, exit: { position: { x: 41, y: 24 }, narrative: FARM_NARRATIVE } },
+    { kind: 'exit', x: 42, y: 24, exit: { position: { x: 42, y: 24 }, narrative: FARM_NARRATIVE } },
+    { kind: 'exit', x: 43, y: 24, exit: { position: { x: 43, y: 24 }, narrative: FARM_NARRATIVE } },
+    { kind: 'exit', x: 41, y: 25, exit: { position: { x: 41, y: 25 }, narrative: FARM_NARRATIVE } },
+    { kind: 'exit', x: 42, y: 25, exit: { position: { x: 42, y: 25 }, narrative: FARM_NARRATIVE } },
+    { kind: 'exit', x: 43, y: 25, exit: { position: { x: 43, y: 25 }, narrative: FARM_NARRATIVE } },
+  ],
+};
 
 // ── Constructed maps ──────────────────────────────────────────────────────────
 
-export const VILLAGE_MAP: TileMap = convertMap(
-  'village', VILLAGE_ROWS, VILLAGE_EXITS, VILLAGE_BUILDINGS,
-  VILLAGE_BUILDING_REGIONS, { x: 11, y: 17 },
-);
+export const VILLAGE_MAP: TileMap = buildMap(VILLAGE_SPEC);
+export const FARM_MAP:    TileMap = buildMap(FARM_MAP_SPEC);
 
-export const FARM_MAP: TileMap = convertMap(
-  'farm-map', FARM_MAP_ROWS, FARM_EXITS, [],
-  FARM_BUILDING_REGIONS, { x: 11, y: 31 },
-);
-
-export const DUNGEON_1_MAP: TileMap = convertMap(
-  'dungeon-1', DUNGEON_1_ROWS, DUNGEON_1_EXITS, [],
-  [], { x: 22, y: 39 },
-);
+// Dungeon maps are generated procedurally by dungeon-gen.ts.
+// DUNGEON_1_MAP is a static fallback kept for save-state backward compat.
+export const DUNGEON_1_MAP: TileMap = (() => {
+  const t: Tile[][] = Array.from({ length: 1 }, () =>
+    Array.from({ length: 1 }, (): Tile => ({ terrain: 'void', walkable: false, items: [] }))
+  );
+  return { id: 'dungeon-1', width: 1, height: 1, tiles: t, entryPosition: { x: 0, y: 0 } };
+})();
 
 export const ALL_MAPS: Record<MapId, TileMap> = {
-  'village': VILLAGE_MAP,
-  'farm-map': FARM_MAP,
+  'village':   VILLAGE_MAP,
+  'farm-map':  FARM_MAP,
   'dungeon-1': DUNGEON_1_MAP,
 };
