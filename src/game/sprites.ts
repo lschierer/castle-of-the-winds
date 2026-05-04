@@ -194,7 +194,101 @@ function buildingRegionStyle(region: BuildingRegion, x: number, y: number, base:
     backgroundSize: `${sw}px ${sh}px, ${base.backgroundSize}`,
     backgroundPosition: `-${dx * 32 + b}px -${dy * 32 + b}px, ${base.backgroundPosition}`,
     backgroundRepeat: `${REPEAT_NO}, ${base.backgroundRepeat}`,
+    backgroundColor: '#20ff00',
   };
+}
+
+// ── Monster sprite map ────────────────────────────────────────────────────────
+
+/**
+ * Maps monster spec IDs to icon resource IDs extracted from CASTLE1.EXE.
+ * Sprites are stored as public/assets/sprites/icons/icon_NNN.png.
+ * IDs were identified by visual inspection; entries marked ~approximate.
+ */
+const MONSTER_ICON_ID: Record<string, number> = {
+  // Animals
+  giant_bat:              405,
+  giant_rat:              381,
+  wild_dog:               387,
+  gray_wolf:              431,
+  white_wolf:             433,
+  bear:                   435,
+  // Reptiles / arthropods
+  large_snake:            383,
+  viper:                  151,
+  giant_scorpion:         409,
+  giant_trapdoor_spider:  391,
+  huge_lizard:            393,
+  // Humanoids
+  kobold:                 363,
+  goblin:                 427,
+  goblin_fighter:         429,
+  hobgoblin:              395,
+  bandit:                 421,
+  thief:                  415,
+  evil_warrior:           439,
+  ogre:                   443,
+  troll:                  413,
+  wizard:                 403,
+  rat_man:                397,
+  wolf_man:               399,
+  bear_man:               401,
+  // Giants
+  hill_giant:             401,
+  stone_giant:            441,
+  frost_giant:            451,
+  fire_giant:             449,
+  // Undead
+  skeleton:               457,
+  walking_corpse:         447,
+  ghost:                  407,
+  shadow:                 355,
+  shade:                  355,
+  spectre:                445,
+  barrow_wight:           445,
+  tunnel_wight:           445,
+  castle_wight:           445,
+  pale_wraith:            355,
+  dark_wraith:            355,
+  abyss_wraith:           355,
+  vampire:                453,
+  // Devils
+  spiked_devil:           425,
+  horned_devil:           425,
+  ice_devil:              425,
+  abyss_fiend:            453,
+  // Elementals
+  air_elemental:          357,
+  earth_elemental:        357,
+  fire_elemental:         357,
+  water_elemental:        351,
+  // Dragons
+  young_green_dragon:     417,
+  old_green_dragon:       417,
+  young_white_dragon:     417,
+  young_blue_dragon:      417,
+  young_red_dragon:       417,
+  ancient_red_dragon:     417,
+  // Other creatures
+  carrion_creeper:        361,
+  gelatinous_glob:        419,
+  manticore:              437,
+  slime:                  411,
+  // Statues
+  wooden_statue:           18,
+  bronze_statue:           18,
+  iron_statue:             18,
+  marble_statue:           18,
+  // Boss monsters
+  hrugnir:                401,
+  utgardhalok:            401,
+  surtur:                 449,
+};
+
+/** Returns the img src for a monster's sprite, or undefined if not mapped. */
+export function monsterSpriteSrc(monsterId: string): string | undefined {
+  const id = MONSTER_ICON_ID[monsterId];
+  return id !== undefined ? `${ICONS}/icon_${id}.png` : undefined;
 }
 
 // ── Ground item icons ─────────────────────────────────────────────────────────
@@ -208,11 +302,73 @@ const FALLBACK_ICON: Record<string, string> = {
   scroll: 'scroll.png', wand: 'wand.png', container: 'BAG.png', belt: 'belt.png',
 };
 
+/**
+ * Maps hand-drawn fallback icon filenames to extracted CotW sprite IDs.
+ * When an icon filename appears here, the extracted sprite is preferred.
+ */
+const ICON_TO_EXTRACTED: Record<string, number> = {
+  // Armor
+  'armor_r.png':    215,
+  'LARMOR.png':     215,
+  'armor.png':      115,
+  'armor_e2.png':   169,
+  // Shields
+  'lshield.png':    119,
+  'shield.png':     119,
+  'shield_2.png':   239,
+  'shield_b.png':   119,
+  // Helms
+  'helm_b.png':     123,
+  'LHELMET.png':    123,
+  'helmet.png':     123,
+  'helmet_s.png':   125,
+  'helmet_v.png':   207,
+  'helmet_e.png':   209,
+  // Gauntlets
+  'gauntlet.png':   129,
+  'gaunt_p.png':    203,
+  'gaunt_sl.png':   279,
+  // Bracers
+  'bracers.png':    181,
+  'Bracer_e.png':   281,
+  // Boots
+  'boots.png':      185,
+  'BOOtsspd.png':   193,
+  'BOOtslev.png':   187,
+  // Cloaks
+  'cloak.png':      131,
+  'Cloak_e.png':    195,
+  // Weapons
+  'dagger.png':      36,
+  'sword.png':      243,
+  'mace.png':       113,
+  'spear.png':      273,
+  // Coins
+  'copper.png':     325,
+  'silver.png':     325,
+  'gold.png':       323,
+  'platinum.png':   323,
+  // Consumables / misc
+  'potion.png':      93,
+  'scroll.png':      99,
+  'wand.png':       255,
+  'BAG.png':        157,
+  'pile.png':       149,
+  // Rings & amulets
+  'ring.png':       133,
+  'amulet.png':     161,
+};
+
+/** Returns the full icon URL for a named icon file, preferring extracted CotW sprites. */
+export function resolveItemIcon(filename: string): string {
+  const id = ICON_TO_EXTRACTED[filename];
+  return id !== undefined ? `${ICONS}/icon_${id}.png` : `${ICONS}/${filename}`;
+}
+
 function itemIcon(item: Item): string {
   if (item.icon) return item.icon;
   if (item.kind === 'coin' && item.coinKind) return `${item.coinKind}.png`;
   if (item.kind === 'weapon') {
-    // Check weapon spec for type-appropriate icon
     const name = item.name.toLowerCase();
     if (name.includes('staff') || name.includes('spear')) return 'spear.png';
     if (name.includes('mace') || name.includes('hammer') || name.includes('flail') || name.includes('club') || name.includes('star')) return 'mace.png';
@@ -227,16 +383,16 @@ function groundItemIcon(items: Item[]): string | undefined {
   if (items.length === 1) {
     const it = items[0];
     if (!it) return undefined;
-    return `${ICONS}/${itemIcon(it)}`;
+    return resolveItemIcon(itemIcon(it));
   }
   // 2+ items: if all coins, show best denomination
   if (items.every((i) => i.kind === 'coin')) {
     const order: string[] = ['platinum', 'gold', 'silver', 'copper'];
     for (const kind of order) {
-      if (items.some((i) => i.coinKind === kind)) return `${ICONS}/${kind}.png`;
+      if (items.some((i) => i.coinKind === kind)) return resolveItemIcon(`${kind}.png`);
     }
   }
-  return `${ICONS}/pile.png`;
+  return resolveItemIcon('pile.png');
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
