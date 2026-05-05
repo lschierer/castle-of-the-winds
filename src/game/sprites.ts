@@ -198,13 +198,59 @@ function buildingRegionStyle(region: BuildingRegion, x: number, y: number, base:
   };
 }
 
+// ── Icon subdir lookup ────────────────────────────────────────────────────────
+
+/** Maps extracted icon IDs to their subdirectory under /assets/sprites/icons/. */
+const ICON_SUBDIR: Partial<Record<number, string>> = {
+  24:'Traps',  26:'Traps',  28:'Traps',  30:'Traps',  32:'Traps',  34:'Traps',
+  36:'Traps',  38:'Traps',  40:'Traps',  42:'Traps',  43:'Traps',  45:'Traps',
+  49:'Traps',  51:'Traps',  52:'Traps',
+  74:'Castle', 76:'Castle', 78:'Castle', 80:'Castle', 84:'Castle',
+  81:'Fort',   82:'Fort',   85:'Fort',   92:'Fort',   93:'Fort',   94:'Fort',   95:'Fort',
+  109:'Weapons', 111:'Weapons', 113:'Weapons', 175:'Weapons', 177:'Weapons',
+  223:'Weapons', 225:'Weapons', 243:'Weapons', 245:'Weapons', 247:'Weapons',
+  291:'Weapons', 293:'Weapons', 295:'Weapons', 297:'Weapons', 299:'Weapons',
+  301:'Weapons', 303:'Weapons', 305:'Weapons', 307:'Weapons', 309:'Weapons',
+  311:'Weapons', 313:'Weapons', 315:'Weapons', 317:'Weapons', 319:'Weapons',
+  325:'Weapons', 327:'Weapons', 329:'Weapons', 331:'Weapons', 333:'Weapons',
+  366:'Weapons', 368:'Weapons', 370:'Weapons', 372:'Weapons',
+  115:'Armor', 117:'Armor', 169:'Armor', 171:'Armor', 173:'Armor', 215:'Armor', 217:'Armor',
+  119:'Shields', 121:'Shields', 219:'Shields', 221:'Shields', 239:'Shields', 241:'Shields', 269:'Shields',
+  123:'Helmets', 125:'Helmets', 127:'Helmets', 205:'Helmets', 207:'Helmets',
+  209:'Helmets', 211:'Helmets', 213:'Helmets', 271:'Helmets',
+  129:'Gauntlets', 199:'Gauntlets', 201:'Gauntlets', 203:'Gauntlets', 279:'Gauntlets',
+  191:'Bracers', 193:'Bracers', 281:'Bracers',
+  137:'Containers', 139:'Containers', 141:'Containers', 143:'Containers',
+  157:'Containers', 179:'Containers', 181:'Containers', 183:'Containers',
+  97:'Items',  99:'Items',  101:'Items', 103:'Items', 105:'Items', 107:'Items',
+  131:'Items', 133:'Items', 135:'Items', 147:'Items', 149:'Items', 151:'Items',
+  153:'Items', 155:'Items', 159:'Items', 161:'Items', 163:'Items', 165:'Items',
+  167:'Items', 185:'Items', 187:'Items', 189:'Items', 195:'Items', 197:'Items',
+  227:'Items', 229:'Items', 231:'Items', 233:'Items', 235:'Items', 237:'Items',
+  249:'Items', 251:'Items', 253:'Items', 255:'Items', 257:'Items', 259:'Items',
+  261:'Items', 263:'Items', 265:'Items', 267:'Items', 273:'Items', 275:'Items',
+  277:'Items', 283:'Items', 285:'Items', 287:'Items', 289:'Items', 321:'Items', 323:'Items',
+  335:'Spells', 337:'Spells', 339:'Spells', 341:'Spells', 343:'Spells', 345:'Spells',
+  347:'Spells', 349:'Spells', 351:'Spells', 353:'Spells', 355:'Spells', 357:'Spells',
+  359:'Spells', 361:'Spells', 363:'Spells', 365:'Spells',
+  379:'Monsters', 381:'Monsters', 383:'Monsters', 385:'Monsters', 387:'Monsters',
+  389:'Monsters', 391:'Monsters', 393:'Monsters', 395:'Monsters', 397:'Monsters',
+  399:'Monsters', 405:'Monsters', 407:'Monsters', 409:'Monsters', 411:'Monsters',
+  413:'Monsters', 415:'Monsters', 417:'Monsters', 419:'Monsters', 421:'Monsters',
+  423:'Monsters', 425:'Monsters', 427:'Monsters', 429:'Monsters', 431:'Monsters',
+  433:'Monsters', 435:'Monsters', 437:'Monsters', 439:'Monsters', 441:'Monsters',
+  443:'Monsters', 445:'Monsters', 447:'Monsters', 449:'Monsters', 451:'Monsters',
+  453:'Monsters', 455:'Monsters', 457:'Monsters',
+};
+
+function iconUrl(id: number): string {
+  const sub = ICON_SUBDIR[id];
+  return sub ? `${ICONS}/${sub}/icon_${id}.png` : `${ICONS}/icon_${id}.png`;
+}
+
 // ── Monster sprite map ────────────────────────────────────────────────────────
 
-/**
- * Maps monster spec IDs to icon resource IDs extracted from CASTLE1.EXE.
- * Sprites are stored as public/assets/sprites/icons/icon_NNN.png.
- * IDs were identified by visual inspection; entries marked ~approximate.
- */
+/** Maps monster spec IDs to icon IDs extracted from CASTLE1.EXE (identified by visual inspection). */
 const MONSTER_ICON_ID: Record<string, number> = {
   // Animals
   giant_bat:              405,
@@ -215,80 +261,66 @@ const MONSTER_ICON_ID: Record<string, number> = {
   bear:                   435,
   // Reptiles / arthropods
   large_snake:            383,
-  viper:                  151,
+  viper:                  423,
   giant_scorpion:         409,
   giant_trapdoor_spider:  391,
-  huge_lizard:            393,
-  // Humanoids
-  kobold:                 363,
-  goblin:                 427,
-  goblin_fighter:         429,
-  hobgoblin:              395,
-  bandit:                 421,
-  thief:                  415,
-  evil_warrior:           439,
-  ogre:                   443,
+  huge_lizard:            399,
+  // Humanoids — kobold=379, goblin=429, goblin fighter/hobgoblin=427, bandit=439, thief=421, evil knight=441
+  kobold:                 379,
+  goblin:                 429,
+  goblin_fighter:         427,
+  hobgoblin:              427,
+  bandit:                 439,
+  thief:                  421,
+  evil_warrior:           441,
+  ogre:                   415,  // no ogre extracted; hill giant is closest large humanoid
   troll:                  413,
-  wizard:                 403,
-  rat_man:                397,
-  wolf_man:               399,
-  bear_man:               401,
-  // Giants
-  hill_giant:             401,
-  stone_giant:            441,
-  frost_giant:            451,
-  fire_giant:             449,
+  rat_man:                455,
+  wolf_man:               451,
+  bear_man:               453,
+  // Giants — only hill giant and hill giant king extracted
+  hill_giant:             415,
+  stone_giant:            415,
+  frost_giant:            415,
+  fire_giant:             415,
+  hrugnir:                425,  // hill giant king
+  utgardhalok:            425,
   // Undead
-  skeleton:               457,
-  walking_corpse:         447,
+  skeleton:               389,
+  walking_corpse:         397,
   ghost:                  407,
-  shadow:                 355,
-  shade:                  355,
+  shadow:                 457,
+  shade:                  457,
   spectre:                445,
   barrow_wight:           445,
   tunnel_wight:           445,
   castle_wight:           445,
-  pale_wraith:            355,
-  dark_wraith:            355,
-  abyss_wraith:           355,
-  vampire:                453,
-  // Devils
-  spiked_devil:           425,
-  horned_devil:           425,
-  ice_devil:              425,
-  abyss_fiend:            453,
-  // Elementals
-  air_elemental:          357,
-  earth_elemental:        357,
-  fire_elemental:         357,
-  water_elemental:        351,
-  // Dragons
-  young_green_dragon:     417,
-  old_green_dragon:       417,
-  young_white_dragon:     417,
-  young_blue_dragon:      417,
-  young_red_dragon:       417,
-  ancient_red_dragon:     417,
-  // Other creatures
-  carrion_creeper:        361,
+  pale_wraith:            445,
+  dark_wraith:            445,
+  abyss_wraith:           445,
+  vampire:                445,  // no vampire extracted; spectre is closest
+  // Devils — none extracted; evil knight is closest humanoid-shaped
+  spiked_devil:           441,
+  horned_devil:           441,
+  ice_devil:              441,
+  abyss_fiend:            441,
+  // Other creatures with confirmed extractions
+  carrion_creeper:        393,
   gelatinous_glob:        419,
-  manticore:              437,
   slime:                  411,
-  // Statues
-  wooden_statue:           18,
-  bronze_statue:           18,
-  iron_statue:             18,
+  // Statues — 447=bronze, 449=wooden, 18=stone/marble
+  wooden_statue:          449,
+  bronze_statue:          447,
+  iron_statue:            447,
   marble_statue:           18,
-  // Boss monsters
-  hrugnir:                401,
-  utgardhalok:            401,
-  surtur:                 449,
+  // Boss
+  surtur:                 425,
 };
 
 /** Returns the img src for a monster's sprite, or undefined if not mapped. */
 export function monsterSpriteSrc(monsterId: string): string | undefined {
   const id = MONSTER_ICON_ID[monsterId];
-  return id !== undefined ? `${ICONS}/icon_${id}.png` : undefined;
+  return id !== undefined ? iconUrl(id) : undefined;
 }
 
 // ── Ground item icons ─────────────────────────────────────────────────────────
@@ -302,67 +334,64 @@ const FALLBACK_ICON: Record<string, string> = {
   scroll: 'scroll.png', wand: 'wand.png', container: 'BAG.png', belt: 'belt.png',
 };
 
-/**
- * Maps hand-drawn fallback icon filenames to extracted CotW sprite IDs.
- * When an icon filename appears here, the extracted sprite is preferred.
- */
+/** Maps named icon filenames to extracted CotW sprite IDs. */
 const ICON_TO_EXTRACTED: Record<string, number> = {
   // Armor
-  'armor_r.png':    215,
-  'LARMOR.png':     215,
-  'armor.png':      115,
-  'armor_e2.png':   169,
+  'armor_r.png':    215,  // ring/studded leather
+  'LARMOR.png':     117,  // light = studded leather
+  'armor.png':      115,  // iron/chain mail
+  'armor_e2.png':   169,  // enchanted chain/scale
   // Shields
-  'lshield.png':    119,
-  'shield.png':     119,
-  'shield_2.png':   239,
-  'shield_b.png':   119,
-  // Helms
-  'helm_b.png':     123,
-  'LHELMET.png':    123,
+  'lshield.png':    121,  // wooden/light shield
+  'shield.png':     119,  // iron/steel shield
+  'shield_2.png':   239,  // enchanted shield
+  'shield_b.png':   269,  // broken shield
+  // Helmets
+  'helm_b.png':     123,  // iron/steel helmet
+  'LHELMET.png':    125,  // leather helmet
   'helmet.png':     123,
-  'helmet_s.png':   125,
-  'helmet_v.png':   207,
-  'helmet_e.png':   209,
+  'helmet_s.png':   125,  // soft/leather helmet
+  'helmet_v.png':   207,  // enchanted iron/steel helmet
+  'helmet_e.png':   209,  // enchanted helmet
   // Gauntlets
   'gauntlet.png':   129,
-  'gaunt_p.png':    203,
-  'gaunt_sl.png':   279,
-  // Bracers
-  'bracers.png':    181,
-  'Bracer_e.png':   281,
+  'gaunt_p.png':    203,  // enchanted gauntlets of slaying
+  'gaunt_sl.png':   279,  // rusty gauntlets
+  // Bracers — 127 is in Helmets/ dir but is bracers per dictionary
+  'bracers.png':    127,
+  'Bracer_e.png':   127,  // no enchanted bracers ID exists
   // Boots
-  'boots.png':      185,
-  'BOOtsspd.png':   193,
-  'BOOtslev.png':   187,
+  'boots.png':      135,  // plain leather boots
+  'BOOtsspd.png':   185,  // enchanted boots of speed
+  'BOOtslev.png':   187,  // enchanted boots of levitation
   // Cloaks
-  'cloak.png':      131,
-  'Cloak_e.png':    195,
-  // Weapons
-  'dagger.png':      36,
-  'sword.png':      243,
+  'cloak.png':      131,  // wool cloak
+  'Cloak_e.png':    197,  // enchanted cape
+  // Weapons — no dagger extracted; use sword
+  'dagger.png':     111,
+  'sword.png':      111,
   'mace.png':       113,
-  'spear.png':      273,
+  'spear.png':      309,  // spear/quarterstaff
   // Coins
-  'copper.png':     325,
-  'silver.png':     325,
-  'gold.png':       323,
-  'platinum.png':   323,
+  'copper.png':     149,
+  'silver.png':     151,
+  'gold.png':       153,
+  'platinum.png':   155,
   // Consumables / misc
-  'potion.png':      93,
+  'potion.png':      97,
   'scroll.png':      99,
-  'wand.png':       255,
-  'BAG.png':        157,
-  'pile.png':       149,
+  'wand.png':       255,  // wand of detect (generic wand)
+  'BAG.png':        139,  // bag
+  'pile.png':       147,  // pile of loot
   // Rings & amulets
   'ring.png':       133,
-  'amulet.png':     161,
+  'amulet.png':     107,  // generic amulet
 };
 
 /** Returns the full icon URL for a named icon file, preferring extracted CotW sprites. */
 export function resolveItemIcon(filename: string): string {
   const id = ICON_TO_EXTRACTED[filename];
-  return id !== undefined ? `${ICONS}/icon_${id}.png` : `${ICONS}/${filename}`;
+  return id !== undefined ? iconUrl(id) : `${ICONS}/${filename}`;
 }
 
 function itemIcon(item: Item): string {
