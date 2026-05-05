@@ -250,15 +250,6 @@ export const SHOPS: Record<string, ShopDef> = {
     sells: [],
     type: 'temple',
   },
-  'Bank': {
-    id: 'Bank',
-    name: 'Bank',
-    townTier: 'hamlet',
-    stockLevel: townStockLevel('hamlet'),
-    buys: [],
-    sells: [],
-    type: 'bank',
-  },
 };
 
 // ── Shop inventory generation ─────────────────────────────────────────────────

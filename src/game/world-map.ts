@@ -436,13 +436,6 @@ const VILLAGE_SPEC: MapSpec = {
       sprite: `${BITMAPS}/blrto.png`, borderPx: 2,
       doors: [{ x: 11, y: 21, info: { position: { x: 11, y: 21 }, name: 'Temple of Odin', description: 'Wise Old Odin, healer of ailments.' } }] },
 
-    // Bank — non-canonical for the hamlet (the original puts banks only
-    // in bigger towns) but useful for testing line-of-credit features
-    // until larger towns are built.
-    { kind: 'building', id: 'bank', x: 3, y: 13, cols: 2, rows: 2,
-      sprite: `${BITMAPS}/bank.png`,
-      doors: [{ x: 5, y: 14, info: { position: { x: 5, y: 14 }, name: 'Bank', description: 'Safe-keeping for your coin.' } }] },
-
     // ── Well ──────────────────────────────────────────────────────────────
     { kind: 'feature', x: 11, y: 18, feature: 'well', terrain: 'grass', walkable: true },
   ],
