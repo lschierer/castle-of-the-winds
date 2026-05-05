@@ -220,6 +220,27 @@ export function derivedSpeed(stats: CharacterStats, difficulty: Difficulty): num
 }
 
 /**
+ * Effective speed after carry-weight penalty.  Help describes weight as
+ * reducing speed; concrete formula is conservative until a speed-driven
+ * action loop exists: 1 point of speed lost per 2000 g of carried
+ * weight beyond the (STR × 30) soft threshold.  The same threshold is
+ * used by combat.ts:carryingPenalty for melee STR penalty.
+ *
+ * baseSpeed: from derivedSpeed() or the character record.
+ * totalWeightGrams: sum of all carried items' reported weights.
+ */
+export function effectiveSpeed(
+  baseSpeed: number,
+  strength: number,
+  totalWeightGrams: number,
+): number {
+  const threshold = strength * 30;
+  const excess = Math.max(0, totalWeightGrams - threshold);
+  const penalty = Math.floor(excess / 2000);
+  return Math.max(STAT_MIN, baseSpeed - penalty);
+}
+
+/**
  * Charisma: NPC reactions, shop prices.
  * Basis unclear from references; starts at a neutral 50 modified by difficulty.
  * Equipment (e.g. cursed items) affects it significantly during play.

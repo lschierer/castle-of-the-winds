@@ -46,6 +46,129 @@ export const COIN_VALUE_CP: Record<CoinKind, number> = {
   platinum: 1000,
 };
 
+// ── Named enchantments (affixes) ──────────────────────────────────────────────
+
+/**
+ * Named enchantment effects per the original game's Object Directory
+ * (REPORT.md item_template: 'Amulet of %i', 'Ring of %i', etc.).  An
+ * item may carry up to two affixes plus a numeric `enchantment` bonus
+ * — e.g. "Sword of Quickness +1" has the Quickness affix AND a +1 to
+ * its base weapon class.
+ *
+ * The list below is the starter vocabulary; not all are wired into
+ * effects yet (many require gameplay loops that don't exist).  Items
+ * created with these affixes still display correctly and can be
+ * inspected; effect handlers can be added incrementally.
+ */
+export type AffixKind =
+  // Resistances
+  | 'resist-fire'
+  | 'resist-cold'
+  | 'resist-lightning'
+  | 'resist-acid'
+  | 'resist-fear'
+  // Stat boosts (numeric `value` carries the magnitude)
+  | 'strength'
+  | 'intelligence'
+  | 'constitution'
+  | 'dexterity'
+  // Movement / action speed
+  | 'speed'
+  | 'quickness'
+  // Magic affinity
+  | 'wizardry'
+  | 'sorcery'
+  // Detection
+  | 'detect-monsters'
+  | 'detect-traps'
+  | 'detect-objects'
+  // Combat
+  | 'slaying'        // bonus damage vs. specific monster type
+  | 'protection'     // AC bonus
+  | 'returning'      // wand returns to hand after throw
+  // Utility
+  | 'levitation'
+  | 'rune-of-return'
+  | 'remove-curse';
+
+export interface Affix {
+  kind: AffixKind;
+  /** Magnitude for stat-style affixes (+N strength, +1 protection). */
+  value?: number;
+  /** For 'slaying': monster spec id targeted (e.g. 'red-dragon'). */
+  slaysSpecId?: string;
+}
+
+/**
+ * Default English label for an affix.  Used by displayName when
+ * composing names like "Ring of Strength +2" or "Cloak of Resist Fire".
+ */
+export function affixLabel(affix: Affix): string {
+  const base = AFFIX_LABEL[affix.kind];
+  if (affix.value !== undefined && affix.value !== 0) {
+    const sign = affix.value > 0 ? '+' : '';
+    return `${base} ${sign}${affix.value}`;
+  }
+  return base;
+}
+
+const AFFIX_LABEL: Record<AffixKind, string> = {
+  'resist-fire':      'Resist Fire',
+  'resist-cold':      'Resist Cold',
+  'resist-lightning': 'Resist Lightning',
+  'resist-acid':      'Resist Acid',
+  'resist-fear':      'Resist Fear',
+  'strength':         'Strength',
+  'intelligence':     'Intelligence',
+  'constitution':     'Constitution',
+  'dexterity':        'Dexterity',
+  'speed':            'Speed',
+  'quickness':        'Quickness',
+  'wizardry':         'Wizardry',
+  'sorcery':          'Sorcery',
+  'detect-monsters':  'Detect Monsters',
+  'detect-traps':     'Detect Traps',
+  'detect-objects':   'Detect Objects',
+  'slaying':          'Slaying',
+  'protection':       'Protection',
+  'returning':        'Returning',
+  'levitation':       'Levitation',
+  'rune-of-return':   'Rune of Return',
+  'remove-curse':     'Remove Curse',
+};
+
+// ── Consumable strength tiers ─────────────────────────────────────────────────
+
+/**
+ * Five-strength scale for alchemical consumables (potions, scrolls,
+ * etc.) per the original game (REPORT.md: "Potion of, Elixir of,
+ * Distillation of, Draught of, Essence of (5 strength tiers!)").
+ *
+ * Ordered weakest → strongest:
+ *   distillation < draught < potion < elixir < essence
+ *
+ * Distillations are often the "useless" form (e.g. Distillation of
+ * Water).  Essences are the rare concentrated form sold by alchemists.
+ * The strength multiplier scales effect magnitude or duration.
+ */
+export type ConsumableTier = 'distillation' | 'draught' | 'potion' | 'elixir' | 'essence';
+
+export const CONSUMABLE_TIER_MULTIPLIER: Record<ConsumableTier, number> = {
+  distillation: 0.25,
+  draught:      0.5,
+  potion:       1.0,
+  elixir:       1.5,
+  essence:      2.0,
+};
+
+export const CONSUMABLE_TIER_PREFIX: Record<ConsumableTier, string> = {
+  distillation: 'Distillation',
+  draught:      'Draught',
+  potion:       'Potion',
+  elixir:       'Elixir',
+  essence:      'Essence',
+};
+
 // ── Item kinds ────────────────────────────────────────────────────────────────
 
 export type ItemKind =
@@ -118,6 +241,13 @@ export interface Item {
   broken: boolean;
   /** Enchantment level: 0 = normal, +N = bonus, −N = cursed quality. */
   enchantment: number;
+  /**
+   * Named enchantment effects (REPORT.md "Amulet of %i" etc.).
+   * Items may carry up to two affixes; if a numeric bonus is also
+   * present, it lives in `enchantment` and stacks alongside.  Effect
+   * handlers consult this list when applying buffs / resistances.
+   */
+  affixes?: Affix[];
   /** Only present when kind === 'container' or kind === 'belt'. */
   slots?: ContainerSlot[];
   /** Subtype tag for coins — only present when kind === 'coin'. */
@@ -133,6 +263,13 @@ export interface Item {
    * spell) but won't fire until recharged or replaced.
    */
   charges?: number;
+  /**
+   * Strength tier for consumables (kind = 'potion', 'scroll', etc.).
+   * Five levels per REPORT.md ("5 strength tiers!").  Tier scales
+   * effect magnitude/duration; see CONSUMABLE_TIER_MULTIPLIER.  When
+   * undefined, treat as the standard 'potion' tier.
+   */
+  tier?: ConsumableTier;
   /**
    * Container weight reported to its parent regardless of contents.
    * When set, the container reports exactly this weight no matter what's
@@ -649,23 +786,29 @@ export function displayName(item: Item): string {
   // Broken/rusted items use their name as-is
   if (item.broken) return item.name;
 
-  // Coins and non-equipment
+  // Compose affix suffix ("of Quickness", "of Resist Fire +1") if any.
+  const ofClause = item.affixes && item.affixes.length > 0
+    ? ' of ' + item.affixes.map(affixLabel).join(' & ')
+    : '';
+
+  // Coins and non-equipment — affixes still apply (e.g. Wand of Fire,
+  // Potion of Healing) but no "Cursed" / "Enchanted" prefix.
   if (item.kind === 'coin' || item.kind === 'potion' || item.kind === 'scroll' ||
       item.kind === 'wand' || item.kind === 'staff' || item.kind === 'spellbook' ||
       item.kind === 'container' || item.kind === 'misc') {
-    return item.name;
+    return `${item.name}${ofClause}`;
   }
 
   // Equipment naming
   if (item.cursed) {
-    return item.kind === 'weapon'
-      ? `Cursed ${item.name}`
-      : `Cursed ${item.name}`;
+    return `Cursed ${item.name}${ofClause}`;
   }
   if (item.enchantment > 0) {
-    return item.kind === 'weapon'
-      ? `Enchanted ${item.name}`
-      : `Enchanted ${item.name}`;
+    return `Enchanted ${item.name}${ofClause}`;
+  }
+  if (ofClause) {
+    // Has named affixes but no flat enchantment: skip the "Normal" prefix.
+    return `${item.name}${ofClause}`;
   }
   return `Normal ${item.name}`;
 }
@@ -759,6 +902,51 @@ export function removeFromSlot(slot: ContainerSlot, itemId: string): Item | unde
   const idx = slot.items.findIndex((i) => i.id === itemId);
   if (idx === -1) return undefined;
   return slot.items.splice(idx, 1)[0];
+}
+
+// ── Total carry weight ────────────────────────────────────────────────────────
+
+/**
+ * Sum of every Item's reported weight that the character is carrying:
+ * worn equipment, the pack and its contents, the belt and its contents,
+ * the purse.  Used to compute the carrying penalty (combat.ts) and the
+ * weight-speed adjustment (character.ts).
+ *
+ * Containers contribute their reported weight (which honours the
+ * fixedReportedWeight override on Packs of Holding) so a Pack of
+ * Holding stuffed full of loot is still 5 kg.
+ */
+export function totalCarryWeight(items: Iterable<Item | null>): number {
+  let total = 0;
+  for (const it of items) {
+    if (!it) continue;
+    total += reportedUnitWeight(it) * (it.quantity || 1);
+  }
+  return total;
+}
+
+// ── Activate predicate ────────────────────────────────────────────────────────
+
+/**
+ * Whether an item shows up on the Activate menu (help topic 017).
+ *
+ * Activatable kinds:
+ *   - potions, scrolls  (single-use consumables)
+ *   - wands, staves     (charge-based)
+ *   - spellbooks        (re-readable for learning)
+ *   - any unidentified item — might or might not be activatable; shown
+ *     so the player can experiment ("identify on use")
+ *
+ * Identified non-activatable items (a sword, a ring of adornment, a
+ * Distillation of Water) do NOT show.
+ */
+export function isActivatable(item: Item): boolean {
+  if (!item.identified) return true;
+  return item.kind === 'potion'
+    || item.kind === 'scroll'
+    || item.kind === 'wand'
+    || item.kind === 'staff'
+    || item.kind === 'spellbook';
 }
 
 // ── Sort Pack ─────────────────────────────────────────────────────────────────

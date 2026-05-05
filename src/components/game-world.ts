@@ -46,7 +46,7 @@ import {
   resetVisitPrices,
   purseTotalCopper, bankTotalCopper, bankDeposit, bankWithdraw,
 } from '../game/shop.ts';
-import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk } from '../game/items.ts';
+import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk, isActivatable, totalCarryWeight, affixLabel, CONSUMABLE_TIER_MULTIPLIER } from '../game/items.ts';
 import {
   type MonsterInstance,
   type PlayerStatus,
@@ -79,7 +79,7 @@ function viewportSize(): { cols: number; rows: number } {
   return { cols, rows };
 }
 
-type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells';
+type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells' | 'activate';
 
 type DragSrc =
   | { from: 'equip'; slotKey: string; item: Item }
@@ -1069,6 +1069,11 @@ export class GameWorld extends LitElement {
       this.toggleOverlay('story');
       return;
     }
+    if (e.key === 'a' || e.key === 'A') {
+      e.preventDefault();
+      this.toggleOverlay('activate');
+      return;
+    }
     if ((e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       this.manualSave();
@@ -1362,13 +1367,30 @@ export class GameWorld extends LitElement {
   }
 
   /** Player attacks a specific monster instance. */
+  /**
+   * Sum of every Item's reported weight currently on the character.
+   * Used by the melee carry-weight penalty (combat.ts:carryingPenalty)
+   * and by future speed-effect code (character.ts:effectiveSpeed).
+   * Containers contribute their reported weight (Pack of Holding stays
+   * a constant 5 kg even when stuffed).
+   */
+  private totalCarryWeight(): number {
+    const c = this.character;
+    if (!c) return 0;
+    return totalCarryWeight([
+      c.weapon, c.freeHand, c.armor, c.helm, c.shield, c.boots, c.cloak,
+      c.bracers, c.gauntlets, c.ringLeft, c.ringRight, c.amulet,
+      c.belt, c.purse, c.pack,
+    ]);
+  }
+
   private playerAttacks(target: MonsterInstance): void {
     const c = this.character;
     if (!c) return;
     const spec = monsterById(target.specId);
     if (!spec) return;
 
-    const result = playerMeleeAttack(c, c.weapon, spec, this.playerStatus);
+    const result = playerMeleeAttack(c, c.weapon, spec, this.playerStatus, this.totalCarryWeight());
     this.pushMessage(result.message);
 
     if (!result.dodged && result.damage > 0) {
@@ -2440,6 +2462,14 @@ export class GameWorld extends LitElement {
       if (item.charges !== undefined) {
         lines.push(html`<div><span style="color:#a09070">Charges:</span> ${item.charges}</div>`);
       }
+      if (item.affixes && item.affixes.length > 0) {
+        for (const a of item.affixes) {
+          lines.push(html`<div style="color:#a8a040">◆ ${affixLabel(a)}</div>`);
+        }
+      }
+      if (item.tier) {
+        lines.push(html`<div><span style="color:#a09070">Tier:</span> ${item.tier} (×${CONSUMABLE_TIER_MULTIPLIER[item.tier]})</div>`);
+      }
     } else {
       lines.push(html`<div style="color:#806040">Unidentified</div>`);
     }
@@ -2933,6 +2963,139 @@ export class GameWorld extends LitElement {
     `;
   }
 
+  /**
+   * Activate menu (help topic 017): lists every "activatable" item the
+   * player has within reach — items in the equipment slots and on the
+   * belt (NOT in the pack).  Activatables are potions, scrolls, wands,
+   * staves, spellbooks, plus any unidentified item that might be one.
+   * Identified non-activatable items are filtered out.
+   *
+   * Selecting an item activates it.  Wands/staves decrement a charge;
+   * potions/scrolls are consumed (single-use).  Most concrete activate
+   * effects aren't implemented yet — handlers are stubs that pop a
+   * descriptive message.  The menu itself is the parity feature.
+   */
+  private renderActivateOverlay(): TemplateResult {
+    const c = this.character;
+    if (!c) return html``;
+    const close = (): void => { this.overlay = 'none'; };
+
+    // Gather candidates from worn slots and belt.  Pack items are NOT
+    // included per the help text: "Objects in your pack cannot be
+    // activated".
+    const candidates: Array<{ item: Item; location: string }> = [];
+    if (c.freeHand) candidates.push({ item: c.freeHand, location: 'Free Hand' });
+    if (c.weapon)   candidates.push({ item: c.weapon,   location: 'Weapon' });
+    if (c.amulet)   candidates.push({ item: c.amulet,   location: 'Amulet' });
+    if (c.ringLeft)  candidates.push({ item: c.ringLeft,  location: 'Ring (left)' });
+    if (c.ringRight) candidates.push({ item: c.ringRight, location: 'Ring (right)' });
+    if (c.belt?.slots) {
+      c.belt.slots.forEach((slot, i) => {
+        const it = slot.items[0];
+        if (it) candidates.push({ item: it, location: `Belt slot ${i + 1}` });
+      });
+    }
+
+    const activatable = candidates.filter(({ item }) => isActivatable(item));
+
+    return html`
+      <div class="overlay" @click=${close}>
+        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
+          <p class="overlay-title">Activate</p>
+          <p class="building-services">Items in your hands, on your belt, and worn — not in your pack.</p>
+          <div class="divider"></div>
+          ${activatable.length === 0 ? html`<div class="inv-empty">Nothing to activate.</div>` :
+            activatable.map(({ item, location }) => html`
+              <div class="inv-item" style="cursor:pointer;display:flex;align-items:center;gap:4px;padding:0.3rem"
+                @click=${() => { this.doActivate(item); }}
+                @contextmenu=${(e: Event) => { this.onInspectItem(item, e); }}
+              >
+                <img class="inv-item-icon" src="${resolveItemIcon(item.icon ?? (item.kind + '.png'))}" alt="">
+                <span style="flex:1">${displayName(item)}${item.charges !== undefined ? html` <span style="color:#a09070">(${item.charges} charges)</span>` : ''}</span>
+                <span style="color:#806040;font-size:0.7rem">${location}</span>
+              </div>
+            `)}
+          <span class="overlay-close" @click=${close}>[ A / Esc to close ]</span>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Activate handler.  Most concrete effects aren't wired yet — wands,
+   * staves, spellbooks have no factory.  Potions and scrolls fall
+   * through to a default message until concrete effect code exists.
+   */
+  private doActivate(item: Item): void {
+    const c = this.character;
+    if (!c) return;
+    // Charges: decrement if present, refuse if exhausted
+    if (item.charges !== undefined) {
+      if (item.charges <= 0) {
+        this.pushMessage(`The ${displayName(item)} has no charges left.`);
+        return;
+      }
+      item.charges -= 1;
+    }
+    // Identify-on-use: most consumables and all wands/staves identify
+    // when activated for the first time.
+    if (!item.identified) {
+      item.identified = true;
+      this.pushMessage(`You realize this is a ${item.name}.`);
+    }
+    switch (item.kind) {
+      case 'potion':
+        this.pushMessage(`You drink the ${displayName(item)}.  (Effects not yet implemented.)`);
+        // Single-use: remove from wherever it is
+        this.removeActivatedItem(item);
+        break;
+      case 'scroll':
+        this.pushMessage(`You read the ${displayName(item)}.  (Effects not yet implemented.)`);
+        this.removeActivatedItem(item);
+        break;
+      case 'wand':
+      case 'staff':
+        this.pushMessage(`You invoke the ${displayName(item)}.  (Effects not yet implemented.)`);
+        break;
+      case 'spellbook':
+        this.pushMessage(`You consult the ${displayName(item)}.  (Spell-learning UI not yet wired here.)`);
+        break;
+      default:
+        this.pushMessage(`The ${displayName(item)} doesn't have an activate action.`);
+    }
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  /**
+   * Remove a single-use item (potion, scroll) from wherever it is on
+   * the character — equip slot or belt slot.  Pack items aren't
+   * possible here (the activate menu doesn't list pack items).
+   */
+  private removeActivatedItem(item: Item): void {
+    const c = this.character;
+    if (!c) return;
+    const slotKeys: Array<keyof Character> = [
+      'weapon', 'freeHand', 'armor', 'helm', 'shield', 'boots', 'cloak',
+      'bracers', 'gauntlets', 'ringLeft', 'ringRight', 'amulet',
+    ];
+    for (const k of slotKeys) {
+      if ((c[k] as Item | null)?.id === item.id) {
+        (c as unknown as Record<string, unknown>)[k] = null;
+        return;
+      }
+    }
+    if (c.belt?.slots) {
+      for (const slot of c.belt.slots) {
+        const idx = slot.items.findIndex((i) => i.id === item.id);
+        if (idx !== -1) {
+          slot.items.splice(idx, 1);
+          return;
+        }
+      }
+    }
+  }
+
   private renderSpellsOverlay(): TemplateResult {
     const c = this.character;
     if (!c) return html``;
@@ -3127,6 +3290,7 @@ export class GameWorld extends LitElement {
           <button class="spell-bar-btn" @click=${() => { this.pickupGround(); }}>Get</button>
           <button class="spell-bar-btn" @click=${() => { this.doRest(); }}>Rest</button>
           <button class="spell-bar-btn ${this.overlay === 'inventory' ? 'active' : ''}" @click=${() => { this.toggleOverlay('inventory'); }}>Inventory</button>
+          <button class="spell-bar-btn ${this.overlay === 'activate' ? 'active' : ''}" @click=${() => { this.toggleOverlay('activate'); }}>Activate</button>
           <button class="spell-bar-btn ${this.overlay === 'spells' ? 'active' : ''}" @click=${() => { this.toggleOverlay('spells'); }}>Spells</button>
         </div>
         <div class="spell-slots">
@@ -3710,7 +3874,9 @@ export class GameWorld extends LitElement {
                         ? this.renderStoryOverlay()
                         : this.overlay === 'customize-spells'
                           ? this.renderCustomizeSpellsOverlay()
-                          : ''}
+                          : this.overlay === 'activate'
+                            ? this.renderActivateOverlay()
+                            : ''}
           </div>
           ${this.renderSidebar()}
         </div>
