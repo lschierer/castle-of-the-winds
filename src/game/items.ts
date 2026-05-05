@@ -126,6 +126,13 @@ export interface Item {
   weaponClass?: number;
   /** Sprite icon filename (e.g. 'sword.png'). Used for ground/inventory display. */
   icon?: string;
+  /**
+   * Remaining charges — only on wands and staves.  Help topic 017:
+   * "wands and staves have a limited number of charges".  Decrement on
+   * each activation; when 0 the item still exists (engraved with the
+   * spell) but won't fire until recharged or replaced.
+   */
+  charges?: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -306,7 +313,7 @@ export const BELT_SPECS: readonly BeltSpec[] = [
   { name: 'Belt',          weight: 100, bulk: 1, slots: 2, slotMaxBulk: 2 },
   { name: 'Wide Belt',     weight: 150, bulk: 1, slots: 3, slotMaxBulk: 2 },
   { name: 'War Belt',      weight: 200, bulk: 1, slots: 4, slotMaxBulk: 3 },
-  { name: 'Utility Belt',  weight: 250, bulk: 1, slots: 4, slotMaxBulk: 2 },  // 4 item slots + dedicated wand holders
+  { name: 'Utility Belt',  weight: 250, bulk: 1, slots: 10, slotMaxBulk: 2 }, // rare 10-slot belt per help topic 027
   { name: 'Wand Quiver',   weight: 200, bulk: 1, slots: 6, slotMaxBulk: 1 },  // wands/scrolls only, very slim items
 ];
 
@@ -644,6 +651,39 @@ export function removeFromSlot(slot: ContainerSlot, itemId: string): Item | unde
   const idx = slot.items.findIndex((i) => i.id === itemId);
   if (idx === -1) return undefined;
   return slot.items.splice(idx, 1)[0];
+}
+
+// ── Sort Pack ─────────────────────────────────────────────────────────────────
+
+/**
+ * Canonical ItemKind ordering for Sort Pack (help topic 024).
+ * Equipment first, then containers, then consumables, then misc.
+ */
+const KIND_SORT_ORDER: Record<ItemKind, number> = {
+  weapon: 0, armor: 1, helm: 2, shield: 3, boots: 4, cloak: 5,
+  bracers: 6, gauntlets: 7, ring: 8, amulet: 9, belt: 10,
+  container: 11, potion: 12, scroll: 13, wand: 14, staff: 15,
+  spellbook: 16, coin: 17, misc: 18,
+};
+
+function compareItemsForSort(a: Item, b: Item): number {
+  // Identified items before unidentified ones (within a kind).
+  const k = KIND_SORT_ORDER[a.kind] - KIND_SORT_ORDER[b.kind];
+  if (k !== 0) return k;
+  if (a.identified !== b.identified) return a.identified ? -1 : 1;
+  return a.name.localeCompare(b.name);
+}
+
+/**
+ * Sort a pack's contents in place by item kind, then by name within kind,
+ * with unidentified items at the end of each kind group.  Per help topic
+ * 024 ("Sort Pack" menu command).
+ */
+export function sortPackContents(pack: Item): void {
+  if (!pack.slots) return;
+  for (const slot of pack.slots) {
+    slot.items.sort(compareItemsForSort);
+  }
 }
 
 /**

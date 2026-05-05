@@ -45,7 +45,7 @@ import {
   sageIdentify, identifyFee, templeHeal, templeHealCost, templeUncurse, templeUncurseCost,
   resetVisitPrices,
 } from '../game/shop.ts';
-import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins } from '../game/items.ts';
+import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk } from '../game/items.ts';
 import {
   type MonsterInstance,
   type PlayerStatus,
@@ -542,6 +542,20 @@ export class GameWorld extends LitElement {
       color: #f0e0a8;
       border-color: #8b6914;
     }
+    .sort-pack-btn {
+      background: transparent;
+      border: 1px solid #3d3020;
+      color: #a09070;
+      font-family: inherit;
+      font-size: 0.65rem;
+      padding: 0.1rem 0.4rem;
+      cursor: pointer;
+    }
+    .sort-pack-btn:hover {
+      background: #3d3020;
+      color: #f0e0a8;
+      border-color: #8b6914;
+    }
 
     /* Building overlay */
     .building-services {
@@ -776,6 +790,9 @@ export class GameWorld extends LitElement {
 
   /** Item action menu: which item is selected and where it came from. */
   @state() private actionItem: { item: Item; source: 'equip' | 'pack' | 'belt' | 'ground'; slotName?: string } | null = null;
+
+  /** Right-click property popup — see help topic 027. */
+  @state() private inspectItem: Item | null = null;
 
   /** Spell targeting mode: spell selected, waiting for direction input. */
   @state() private castingSpell: string | null = null;
@@ -1885,6 +1902,7 @@ export class GameWorld extends LitElement {
         class="equip-slot ${item ? 'filled' : ''}"
         style="grid-area:${gridArea};${item ? 'cursor:pointer' : ''}"
         @click=${onClick}
+        @contextmenu=${item ? (e: Event) => { this.onInspectItem(item, e); } : undefined}
         @dragover=${this.onDropZoneDragOver.bind(this)}
         @dragleave=${this.onDropZoneDragLeave.bind(this)}
         @drop=${(e: DragEvent) => { this.onDropEquipSlot(key, e); }}
@@ -2066,6 +2084,15 @@ export class GameWorld extends LitElement {
   }
 
 
+  private onSortPack(): void {
+    const c = this.character;
+    if (!c?.pack) return;
+    sortPackContents(c.pack);
+    this.pushMessage('You sort the pack.');
+    this.autoSave();
+    this.requestUpdate();
+  }
+
   private doSwapPack(newPack: Item, source: 'pack' | 'belt'): void {
     const c = this.character;
     if (!c) return;
@@ -2199,6 +2226,58 @@ export class GameWorld extends LitElement {
             <button class="action-menu-btn" @click=${act.handler}>${act.label}</button>
           `)}
           <button class="action-menu-btn" @click=${() => { this.actionItem = null; }}>Cancel</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Right-click handler for item rows: opens the property popup.
+   * Help topic 027: "right click on it to summon a popup window".
+   */
+  private readonly onInspectItem = (item: Item, e: Event): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    this.inspectItem = item;
+  };
+
+  private renderInspectPopup(): TemplateResult {
+    const item = this.inspectItem;
+    if (!item) return html``;
+    const totalWeight = item.weight + (item.slots ? containerWeight(item) : 0);
+    const totalBulk   = item.bulk   + (item.slots ? containerBulk(item)   : 0);
+    const fmt = (g: number): string => g >= 1000 ? `${(g / 1000).toFixed(1)} kg` : `${g} g`;
+    const lines: TemplateResult[] = [];
+    lines.push(html`<div><span style="color:#a09070">Kind:</span> ${item.kind}</div>`);
+    lines.push(html`<div><span style="color:#a09070">Weight:</span> ${fmt(totalWeight)}</div>`);
+    lines.push(html`<div><span style="color:#a09070">Bulk:</span> ${totalBulk.toLocaleString()}</div>`);
+    if (item.kind === 'weapon' && item.weaponClass !== undefined) {
+      lines.push(html`<div><span style="color:#a09070">Weapon class:</span> ${item.weaponClass}</div>`);
+    }
+    if (item.identified) {
+      if (item.enchantment !== 0) {
+        lines.push(html`<div><span style="color:#a09070">Enchantment:</span> ${item.enchantment > 0 ? '+' : ''}${item.enchantment}</div>`);
+      }
+      if (item.cursed) {
+        lines.push(html`<div style="color:#a04040">Cursed</div>`);
+      }
+      if (item.broken) {
+        lines.push(html`<div style="color:#806040">Broken</div>`);
+      }
+      if (item.charges !== undefined) {
+        lines.push(html`<div><span style="color:#a09070">Charges:</span> ${item.charges}</div>`);
+      }
+    } else {
+      lines.push(html`<div style="color:#806040">Unidentified</div>`);
+    }
+    return html`
+      <div class="action-menu-backdrop" @click=${() => { this.inspectItem = null; }}
+        @contextmenu=${(e: Event) => { e.preventDefault(); this.inspectItem = null; }}>
+        <div class="action-menu" @click=${(e: Event) => { e.stopPropagation(); }}>
+          <div class="action-menu-title">${displayName(item)}</div>
+          <div style="padding:0.4rem 0.5rem;font-size:0.75rem;color:#c8b78e">
+            ${lines}
+          </div>
         </div>
       </div>
     `;
@@ -2539,6 +2618,7 @@ export class GameWorld extends LitElement {
                         @dragleave=${this.onDropZoneDragLeave.bind(this)}
                         @drop=${(e: DragEvent) => { this.onDropBeltSlot(slotIndex, e); }}
                         @click=${it ? (e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'belt' }; } : undefined}
+                        @contextmenu=${it ? (e: Event) => { this.onInspectItem(it, e); } : undefined}
                       >
                         ${it ? html`
                           <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt=""
@@ -2557,7 +2637,10 @@ export class GameWorld extends LitElement {
 
             ${c.pack ? html`
               <div class="inv-container-block">
-                <div class="inv-container-label">${c.pack.name}</div>
+                <div class="inv-container-label" style="display:flex;justify-content:space-between;align-items:center">
+                  <span>${c.pack.name}</span>
+                  <button class="sort-pack-btn" @click=${this.onSortPack.bind(this)} title="Sort pack contents">Sort</button>
+                </div>
                 <div class="pack-items"
                   @dragover=${this.onDropZoneDragOver.bind(this)}
                   @dragleave=${this.onDropZoneDragLeave.bind(this)}
@@ -2573,6 +2656,7 @@ export class GameWorld extends LitElement {
                           @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'pack', item: it }, e); }}
                           @dragend=${this.onItemDragEnd.bind(this)}
                           @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'pack' }; }}
+                          @contextmenu=${(e: Event) => { this.onInspectItem(it, e); }}
                         >
                           <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
                           <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:#a04040">(cursed)</span>` : ''}</span>
@@ -2602,6 +2686,7 @@ export class GameWorld extends LitElement {
                       @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'ground', item: it }, e); }}
                       @dragend=${this.onItemDragEnd.bind(this)}
                       @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'ground' }; }}
+                      @contextmenu=${(e: Event) => { this.onInspectItem(it, e); }}
                     >
                       <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
                       <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}</span>
@@ -2614,6 +2699,7 @@ export class GameWorld extends LitElement {
 
           <span class="overlay-close" @click=${() => { this.overlay = 'none'; this.actionItem = null; }}>[ I / Esc to close ]</span>
           ${this.renderActionMenu()}
+          ${this.renderInspectPopup()}
         </div>
       </div>
     `;
