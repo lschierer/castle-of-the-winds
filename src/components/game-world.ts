@@ -2,7 +2,7 @@
  * Game world component — sprite tile map view + sidebar + overlays.
  *
  * Controls:
- *   Arrow keys / WASD / numpad 1-9  — movement (including diagonals)
+ *   Arrow keys / hjklyubn / numpad 1-9  — movement (including diagonals)
  *   Home / End / PageUp / PageDown   — diagonal movement
  *   I                                — toggle inventory
  *   P                                — toggle powers/spells panel
@@ -775,8 +775,8 @@ export class GameWorld extends LitElement {
   @state() private map: TileMap = VILLAGE_MAP;
   @state() private pos: Vec2 = { ...VILLAGE_MAP.entryPosition };
   @state() private messages: Array<{ text: string; fresh: boolean }> = [
-    { text: 'You stand in the village. Arrow keys, WASD, or numpad to move.', fresh: true },
-    { text: 'I = inventory · P = powers/spells · G = get · M = map · ? = story', fresh: false },
+    { text: 'You stand in the village. Arrow keys, hjklyubn, or numpad to move.', fresh: true },
+    { text: 'I = inventory · P = spells · G = get · S = search · R/r = rest · M = map', fresh: false },
   ];
   @state() private locationName = '';
   @state() private overlay: Overlay = 'none';
@@ -1083,6 +1083,16 @@ export class GameWorld extends LitElement {
     if (e.key === 'g' || e.key === 'G') {
       e.preventDefault();
       this.pickupGround();
+      return;
+    }
+    if (e.key === 'f' || e.key === 'F') {
+      e.preventDefault();
+      this.toggleOverlay('inventory');  // Free Hand command
+      return;
+    }
+    if (e.key === 's') {
+      e.preventDefault();
+      this.doSearch();
       return;
     }
     if (e.key === 'm' || e.key === 'M') {
@@ -2622,6 +2632,23 @@ export class GameWorld extends LitElement {
     this.requestUpdate();
   }
 
+  private doSearch(): void {
+    let found = false;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const tile = getTileAt(this.map, this.pos.x + dx, this.pos.y + dy);
+        if (tile.feature === 'secret-door') {
+          tile.feature = 'door';
+          tile.walkable = true;
+          found = true;
+        }
+      }
+    }
+    this.pushMessage(found ? 'You find a hidden door!' : 'You search but find nothing.');
+    this.requestUpdate();
+  }
+
   private pickupGround(): void {
     const c = this.character;
     if (!c) return;
@@ -3657,15 +3684,20 @@ export class GameWorld extends LitElement {
 // ── Key map ───────────────────────────────────────────────────────────────────
 
 const KEY_TO_DELTA: Record<string, { dx: number; dy: number }> = {
-  // Cardinal — arrows and WASD
+  // Cardinal — arrows
   ArrowUp:    { dx:  0, dy: -1 },
   ArrowDown:  { dx:  0, dy:  1 },
   ArrowLeft:  { dx: -1, dy:  0 },
   ArrowRight: { dx:  1, dy:  0 },
-  w: { dx:  0, dy: -1 },
-  s: { dx:  0, dy:  1 },  // note: 's' for south conflicts with spell toggle when no overlay open
-  a: { dx: -1, dy:  0 },
-  d: { dx:  1, dy:  0 },
+  // Vi-keys (original Castle of the Winds alphabetic movement)
+  k: { dx:  0, dy: -1 },
+  j: { dx:  0, dy:  1 },
+  h: { dx: -1, dy:  0 },
+  l: { dx:  1, dy:  0 },
+  y: { dx: -1, dy: -1 },
+  u: { dx:  1, dy: -1 },
+  b: { dx: -1, dy:  1 },
+  n: { dx:  1, dy:  1 },
   // Numpad (roguelike standard)
   '7': { dx: -1, dy: -1 }, '8': { dx:  0, dy: -1 }, '9': { dx:  1, dy: -1 },
   '4': { dx: -1, dy:  0 },                            '6': { dx:  1, dy:  0 },
