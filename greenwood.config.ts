@@ -20,6 +20,47 @@
  *   needed.
  */
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+
+/**
+ * plugin-binary-maps-json
+ *   The binary map JSON files live in data/binary-maps/ (outside src/).
+ *   Greenwood's dev server only resolves files within the workspace (src/),
+ *   so the browser's `import … with { type: 'json' }` requests 404.
+ *   This plugin intercepts those requests and serves the files from disk.
+ */
+const binaryMapsJson = {
+  type: 'resource',
+  name: 'plugin-binary-maps-json',
+  provider: () => ({
+    extensions: ['json'],
+    contentType: 'application/json',
+
+    shouldResolve(url: URL) {
+      return url.pathname.includes('binary-maps/') && url.pathname.endsWith('_map.json');
+    },
+
+    async resolve(url: URL) {
+      const filename = url.pathname.split('/').pop();
+      const resolved = new URL(`./data/binary-maps/${filename}`, new URL(`file://${process.cwd()}/`));
+      if (existsSync(resolved)) {
+        return new Request(resolved);
+      }
+      return new Request(url);
+    },
+
+    shouldServe(url: URL) {
+      return url.protocol === 'file:' && url.pathname.includes('binary-maps/') && url.pathname.endsWith('_map.json');
+    },
+
+    async serve(url: URL) {
+      const source = await readFile(url, 'utf-8');
+      return new Response(source, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  }),
+};
 
 const loglevelEsmShim = {
   type: 'resource',
@@ -56,5 +97,5 @@ const loglevelEsmShim = {
 export default {
   port: 8080,
   useTsc: true,
-  plugins: [loglevelEsmShim],
+  plugins: [binaryMapsJson, loglevelEsmShim],
 };

@@ -802,13 +802,25 @@ export class GameWorld extends LitElement {
   @state() private inspectItem: Item | null = null;
 
   /**
-   * IDs of containers currently expanded in the inventory overlay.
+   * IDs of *nested* containers (sub-containers inside the pack) that
+   * the player has explicitly opened.  Default state is closed; nested
+   * containers are visible only when in this set.
+   *
    * Help topic 027: containers can be opened in-place to view contents.
    * Required because pre-filled packs spawn on the floor and gelatinous
    * globs scoop ground items into piles, so the player ends up with
    * packs-inside-packs that need to be unloaded.
    */
   @state() private openedContainers: Set<string> = new Set();
+
+  /**
+   * IDs of equipped containers (the player's pack) that have been
+   * explicitly closed.  Equipped packs default to *open* (always visible)
+   * so this set rarely has entries; tracking is needed only so that
+   * "Close container" hides the pack pane and stays hidden across
+   * re-renders.
+   */
+  @state() private closedContainers: Set<string> = new Set();
 
   /** Spell targeting mode: spell selected, waiting for direction input. */
   @state() private castingSpell: string | null = null;
@@ -2305,6 +2317,15 @@ export class GameWorld extends LitElement {
 
     if (a.source === 'equip') {
       if (a.item.slots) {
+        // Equipped containers (the pack, the belt) get Open/Close to
+        // toggle the pane below the paperdoll, plus Drop.  Equipped
+        // packs default to open, so the action label flips based on
+        // closedContainers membership.
+        const isOpen = !this.closedContainers.has(a.item.id);
+        actions.push({
+          label: isOpen ? 'Close container' : 'Open container',
+          handler: () => { this.onToggleContainer(a.item.id); this.actionItem = null; },
+        });
         actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
       } else {
         actions.push({ label: 'Unequip', handler: () => { this.doUnequip(); } });
@@ -2840,11 +2861,15 @@ export class GameWorld extends LitElement {
               </div>
             ` : ''}
 
-            ${c.pack ? html`
+            ${c.pack && !this.closedContainers.has(c.pack.id) ? html`
               <div class="inv-container-block">
                 <div class="inv-container-label" style="display:flex;justify-content:space-between;align-items:center">
                   <span>${c.pack.name}</span>
-                  <button class="sort-pack-btn" @click=${this.onSortPack.bind(this)} title="Sort pack contents">Sort</button>
+
+                  <span style="display:flex;gap:0.4rem">
+                    <button class="sort-pack-btn" @click=${this.onSortPack.bind(this)} title="Sort pack contents">Sort</button>
+                    <button class="sort-pack-btn" @click=${() => { this.onToggleContainer(c.pack!.id); }} title="Hide pack pane">Close</button>
+                  </span>
                 </div>
                 <div class="pack-items"
                   @dragover=${this.onDropZoneDragOver.bind(this)}
@@ -3371,12 +3396,26 @@ export class GameWorld extends LitElement {
     this.requestUpdate();
   }
 
-  /** Toggle expand/collapse of a nested container in the pack. */
+  /**
+   * Toggle expand/collapse of a container.  Behavior depends on which
+   * container: equipped packs default to open (toggle moves them in/out
+   * of `closedContainers`); nested sub-containers default to closed
+   * (toggle moves them in/out of `openedContainers`).
+   */
   private onToggleContainer(containerId: string): void {
-    if (this.openedContainers.has(containerId)) {
-      this.openedContainers.delete(containerId);
+    const equippedPackId = this.character?.pack?.id;
+    if (containerId === equippedPackId) {
+      if (this.closedContainers.has(containerId)) {
+        this.closedContainers.delete(containerId);
+      } else {
+        this.closedContainers.add(containerId);
+      }
     } else {
-      this.openedContainers.add(containerId);
+      if (this.openedContainers.has(containerId)) {
+        this.openedContainers.delete(containerId);
+      } else {
+        this.openedContainers.add(containerId);
+      }
     }
     this.requestUpdate();
   }

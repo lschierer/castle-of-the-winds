@@ -72,6 +72,50 @@ const DIAGONAL_ROAD: Record<string, string> = {
   SW: `${BITMAPS}/ULROCKRD.png`,
 };
 
+// ── Binary byte → oriented sprite override ────────────────────────────────────
+
+/**
+ * The 1993 binary's terrain byte IS its sprite-atlas index.  When a tile is
+ * sourced from a binary map, its `binaryByte` carries the original choice
+ * of oriented variant (road bend NW vs NE, mountain peak NW corner vs N
+ * edge, etc.).  Mapping the byte directly to a specific sprite preserves
+ * that detail — without it the renderer would have to guess from terrain
+ * + feature alone and collapse all variants to one.
+ *
+ * Mappings below are best-effort visual identifications from the seg27
+ * (Castle Road) and seg30 (mountain pass) ASCII dumps.  Bytes for which we
+ * have no confident orientation are omitted; the renderer falls back to
+ * the typed terrain/feature path for those.  Empirical tweaks welcome —
+ * tighten as visuals are checked in-game.
+ */
+const BINARY_BYTE_SPRITE: Record<number, string> = {
+  // Road pieces 0x77..0x7F.  In seg27 these form curves and bends — the
+  // four ROCKRD variants are the four oriented sprite choices.  Distribute
+  // by observed in-map context: `~` and `}` are straight runs; `w` `x` `y`
+  // `z` `{` are the join pieces that hook the run to its next direction.
+  0x77: `${BITMAPS}/ULROCKRD.png`,  // 'w' — joins straight run from below-left
+  0x78: `${BITMAPS}/URROCKRD.png`,  // 'x' — joins from below-right
+  0x79: `${BITMAPS}/URROCKRD.png`,  // 'y' — left start of horizontal run
+  0x7A: `${BITMAPS}/LRROCKRD.png`,  // 'z'
+  0x7B: `${BITMAPS}/LRROCKRD.png`,  // '{' — right end of horizontal run
+  0x7D: `${BITMAPS}/LLROCKRD.png`,  // '}' — diagonal run NE→SW
+  0x7E: `${BITMAPS}/road.png`,      // '~' — straight horizontal road
+  0x7F: `${BITMAPS}/ULROCKRD.png`,
+  // Mountain orientations 0x80..0x83.  Specific corner/edge pieces.
+  0x80: `${BITMAPS}/PEAKnw.png`,
+  0x81: `${BITMAPS}/PEAKne.png`,
+  0x82: `${BITMAPS}/PEAKsw.png`,
+  0x83: `${BITMAPS}/PEAKse.png`,
+  // Mountain edge pieces 0x0D..0x10.
+  0x0D: `${BITMAPS}/BtMounPk.png`,
+  0x0E: `${BITMAPS}/LFMounPk.png`,
+  0x0F: `${BITMAPS}/RTMounPk.png`,
+  0x10: `${BITMAPS}/BtMounPk.png`,
+  // Diagonal road border pieces (verge).
+  0x53: `${BITMAPS}/URROCKRD.png`,
+  0x56: `${BITMAPS}/ULROCKRD.png`,
+};
+
 // ── Mountain sprites by direction ─────────────────────────────────────────────
 
 const MOUNTAIN_SPRITE: Record<Direction, string> = {
@@ -128,6 +172,11 @@ function terrainBase(tile: Tile): TileStyle {
     return style;
   }
   if (tile.terrain === 'mountain') {
+    // Prefer the binary's exact byte-indexed sprite when available.
+    if (tile.binaryByte !== undefined) {
+      const byteSprite = BINARY_BYTE_SPRITE[tile.binaryByte];
+      if (byteSprite) return singleLayer(byteSprite);
+    }
     const dir = tile.direction ?? 'N';
     return singleLayer(MOUNTAIN_SPRITE[dir]);
   }
@@ -514,8 +563,16 @@ export function getTileStyle(
         break;
 
       case 'diagonal-road': {
-        const dir = tile.direction ?? 'NE';
-        const roadSprite = DIAGONAL_ROAD[dir] ?? `${BITMAPS}/road.png`;
+        // Prefer the binary's byte-indexed road piece when sourced from a
+        // binary map; falls back to direction-based lookup for spec maps.
+        let roadSprite: string | undefined;
+        if (tile.binaryByte !== undefined) {
+          roadSprite = BINARY_BYTE_SPRITE[tile.binaryByte];
+        }
+        if (!roadSprite) {
+          const dir = tile.direction ?? 'NE';
+          roadSprite = DIAGONAL_ROAD[dir] ?? `${BITMAPS}/road.png`;
+        }
         style = addLayer(roadSprite, style);
         break;
       }
