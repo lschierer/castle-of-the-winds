@@ -285,6 +285,7 @@ export function makePurse(
     cursed: false,
     broken: false,
     enchantment: 0,
+    icon: 'purse.png',
     slots: [
       coinSlot('copper',   copper),
       coinSlot('silver',   silver),
@@ -389,6 +390,14 @@ export const BELT_SPECS: readonly BeltSpec[] = [
 export function makePack(name: string): Item {
   const spec = PACK_SPECS.find((s) => s.name === name);
   if (!spec) throw new Error(`Unknown pack: ${name}`);
+  // Pick an appropriate icon by container kind so the shop and ground
+  // panes show the right sprite (otherwise the shop falls back to
+  // 'container.png' which doesn't exist and renders as a broken-image
+  // placeholder).
+  const lower = spec.name.toLowerCase();
+  const icon = lower.includes('chest') ? 'CHEST.png'
+             : lower.includes('bag')   ? 'BAG.png'
+             : 'pack.png';
   const item: Item = {
     id: uid(),
     kind: 'container',
@@ -400,6 +409,7 @@ export function makePack(name: string): Item {
     cursed: false,
     broken: false,
     enchantment: 0,
+    icon,
     slots: [
       { accepts: [], maxWeight: spec.maxPayloadWeight, maxBulk: spec.maxPayloadBulk, items: [] },
     ],
@@ -432,6 +442,7 @@ export function makeBelt(name: string): Item {
     bulk: spec.bulk,
     quantity: 1,
     identified: true,
+    icon: 'belt.png',
     cursed: false,
     broken: false,
     enchantment: 0,
@@ -499,6 +510,32 @@ function pickRandom<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
 }
 
+/**
+ * Pick an icon filename for a weapon based on its name (and falls back
+ * on weaponType/class).  Per-name is preferred so e.g. Hammer doesn't
+ * share Mace's icon.  Available named icons: hammer, club, flail, BAXE
+ * (battle axe), spear, dagger, sword, plus mace/sword/spear via the
+ * ICON_TO_EXTRACTED redirect.
+ */
+function weaponIconForName(
+  name: string,
+  weaponType?: 'blade' | 'blunt' | 'polearm',
+  weaponClass?: number,
+): string {
+  const n = name.toLowerCase();
+  if (n.includes('hammer'))         return 'hammer.png';
+  if (n.includes('club'))           return 'club.png';
+  if (n.includes('flail'))          return 'flail.png';
+  if (n.includes('battle axe'))     return 'BAXE.png';
+  if (n.includes('axe'))            return 'BAXE.png';
+  if (n.includes('morning star'))   return 'mace.png';
+  if (n.includes('quarterstaff'))   return 'spear.png';
+  if (weaponType === 'blunt')       return 'mace.png';
+  if (weaponType === 'polearm')     return 'spear.png';
+  if ((weaponClass ?? 2) <= 2)      return 'dagger.png';
+  return 'sword.png';
+}
+
 /** Roll damage for a weapon. Returns value clamped to ≥ 0. */
 export function rollDamage(damage: DamageDice): number {
   let total = damage.bonus;
@@ -533,7 +570,7 @@ export function makeWeapon(name: string, weight?: number, dungeonLevel?: number)
     cursed: enchantment < 0,
     broken: false,
     enchantment,
-    icon: spec?.weaponType === 'blunt' ? 'mace.png' : spec?.weaponType === 'polearm' ? 'spear.png' : (spec?.weaponClass ?? 2) <= 2 ? 'dagger.png' : 'sword.png',
+    icon: weaponIconForName(name, spec?.weaponType, spec?.weaponClass),
     weaponClass: spec?.weaponClass ?? 2,
   };
 }
