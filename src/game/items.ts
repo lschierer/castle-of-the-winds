@@ -390,6 +390,7 @@ export const BELT_SPECS: readonly BeltSpec[] = [
 export function makePack(name: string): Item {
   const spec = PACK_SPECS.find((s) => s.name === name);
   if (!spec) throw new Error(`Unknown pack: ${name}`);
+
   // Pick an appropriate icon by container kind so the shop and ground
   // panes show the right sprite (otherwise the shop falls back to
   // 'container.png' which doesn't exist and renders as a broken-image

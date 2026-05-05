@@ -167,14 +167,12 @@ export function pickupAllItems(map: TileMap, x: number, y: number): Item[] {
  * Walls block vision but are themselves revealed.
  */
 export function revealAround(map: TileMap, px: number, py: number, radius = 10): void {
-  // If player is in a room, reveal the entire room + its walls (once per room)
+  // If player is in a room, reveal the entire room + its walls
   const playerTile = getTileAt(map, px, py);
   if (playerTile.roomId !== undefined) {
     if (!map.revealedRooms) map.revealedRooms = new Set();
-    if (!map.revealedRooms.has(playerTile.roomId)) {
-      revealRoom(map, playerTile.roomId);
-      map.revealedRooms.add(playerTile.roomId);
-    }
+    revealRoom(map, playerTile.roomId);
+    map.revealedRooms.add(playerTile.roomId);
   }
 
   // Normal LOS reveal for corridors and nearby area
