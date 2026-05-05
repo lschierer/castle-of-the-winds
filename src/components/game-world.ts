@@ -1280,15 +1280,26 @@ export class GameWorld extends LitElement {
     for (let i = 0; i < 50; i++) {
       const nx = this.pos.x + dx;
       const ny = this.pos.y + dy;
-      // Stop if monster adjacent or in path
+      // Stop if monster blocks the destination tile
       if (this.monsters.some((m) => m.x === nx && m.y === ny)) break;
-      if (this.monsters.some((m) => Math.abs(m.x - this.pos.x) <= 1 && Math.abs(m.y - this.pos.y) <= 1)) break;
       if (!isWalkable(this.map, nx, ny)) break;
       if (exitAt(this.map, nx, ny)) break;
       this.moveTo(nx, ny);
       // Stop if items on ground
       const tile = getTileAt(this.map, nx, ny);
       if (tile.items.length > 0) break;
+      // Ranged monsters can interrupt the run if they have LOS
+      const interrupted = this.monsters.some((m) => {
+        const spec = monsterById(m.specId);
+        if (!spec?.specials) return false;
+        const hasRanged = spec.specials.some((s) => s.startsWith('ranged_') || s === 'breath_fire');
+        if (!hasRanged) return false;
+        return hasLineOfSight(this.map, m.x, m.y, this.pos.x, this.pos.y);
+      });
+      if (interrupted) {
+        this.pushMessage('A ranged attack interrupts your run!');
+        break;
+      }
     }
     this.runMonsterTurns();
   }
