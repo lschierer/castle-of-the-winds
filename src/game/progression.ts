@@ -18,7 +18,7 @@ export function totalFloorsForStage(stage: GameStage): number {
 export const MINE_UPSTAIRS_FROM_FLOOR = 4;
 
 /** Scrap of Parchment appears on the deepest mine floor. */
-export const MINE_PARCHMENT_FLOOR = 8;
+export const MINE_PARCHMENT_FLOOR = 4;
 
 /** Hrungnir boss spawns on the deepest fortress floor. */
 export const FORTRESS_BOSS_FLOOR = 11;
