@@ -44,6 +44,7 @@ import {
   generateShopInventory, buyItem, sellItem, buyPrice, sellPrice, junkYardPrice,
   sageIdentify, identifyFee, templeHeal, templeHealCost, templeUncurse, templeUncurseCost,
   resetVisitPrices,
+  purseTotalCopper, bankTotalCopper, bankDeposit, bankWithdraw,
 } from '../game/shop.ts';
 import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk } from '../game/items.ts';
 import {
@@ -1661,6 +1662,7 @@ export class GameWorld extends LitElement {
     if (shop.type === 'sage') return this.renderSageShop(b.name, c, packItems, close);
     if (shop.type === 'temple') return this.renderTempleShop(b.name, c, close);
     if (shop.type === 'junkyard') return this.renderJunkYard(b.name, c, packItems, close);
+    if (shop.type === 'bank') return this.renderBank(b.name, shop, c, close);
     return this.renderTradeShop(b.name, shop, inv, c, packItems, close);
   }
 
@@ -1764,6 +1766,68 @@ export class GameWorld extends LitElement {
             <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopUncurse(it); }}>
               Remove curse: ${displayName(it)} — <span style="color:#d4a820">${templeUncurseCost()} cp</span>
             </div>`) : html`<div class="inv-empty">No cursed equipment.</div>`}
+          <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Bank UI: deposit purse coins, withdraw to purse, view balance.
+   * Help topic 011: "Copper: ... plus any money you have in the bank";
+   * help topic 001 (C2): a bank "where you can leave your money for
+   * safe keeping".  Lines of credit transfer between bank locations.
+   */
+  private renderBank(name: string, shop: ShopDef, c: Character, close: () => void): TemplateResult {
+    const purseCp = purseTotalCopper(c.purse);
+    const bankCp  = bankTotalCopper(c);
+    const onDeposit = (amountStr: string): void => {
+      const n = Math.floor(Number(amountStr));
+      if (!Number.isFinite(n) || n <= 0) { this.pushMessage('Enter a positive amount.'); return; }
+      if (bankDeposit(c, shop.id, n)) {
+        this.pushMessage(`Deposited ${n.toLocaleString()} cp.`);
+        this.autoSave();
+        this.requestUpdate();
+      } else {
+        this.pushMessage(`Not enough in your purse — have ${purseCp.toLocaleString()} cp.`);
+      }
+    };
+    const onWithdraw = (amountStr: string): void => {
+      const n = Math.floor(Number(amountStr));
+      if (!Number.isFinite(n) || n <= 0) { this.pushMessage('Enter a positive amount.'); return; }
+      if (bankWithdraw(c, shop.id, n)) {
+        this.pushMessage(`Withdrew ${n.toLocaleString()} cp.`);
+        this.autoSave();
+        this.requestUpdate();
+      } else {
+        this.pushMessage(`Not enough on deposit — have ${bankCp.toLocaleString()} cp.`);
+      }
+    };
+    return html`
+      <div class="overlay" @click=${close}>
+        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
+          <p class="overlay-title">${name}</p>
+          <p class="building-services">Safe-keeping for your coin.  Balances transfer between branches.</p>
+          <div class="divider"></div>
+          <div style="font-size:0.8rem;color:#c8b78e;margin-bottom:0.6rem">
+            <div>On hand (purse): <span style="color:#d4a820">${purseCp.toLocaleString()} cp</span></div>
+            <div>On deposit (all banks): <span style="color:#d4a820">${bankCp.toLocaleString()} cp</span></div>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.4rem">
+            <input id="bank-deposit" type="number" min="1" placeholder="amount" style="width:6rem;background:#1a1610;border:1px solid #3d3020;color:#c8b78e;padding:0.2rem 0.3rem">
+            <button class="action-menu-btn" @click=${(e: Event) => {
+              const root = (e.currentTarget as HTMLElement).getRootNode() as ShadowRoot | Document;
+              const input = root.querySelector('#bank-deposit') as HTMLInputElement | null;
+              if (input) onDeposit(input.value);
+            }}>Deposit</button>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center">
+            <input id="bank-withdraw" type="number" min="1" placeholder="amount" style="width:6rem;background:#1a1610;border:1px solid #3d3020;color:#c8b78e;padding:0.2rem 0.3rem">
+            <button class="action-menu-btn" @click=${(e: Event) => {
+              const root = (e.currentTarget as HTMLElement).getRootNode() as ShadowRoot | Document;
+              const input = root.querySelector('#bank-withdraw') as HTMLInputElement | null;
+              if (input) onWithdraw(input.value);
+            }}>Withdraw</button>
+          </div>
           <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
         </div>
       </div>`;

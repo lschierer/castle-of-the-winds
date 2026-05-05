@@ -136,6 +136,15 @@ export interface Character {
   pack: Item | null;
   /** Per-shop reputations, keyed by shop id (shop name). */
   shopReputations: Record<string, ShopReputation>;
+  /**
+   * Bank lines of credit, in copper pieces, keyed by bank id.
+   * Help topic 011: "Copper: ...plus any money you have in the bank".
+   * Lines of credit can't be stolen and transfer between bank locations
+   * (a deposit at any bank shows the same balance everywhere).
+   * The keying-by-bank-id is for future per-branch reputation; balances
+   * are pooled across branches at withdraw/deposit time.
+   */
+  linesOfCredit?: Record<string, number>;
 }
 
 // ── Point-buy helpers ─────────────────────────────────────────────────────────
