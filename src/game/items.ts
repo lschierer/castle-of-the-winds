@@ -124,7 +124,7 @@ export interface Item {
   coinKind?: CoinKind;
   /** Weapon class (0-12) — only present when kind === 'weapon'. Higher = more damage. */
   weaponClass?: number;
-  /** Sprite icon filename (e.g. 'sword.png'). Used for ground/inventory display. */
+  /** Sprite icon filename (e.g. '/assets/sprites/icons/Weapons/icon_111.png'). Used for ground/inventory display. */
   icon?: string;
   /**
    * Remaining charges — only on wands and staves.  Help topic 017:
@@ -246,7 +246,7 @@ export function makeCoinStack(kind: CoinKind, quantity: number): Item {
     kind: 'coin',
     coinKind: kind,
     name: COIN_NAMES[kind],
-    icon: `${kind}.png`,
+    icon: `/assets/sprites/icons/Items/icon_${kind === "copper" ? "149" : kind === "silver" ? "151" : kind === "gold" ? "153" : "155"}.png`,
     weight: 5,          // ~5 g per coin
     bulk: 0,            // coins are negligibly bulky
     quantity,
@@ -285,7 +285,7 @@ export function makePurse(
     cursed: false,
     broken: false,
     enchantment: 0,
-    icon: 'purse.png',
+    icon: '/assets/sprites/icons/Containers/icon_157.png',
     slots: [
       coinSlot('copper',   copper),
       coinSlot('silver',   silver),
@@ -397,9 +397,9 @@ export function makePack(name: string): Item {
   // 'container.png' which doesn't exist and renders as a broken-image
   // placeholder).
   const lower = spec.name.toLowerCase();
-  const icon = lower.includes('chest') ? 'CHEST.png'
-             : lower.includes('bag')   ? 'BAG.png'
-             : 'pack.png';
+  const icon = lower.includes('chest') ? '/assets/sprites/icons/Containers/icon_141.png'
+             : lower.includes('bag')   ? '/assets/sprites/icons/Containers/icon_139.png'
+             : '/assets/sprites/icons/Containers/icon_143.png';
   const item: Item = {
     id: uid(),
     kind: 'container',
@@ -444,7 +444,7 @@ export function makeBelt(name: string): Item {
     bulk: spec.bulk,
     quantity: 1,
     identified: true,
-    icon: 'belt.png',
+    icon: '/assets/sprites/icons/Containers/icon_137.png',
     cursed: false,
     broken: false,
     enchantment: 0,
@@ -525,17 +525,17 @@ function weaponIconForName(
   weaponClass?: number,
 ): string {
   const n = name.toLowerCase();
-  if (n.includes('hammer'))         return 'hammer.png';
-  if (n.includes('club'))           return 'club.png';
-  if (n.includes('flail'))          return 'flail.png';
-  if (n.includes('battle axe'))     return 'BAXE.png';
-  if (n.includes('axe'))            return 'BAXE.png';
-  if (n.includes('morning star'))   return 'mace.png';
-  if (n.includes('quarterstaff'))   return 'spear.png';
-  if (weaponType === 'blunt')       return 'mace.png';
-  if (weaponType === 'polearm')     return 'spear.png';
-  if ((weaponClass ?? 2) <= 2)      return 'dagger.png';
-  return 'sword.png';
+  if (n.includes('hammer'))         return '/assets/sprites/icons/Weapons/icon_291.png';
+  if (n.includes('club'))           return '/assets/sprites/icons/Weapons/icon_315.png';
+  if (n.includes('flail'))          return '/assets/sprites/icons/Weapons/icon_297.png';
+  if (n.includes('battle axe'))     return '/assets/sprites/icons/Weapons/icon_109.png';
+  if (n.includes('axe'))            return '/assets/sprites/icons/Weapons/icon_109.png';
+  if (n.includes('morning star'))   return '/assets/sprites/icons/Weapons/icon_113.png';
+  if (n.includes('quarterstaff'))   return '/assets/sprites/icons/Weapons/icon_309.png';
+  if (weaponType === 'blunt')       return '/assets/sprites/icons/Weapons/icon_113.png';
+  if (weaponType === 'polearm')     return '/assets/sprites/icons/Weapons/icon_309.png';
+  if ((weaponClass ?? 2) <= 2)      return '/assets/sprites/icons/Weapons/icon_111.png';
+  return '/assets/sprites/icons/Weapons/icon_111.png';
 }
 
 /** Roll damage for a weapon. Returns value clamped to ≥ 0. */

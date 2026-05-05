@@ -178,8 +178,9 @@ export function playerMeleeAttack(
   if (weapon) {
     const spec = WEAPON_SPECS.find((s) => s.name === weapon.name);
     const wc = weapon.weaponClass ?? spec?.weaponClass ?? 2;
-    // Weapon class damage: 1 + random(0..WC). A dagger (WC 2) does 1-3.
-    rawDamage = 1 + Math.floor(rand() * (wc + 1));
+    // Weapon damage: 1 + random(0..WC*3-1). Matches original's damage scale
+    // where monsters with damageMax 6 hit for 1-6 and have 8-128 HP.
+    rawDamage = 1 + Math.floor(rand() * (wc * 3));
     weaponName = weapon.name;
     // Enchantment adds flat damage
     rawDamage += weapon.enchantment;
