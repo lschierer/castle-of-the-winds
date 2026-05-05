@@ -46,7 +46,7 @@ import {
   resetVisitPrices,
   purseTotalCopper, bankTotalCopper, bankDeposit, bankWithdraw,
 } from '../game/shop.ts';
-import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk } from '../game/items.ts';
+import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk, PACK_SPECS } from '../game/items.ts';
 import {
   type MonsterInstance,
   type PlayerStatus,
@@ -967,6 +967,16 @@ export class GameWorld extends LitElement {
     const state = loadGameState();
     if (state) {
       this.character = state.character;
+      // Migrate stale pack slot limits from older saves
+      if (this.character.pack?.slots) {
+        const spec = PACK_SPECS.find((s) => s.name === this.character!.pack!.name);
+        if (spec) {
+          for (const slot of this.character.pack.slots) {
+            if (slot.maxWeight !== undefined) slot.maxWeight = spec.maxPayloadWeight;
+            if (slot.maxBulk !== undefined) slot.maxBulk = spec.maxPayloadBulk;
+          }
+        }
+      }
       this.pos = state.pos;
       this.currentStage = (state.currentStage as GameStage | undefined) ?? 'mine';
       this.currentDungeonLevel = state.currentDungeonLevel;

@@ -339,6 +339,7 @@ export interface PackSpec {
 
 export const PACK_SPECS: readonly PackSpec[] = [
   // ── Mundane packs (from help file) ───────────────────────────────────────────
+  { name: 'Broken Pack',        weight:  1000, bulk: 1000, maxPayloadWeight:      0, maxPayloadBulk:      0 },
   { name: 'Small Pack',         weight:  1000, bulk: 1000, maxPayloadWeight:  12000, maxPayloadBulk:  50000 },
   { name: 'Medium Pack',        weight:  2000, bulk: 1500, maxPayloadWeight:  22000, maxPayloadBulk:  75000 },
   { name: 'Large Pack',         weight:  4000, bulk: 2000, maxPayloadWeight:  35000, maxPayloadBulk: 100000 },
