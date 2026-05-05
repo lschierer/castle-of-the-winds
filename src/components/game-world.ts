@@ -1124,7 +1124,11 @@ export class GameWorld extends LitElement {
     const delta = KEY_TO_DELTA[e.key];
     if (delta) {
       e.preventDefault();
-      this.tryMove(delta.dx, delta.dy);
+      if (e.shiftKey) {
+        this.runInDirection(delta.dx, delta.dy);
+      } else {
+        this.tryMove(delta.dx, delta.dy);
+      }
     }
   };
 
@@ -1190,6 +1194,23 @@ export class GameWorld extends LitElement {
       this.locationName = '';
     }
 
+    this.runMonsterTurns();
+  }
+
+  private runInDirection(dx: number, dy: number): void {
+    for (let i = 0; i < 50; i++) {
+      const nx = this.pos.x + dx;
+      const ny = this.pos.y + dy;
+      // Stop if monster adjacent or in path
+      if (this.monsters.some((m) => m.x === nx && m.y === ny)) break;
+      if (this.monsters.some((m) => Math.abs(m.x - this.pos.x) <= 1 && Math.abs(m.y - this.pos.y) <= 1)) break;
+      if (!isWalkable(this.map, nx, ny)) break;
+      if (exitAt(this.map, nx, ny)) break;
+      this.moveTo(nx, ny);
+      // Stop if items on ground
+      const tile = getTileAt(this.map, nx, ny);
+      if (tile.items.length > 0) break;
+    }
     this.runMonsterTurns();
   }
 
