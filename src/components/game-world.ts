@@ -83,6 +83,7 @@ type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 's
 type DragSrc =
   | { from: 'equip'; slotKey: string; item: Item }
   | { from: 'pack'; item: Item }
+  | { from: 'sub-container'; containerId: string; item: Item }
   | { from: 'belt'; slotIndex: number; item: Item }
   | { from: 'ground'; item: Item }
   | { from: 'shop'; item: Item; inv: ShopInventory };
@@ -788,11 +789,25 @@ export class GameWorld extends LitElement {
   /** Active status effects on the player. */
   @state() private playerStatus: PlayerStatus = {};
 
-  /** Item action menu: which item is selected and where it came from. */
-  @state() private actionItem: { item: Item; source: 'equip' | 'pack' | 'belt' | 'ground'; slotName?: string } | null = null;
+  /**
+   * Item action menu: which item is selected and where it came from.
+   * `containerId` is set when the item is inside an opened nested
+   * container (e.g. a Bag inside the pack); doDrop / doUnequip / etc.
+   * use it to find the right container to remove the item from.
+   */
+  @state() private actionItem: { item: Item; source: 'equip' | 'pack' | 'belt' | 'ground'; slotName?: string; containerId?: string } | null = null;
 
   /** Right-click property popup — see help topic 027. */
   @state() private inspectItem: Item | null = null;
+
+  /**
+   * IDs of containers currently expanded in the inventory overlay.
+   * Help topic 027: containers can be opened in-place to view contents.
+   * Required because pre-filled packs spawn on the floor and gelatinous
+   * globs scoop ground items into piles, so the player ends up with
+   * packs-inside-packs that need to be unloaded.
+   */
+  @state() private openedContainers: Set<string> = new Set();
 
   /** Spell targeting mode: spell selected, waiting for direction input. */
   @state() private castingSpell: string | null = null;
@@ -1975,8 +1990,12 @@ export class GameWorld extends LitElement {
     }
     const charKey = this.EQUIP_SLOT_MAP[slotName];
     if (!charKey) return;
-    // Remove from pack
-    const removed = removeFromContainer(c.pack, item.id);
+    // Remove from wherever the action menu sourced this item (the pack
+    // itself, or a nested sub-container that's currently opened).
+    const sourceContainer = this.actionItem?.containerId
+      ? this.findSubContainerInPack(this.actionItem.containerId) ?? c.pack
+      : c.pack;
+    const removed = removeFromContainer(sourceContainer, item.id);
     if (!removed) return;
     // If slot occupied, swap to pack
     const current = (c as unknown as Record<string, Item | null>)[charKey];
@@ -2167,7 +2186,13 @@ export class GameWorld extends LitElement {
       const charKey = this.EQUIP_SLOT_MAP[a.slotName];
       if (charKey) (c as unknown as Record<string, unknown>)[charKey] = null;
     } else if (a.source === 'pack' && c.pack) {
-      removeFromContainer(c.pack, a.item.id);
+      // Item may be in the main pack or in a nested sub-container.
+      if (a.containerId) {
+        const sub = this.findSubContainerInPack(a.containerId);
+        if (sub) removeFromContainer(sub, a.item.id);
+      } else {
+        removeFromContainer(c.pack, a.item.id);
+      }
     } else if (a.source === 'belt' && c.belt) {
       removeFromContainer(c.belt, a.item.id);
     }
@@ -2192,6 +2217,19 @@ export class GameWorld extends LitElement {
       }
     } else if (a.source === 'pack' || a.source === 'belt') {
       const src = a.source;
+      // For nested containers in the pack: offer Open/Close to expand
+      // their contents in a sub-pane.  Distinct from Swap Pack (which
+      // replaces the player's equipped pack with this one).
+      const isNestedContainer = src === 'pack'
+        && a.item.slots !== undefined
+        && a.item.id !== this.character?.pack?.id;
+      if (isNestedContainer) {
+        const isOpen = this.openedContainers.has(a.item.id);
+        actions.push({
+          label: isOpen ? 'Close container' : 'Open container',
+          handler: () => { this.onToggleContainer(a.item.id); this.actionItem = null; },
+        });
+      }
       if (a.item.name === 'Scrap of Parchment') {
         actions.push({ label: 'Read', handler: () => { this.readParchment(); } });
       } else if (a.item.kind === 'coin' && a.item.coinKind) {
@@ -2226,6 +2264,46 @@ export class GameWorld extends LitElement {
             <button class="action-menu-btn" @click=${act.handler}>${act.label}</button>
           `)}
           <button class="action-menu-btn" @click=${() => { this.actionItem = null; }}>Cancel</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render the contents of an opened nested container (e.g. a Bag inside
+   * the pack).  Each row is draggable out (to pack, equip slots, ground)
+   * and the pane itself accepts drops to put items in.
+   */
+  private renderSubContainerPane(container: Item): TemplateResult {
+    const items = container.slots?.flatMap((s) => s.items) ?? [];
+    const close = (): void => { this.openedContainers.delete(container.id); this.requestUpdate(); };
+    return html`
+      <div class="inv-container-block" style="margin-top:0.4rem;border-left:2px solid #3d3020;padding-left:0.5rem">
+        <div class="inv-container-label" style="display:flex;justify-content:space-between;align-items:center">
+          <span>↳ ${displayName(container)}</span>
+          <button class="sort-pack-btn" @click=${close} title="Close container">Close</button>
+        </div>
+        <div class="pack-items"
+          @dragover=${this.onDropZoneDragOver.bind(this)}
+          @dragleave=${this.onDropZoneDragLeave.bind(this)}
+          @drop=${(e: DragEvent) => { this.onDropSubContainer(container.id, e); }}
+        >
+          ${items.length === 0
+            ? html`<div class="inv-empty">Empty</div>`
+            : items.map((it) => html`
+                <div
+                  class="inv-item"
+                  style="cursor:pointer;display:flex;align-items:center;gap:4px"
+                  draggable="true"
+                  @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'sub-container', containerId: container.id, item: it }, e); }}
+                  @dragend=${this.onItemDragEnd.bind(this)}
+                  @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'pack', containerId: container.id }; }}
+                  @contextmenu=${(e: Event) => { this.onInspectItem(it, e); }}
+                >
+                  <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
+                  <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:#a04040">(cursed)</span>` : ''}</span>
+                </div>
+              `)}
         </div>
       </div>
     `;
@@ -2588,13 +2666,28 @@ export class GameWorld extends LitElement {
             ${this.renderEquipSlot(c.freeHand,  'Free Hand', `${IC}/wand.png`,     'freeh')}
 
             <!-- Bottom row (right→left going CCW, excl. pack corner) -->
-            <div class="equip-slot ${purse ? 'filled' : ''}" style="grid-area:purse">
-              <img class="equip-slot-icon" src="${IC}/purse.png" alt="Purse">
+            <div
+              class="equip-slot ${purse ? 'filled' : ''}"
+              style="grid-area:purse;${purse ? 'cursor:pointer' : ''}"
+              @click=${purse ? (e: Event) => { e.stopPropagation(); this.actionItem = { item: purse, source: 'equip', slotName: 'purse' }; } : undefined}
+              @contextmenu=${purse ? (e: Event) => { this.onInspectItem(purse, e); } : undefined}
+              @dragover=${this.onDropZoneDragOver.bind(this)}
+              @dragleave=${this.onDropZoneDragLeave.bind(this)}
+              @drop=${(e: DragEvent) => { this.onDropEquipSlot('purse', e); }}
+            >
               ${purse ? html`
+                <img class="equip-slot-icon" src="${IC}/purse.png" alt="Purse"
+                  draggable="true"
+                  @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'equip', slotKey: 'purse', item: purse }, e); }}
+                  @dragend=${this.onItemDragEnd.bind(this)}
+                >
                 <span class="equip-slot-name" style="font-size:0.45rem">
                   ${cp > 0 ? `${cp.toLocaleString()}cp ` : ''}${sp > 0 ? `${sp.toLocaleString()}sp ` : ''}${gp > 0 ? `${gp.toLocaleString()}gp ` : ''}${pp > 0 ? `${pp.toLocaleString()}pp` : ''}
                 </span>
-              ` : html`<span class="equip-slot-label">Purse</span>`}
+              ` : html`
+                <img class="equip-slot-icon" src="${IC}/purse.png" alt="Purse">
+                <span class="equip-slot-label">Purse</span>
+              `}
             </div>
             ${this.renderEquipSlot(c.boots,     'Boots',     `${IC}/boots.png`,    'boots')}
             ${this.renderEquipSlot(c.ringRight, 'Ring',      `${IC}/ring.png`,     'ring-r')}
@@ -2648,21 +2741,41 @@ export class GameWorld extends LitElement {
                 >
                   ${packItems.length === 0
                     ? html`<div class="inv-empty">Empty</div>`
-                    : packItems.map((it) => html`
-                        <div
-                          class="inv-item"
-                          style="cursor:pointer;display:flex;align-items:center;gap:4px"
-                          draggable="true"
-                          @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'pack', item: it }, e); }}
-                          @dragend=${this.onItemDragEnd.bind(this)}
-                          @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'pack' }; }}
-                          @contextmenu=${(e: Event) => { this.onInspectItem(it, e); }}
-                        >
-                          <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
-                          <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:#a04040">(cursed)</span>` : ''}</span>
-                        </div>
-                      `)}
+                    : packItems.map((it) => {
+                        const isContainer = it.slots !== undefined;
+                        const isOpen = isContainer && this.openedContainers.has(it.id);
+                        // Container rows get @drop so dragging onto a closed
+                        // container icon puts the item inside (help topic 027
+                        // shortcut), and a small ▸/▾ marker to indicate state.
+                        const dropOpts = isContainer ? {
+                          dragover: this.onDropZoneDragOver.bind(this),
+                          dragleave: this.onDropZoneDragLeave.bind(this),
+                          drop: (e: DragEvent) => { this.onDropSubContainer(it.id, e); },
+                        } : null;
+                        return html`
+                          <div
+                            class="inv-item"
+                            style="cursor:pointer;display:flex;align-items:center;gap:4px"
+                            draggable="true"
+                            @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'pack', item: it }, e); }}
+                            @dragend=${this.onItemDragEnd.bind(this)}
+                            @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'pack' }; }}
+                            @contextmenu=${(e: Event) => { this.onInspectItem(it, e); }}
+                            @dragover=${dropOpts?.dragover}
+                            @dragleave=${dropOpts?.dragleave}
+                            @drop=${dropOpts?.drop}
+                          >
+                            <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
+                            <span>${isContainer ? html`<span style="color:#a09070">${isOpen ? '▾' : '▸'}</span> ` : ''}${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:#a04040">(cursed)</span>` : ''}</span>
+                          </div>
+                        `;
+                      })}
                 </div>
+
+                <!-- Expanded sub-containers (nested packs/bags/chests) -->
+                ${packItems
+                  .filter((it) => it.slots !== undefined && this.openedContainers.has(it.id))
+                  .map((sub) => this.renderSubContainerPane(sub))}
               </div>
             ` : ''}
           </div>
@@ -3029,6 +3142,22 @@ export class GameWorld extends LitElement {
     (e.currentTarget as HTMLElement).classList.remove('drag-over');
   }
 
+  /**
+   * Find a container by id among the items currently in the player's pack
+   * (i.e. a sub-container nested one level inside the equipped pack).
+   * Returns undefined if no such item is in the pack or if it isn't a
+   * container.
+   */
+  private findSubContainerInPack(containerId: string): Item | undefined {
+    const pack = this.character?.pack;
+    if (!pack?.slots) return undefined;
+    for (const slot of pack.slots) {
+      const found = slot.items.find((i) => i.id === containerId);
+      if (found?.slots) return found;
+    }
+    return undefined;
+  }
+
   /** Remove an item from wherever it was dragged from. */
   private removeDragSrc(): boolean {
     const src = this.dragSrc;
@@ -3044,6 +3173,10 @@ export class GameWorld extends LitElement {
       (c as unknown as Record<string, unknown>)[key] = null;
     } else if (src.from === 'pack' && c.pack) {
       if (!removeFromContainer(c.pack, src.item.id)) return false;
+    } else if (src.from === 'sub-container') {
+      const container = this.findSubContainerInPack(src.containerId);
+      if (!container) return false;
+      if (!removeFromContainer(container, src.item.id)) return false;
     } else if (src.from === 'belt' && c.belt) {
       if (!removeFromContainer(c.belt, src.item.id)) return false;
     } else if (src.from === 'ground') {
@@ -3063,17 +3196,35 @@ export class GameWorld extends LitElement {
     const c = this.character;
     if (!src || !c || src.from === 'shop') return;
 
-    // Validate kind compatibility via SLOT_TO_KIND
-    const SLOT_ACCEPTS: Record<string, string | null> = {
-      weapon: 'weapon', armor: 'armor', helm: 'helm', shield: 'shield',
-      boots: 'boots', cloak: 'cloak', bracers: 'bracers', gauntlets: 'gauntlets',
-      'ring-l': 'ring', 'ring-r': 'ring', amulet: 'amulet', belt: 'belt',
-      freeh: null, // anything
-      pack: 'container', purse: 'purse',
+    // Validate kind compatibility per slot.
+    // Some slots accept multiple item kinds (free hand = anything, belt =
+    // belts or other containers per help topic 027).
+    const SLOT_ACCEPTS: Record<string, ReadonlyArray<string> | null> = {
+      weapon:    ['weapon'],
+      armor:     ['armor'],
+      helm:      ['helm'],
+      shield:    ['shield'],
+      boots:     ['boots'],
+      cloak:     ['cloak'],
+      bracers:   ['bracers'],
+      gauntlets: ['gauntlets'],
+      'ring-l':  ['ring'],
+      'ring-r':  ['ring'],
+      amulet:    ['amulet'],
+      belt:      ['belt', 'container'], // belts AND containers (e.g., bags)
+      freeh:     null,                  // any kind (per user description)
+      pack:      ['container', 'belt'], // pack slot also accepts any container
+      purse:     ['container'],         // purses are kind='container'
     };
-    const expectedKind = SLOT_ACCEPTS[slotKey];
-    if (expectedKind !== undefined && expectedKind !== null && src.item.kind !== expectedKind) {
+    const accepted = SLOT_ACCEPTS[slotKey];
+    if (accepted !== undefined && accepted !== null && !accepted.includes(src.item.kind)) {
       this.pushMessage(`${displayName(src.item)} cannot go in the ${slotKey} slot.`);
+      this.dragSrc = null;
+      return;
+    }
+    // Purse slot: be specific — only purse-named containers
+    if (slotKey === 'purse' && !src.item.name.includes('Purse')) {
+      this.pushMessage(`Only a purse can go in the purse slot.`);
       this.dragSrc = null;
       return;
     }
@@ -3103,6 +3254,58 @@ export class GameWorld extends LitElement {
     this.pushMessage(result.stuck
       ? `You equip the ${displayName(result.item)}… it's cursed!`
       : `Equipped ${displayName(result.item)}.`);
+    this.dragSrc = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  /** Toggle expand/collapse of a nested container in the pack. */
+  private onToggleContainer(containerId: string): void {
+    if (this.openedContainers.has(containerId)) {
+      this.openedContainers.delete(containerId);
+    } else {
+      this.openedContainers.add(containerId);
+    }
+    this.requestUpdate();
+  }
+
+  /**
+   * Drop an item directly into a nested container (either via the
+   * expanded sub-pane or via the shortcut: dropping on a closed
+   * container icon, per help topic 027).  Same item cannot be dropped
+   * into itself (no circular nesting).
+   */
+  private onDropSubContainer(containerId: string, e: DragEvent): void {
+    (e.currentTarget as HTMLElement).classList.remove('drag-over');
+    e.preventDefault();
+    e.stopPropagation();
+    const src = this.dragSrc;
+    if (!src || src.from === 'shop') { this.dragSrc = null; return; }
+    if (src.item.id === containerId) {
+      this.pushMessage('A container cannot hold itself.');
+      this.dragSrc = null;
+      return;
+    }
+    const target = this.findSubContainerInPack(containerId);
+    if (!target) { this.dragSrc = null; return; }
+    // Same sub-container, no-op
+    if (src.from === 'sub-container' && src.containerId === containerId) {
+      this.dragSrc = null;
+      return;
+    }
+    if (!this.removeDragSrc()) { this.dragSrc = null; return; }
+    if (addToContainer(target, src.item)) {
+      this.pushMessage(`${displayName(src.item)} → ${displayName(target)}.`);
+    } else {
+      // Couldn't fit — put it back in the main pack as a fallback
+      const c = this.character;
+      if (c?.pack && addToContainer(c.pack, src.item)) {
+        this.pushMessage(`${displayName(target)} is full — kept in pack.`);
+      } else {
+        dropItem(this.map, this.pos.x, this.pos.y, src.item);
+        this.pushMessage(`${displayName(target)} is full — ${displayName(src.item)} dropped.`);
+      }
+    }
     this.dragSrc = null;
     this.autoSave();
     this.requestUpdate();
