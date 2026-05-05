@@ -447,6 +447,11 @@ export function getTileStyle(
         }
         break;
 
+      case 'secret-door':
+        // Render as plain wall until searched
+        style = ROCK_WALL_STYLE;
+        break;
+
       case 'well':
         style = addLayer(`${ICONS}/well.png`, style);
         break;
