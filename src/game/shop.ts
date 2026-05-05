@@ -12,10 +12,112 @@ import type { Item, ItemKind } from './items.ts';
 import { identifyItem, displayName } from './items.ts';
 import type { Character, ShopReputation } from './character.ts';
 import { ALL_EQUIPMENT_SPECS, type EquipmentSpec, specForItem, makeEquipmentItem } from './equipment.ts';
-import { makeWeapon, randomWeaponName, addCoins, removeCoins, coinsIn, addToContainer, makePack, makeBelt } from './items.ts';
+import { makeWeapon, randomWeaponName, addCoins, removeCoins, coinsIn, addToContainer, makePack, makeBelt, COIN_VALUE_CP } from './items.ts';
 import { townStockLevel, type TownTier } from './progression.ts';
 
 export type { ShopReputation } from './character.ts';
+
+// ── Money helpers (purse + bank) ──────────────────────────────────────────────
+
+/** Total value of a purse expressed in copper pieces. */
+export function purseTotalCopper(purse: Item | null): number {
+  if (!purse) return 0;
+  return coinsIn(purse, 'copper')
+    + coinsIn(purse, 'silver')   * 10
+    + coinsIn(purse, 'gold')     * 100
+    + coinsIn(purse, 'platinum') * 1000;
+}
+
+/**
+ * Total balance across all bank lines of credit, in copper pieces.
+ * Lines of credit are stored as cp-equivalent integers so no
+ * denomination conversion is needed (per help topic 011, the bank
+ * balance is shown in copper).
+ */
+export function bankTotalCopper(character: Character): number {
+  if (!character.linesOfCredit) return 0;
+  return Object.values(character.linesOfCredit).reduce((acc, n) => acc + n, 0);
+}
+
+/**
+ * Deposit `amount` copper-equivalent from the player's purse into the
+ * bank's line of credit.  Coins are drawn lowest-denomination-first.
+ * Returns true if the deposit succeeded; false if the purse is empty
+ * or doesn't have that much.
+ */
+export function bankDeposit(character: Character, bankId: string, amount: number): boolean {
+  const purse = character.purse;
+  if (!purse || amount <= 0) return false;
+  if (purseTotalCopper(purse) < amount) return false;
+
+  // Drain coins by value, smallest first; break a larger coin if needed
+  let remaining = amount;
+  for (const kind of ['copper', 'silver', 'gold', 'platinum'] as const) {
+    if (remaining <= 0) break;
+    const value = COIN_VALUE_CP[kind];
+    const have = coinsIn(purse, kind);
+    const take = Math.min(have, Math.floor(remaining / value));
+    if (take > 0) {
+      removeCoins(purse, kind, take);
+      remaining -= take * value;
+    }
+  }
+  if (remaining > 0) {
+    // Break a larger coin into copper change
+    for (const kind of ['silver', 'gold', 'platinum'] as const) {
+      if (remaining <= 0) break;
+      const value = COIN_VALUE_CP[kind];
+      if (coinsIn(purse, kind) > 0 && value >= remaining) {
+        removeCoins(purse, kind, 1);
+        const change = value - remaining;
+        if (change > 0) addCoins(purse, 'copper', change);
+        remaining = 0;
+        break;
+      }
+    }
+  }
+
+  if (!character.linesOfCredit) character.linesOfCredit = {};
+  character.linesOfCredit[bankId] = (character.linesOfCredit[bankId] ?? 0) + amount;
+  return true;
+}
+
+/**
+ * Withdraw `amount` copper-equivalent from the player's combined bank
+ * balance.  Lines of credit are pooled across branches per help topic
+ * "lines of credit transfer between the banks in the different towns".
+ * Withdrawal hits the requested branch first, then falls back across
+ * other branches.  Coins are added to the purse as copper for now;
+ * the player can use the existing Consolidate Coins flow to split.
+ */
+export function bankWithdraw(character: Character, bankId: string, amount: number): boolean {
+  if (!character.purse || amount <= 0) return false;
+  if (bankTotalCopper(character) < amount) return false;
+  if (!character.linesOfCredit) character.linesOfCredit = {};
+
+  let remaining = amount;
+  // Drain the requested branch first
+  const here = character.linesOfCredit[bankId] ?? 0;
+  const fromHere = Math.min(here, remaining);
+  if (fromHere > 0) {
+    character.linesOfCredit[bankId] = here - fromHere;
+    remaining -= fromHere;
+  }
+  // Then drain any other branches
+  for (const id of Object.keys(character.linesOfCredit)) {
+    if (remaining <= 0) break;
+    if (id === bankId) continue;
+    const bal = character.linesOfCredit[id] ?? 0;
+    const take = Math.min(bal, remaining);
+    if (take > 0) {
+      character.linesOfCredit[id] = bal - take;
+      remaining -= take;
+    }
+  }
+
+  addCoins(character.purse, 'copper', amount);
+  return true;
+}
 
 // ── Pricing ───────────────────────────────────────────────────────────────────
 
@@ -99,7 +201,7 @@ export interface ShopDef {
   /** Item kinds this shop sells. */
   sells: ItemKind[];
   /** Special shop type. */
-  type: 'trade' | 'sage' | 'temple' | 'junkyard';
+  type: 'trade' | 'sage' | 'temple' | 'junkyard' | 'bank';
 }
 
 export const SHOPS: Record<string, ShopDef> = {
@@ -147,6 +249,15 @@ export const SHOPS: Record<string, ShopDef> = {
     buys: [],
     sells: [],
     type: 'temple',
+  },
+  'Bank': {
+    id: 'Bank',
+    name: 'Bank',
+    townTier: 'hamlet',
+    stockLevel: townStockLevel('hamlet'),
+    buys: [],
+    sells: [],
+    type: 'bank',
   },
 };
 
