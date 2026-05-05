@@ -168,12 +168,13 @@ function lookupCell(terrainByte: number, featureByte: number): Tile {
   const meaning = CELL_MEANING[terrainByte];
   if (!meaning) {
     UNMAPPED_BYTES.add(terrainByte);
-    return { terrain: 'void', walkable: false, items: [] };
+    return { terrain: 'void', walkable: false, items: [], binaryByte: terrainByte };
   }
   const tile: Tile = {
     terrain: meaning.terrain,
     walkable: meaning.walkable,
     items: [],
+    binaryByte: terrainByte,
   };
   if (meaning.feature) tile.feature = meaning.feature;
   // Feature byte can override / add a feature.

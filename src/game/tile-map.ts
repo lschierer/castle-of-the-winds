@@ -84,6 +84,15 @@ export interface Tile {
    * they require explicit searching.
    */
   roomId?: number;
+  /**
+   * Raw terrain byte from the 1993 binary's static map (when this tile was
+   * sourced from a binary map).  Preserved so the renderer can pick the
+   * correct oriented sprite (road bend variant, mountain peak orientation,
+   * specific wall corner, etc.) — the binary's bytes ARE its sprite indices.
+   * Untyped routing through `terrain` + `feature` collapses orientation
+   * detail; this field gives the renderer access to the original choice.
+   */
+  binaryByte?: number;
 }
 
 /**

@@ -62,6 +62,7 @@ export function overlayBinaryTerrain(
       if (b.terrain !== t.terrain) continue;
       t.walkable = b.walkable;
       if (b.feature) t.feature = b.feature;
+      if (b.binaryByte !== undefined) t.binaryByte = b.binaryByte;
     }
   }
 
