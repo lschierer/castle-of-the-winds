@@ -92,15 +92,21 @@ const CELL_MEANING: Record<number, CellMeaning> = {
   0x70: { terrain: 'grass',    walkable: false, feature: 'wall' },
   0x71: { terrain: 'grass',    walkable: false, feature: 'wall' },
 
-  // Wider building / mine variants 0x77..0x7E
-  0x77: { terrain: 'grass',    walkable: false, feature: 'wall' },
-  0x78: { terrain: 'grass',    walkable: false, feature: 'wall' },
-  0x79: { terrain: 'grass',    walkable: false, feature: 'wall' },
-  0x7A: { terrain: 'grass',    walkable: false, feature: 'wall' },
-  0x7B: { terrain: 'grass',    walkable: false, feature: 'wall' },
-  0x7D: { terrain: 'grass',    walkable: false, feature: 'wall' },
-  0x7E: { terrain: 'grass',    walkable: false, feature: 'wall' },
-  0x7F: { terrain: 'grass',    walkable: false, feature: 'wall' },
+  // Road piece variants 0x77..0x7F.
+  // These are pre-baked sprite orientations for road bends/curves/edges in
+  // the binary outdoor maps (heavy in seg27 Castle Road, seg30 mountain
+  // pass).  They do NOT appear in seg25 (village), so there's no conflict
+  // with the building wall byte range 0x67..0x71.  Collapse to plain road
+  // for now; the orientation fidelity will come from Fix 2 (preserve byte
+  // as direct sprite key).
+  0x77: { terrain: 'road',     walkable: true,  feature: 'diagonal-road' },
+  0x78: { terrain: 'road',     walkable: true,  feature: 'diagonal-road' },
+  0x79: { terrain: 'road',     walkable: true,  feature: 'diagonal-road' },
+  0x7A: { terrain: 'road',     walkable: true,  feature: 'diagonal-road' },
+  0x7B: { terrain: 'road',     walkable: true,  feature: 'diagonal-road' },
+  0x7D: { terrain: 'road',     walkable: true,  feature: 'diagonal-road' },
+  0x7E: { terrain: 'road',     walkable: true,  feature: 'diagonal-road' },
+  0x7F: { terrain: 'road',     walkable: true,  feature: 'diagonal-road' },
 
   // Mine / fortress wall variants 0x80..0xA0
   0x80: { terrain: 'mountain', walkable: false },
