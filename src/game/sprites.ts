@@ -342,6 +342,7 @@ const ICON_TO_EXTRACTED: Record<string, number> = {
   'armor.png':      115,  // iron/chain mail
   'armor_e2.png':   169,  // enchanted chain/scale
   // Shields
+
   'lshield.png':    121,  // wooden/light shield
   'shield.png':     119,  // iron/steel shield
   'shield_2.png':   239,  // enchanted shield
@@ -355,11 +356,12 @@ const ICON_TO_EXTRACTED: Record<string, number> = {
   'helmet_e.png':   209,  // enchanted helmet
   // Gauntlets
   'gauntlet.png':   129,
-  'gaunt_p.png':    203,  // enchanted gauntlets of slaying
-  'gaunt_sl.png':   279,  // rusty gauntlets
+
+  'gaunt_p.png':    201,  // enchanted gauntlets of protection
+  'gaunt_sl.png':   203,  // enchanted gauntlets of slaying
   // Bracers — 127 is in Helmets/ dir but is bracers per dictionary
   'bracers.png':    127,
-  'Bracer_e.png':   127,  // no enchanted bracers ID exists
+  'Bracer_e.png':   193,
   // Boots
   'boots.png':      135,  // plain leather boots
   'BOOtsspd.png':   185,  // enchanted boots of speed
@@ -380,12 +382,18 @@ const ICON_TO_EXTRACTED: Record<string, number> = {
   // Consumables / misc
   'potion.png':      97,
   'scroll.png':      99,
-  'wand.png':       255,  // wand of detect (generic wand)
-  'BAG.png':        139,  // bag
-  'pile.png':       147,  // pile of loot
+  'wand.png':       103,
+  'BAG.png':        139,
+  'pile.png':       147,
   // Rings & amulets
   'ring.png':       133,
-  'amulet.png':     107,  // generic amulet
+  'amulet.png':     107,
+  // Belts
+  'belt.png':       137,
+  // Containers
+  'pack.png':       143,
+  'purse.png':      157,
+
 };
 
 /** Returns the full icon URL for a named icon file, preferring extracted CotW sprites. */
@@ -469,6 +477,11 @@ export function getTileStyle(
         if (tile.terrain === 'floor') {
           style = addLayer(`${ICONS}/odoor.png`, style);
         }
+        break;
+
+      case 'secret-door':
+        // Render as plain wall until searched
+        style = ROCK_WALL_STYLE;
         break;
 
       case 'well':

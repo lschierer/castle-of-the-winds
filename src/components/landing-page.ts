@@ -1,9 +1,8 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { parse as parseYaml } from 'yaml';
-import type { Character } from '../game/character.ts';
 import { getLogger } from '../game/logging.ts';
-import { saveCharacter } from '../game/save.ts';
+import { saveGameState, type GameState } from '../game/save.ts';
 
 const logger = getLogger('game:ui');
 
@@ -161,9 +160,10 @@ export class LandingPage extends LitElement {
         return;
       }
 
-      const character = (data as { character: Character }).character;
+      const state = data as GameState;
       logger.info(`Landing: loading save from ${file.name}`);
-      saveCharacter(character);
+      // Save full game state so the game page restores everything
+      saveGameState(state);
       window.location.href = '/game/';
     } catch (err) {
       logger.warn('Landing: failed to parse save file', err);

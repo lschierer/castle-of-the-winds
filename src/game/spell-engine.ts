@@ -142,7 +142,7 @@ function castAttack(
     return { success: true, messages: [`You cast ${spell.name}.`], character: c };
   }
 
-  const baseDamage = rollSpellDamage(spellId, c.level);
+  const baseDamage = rollSpellDamage(spellId);
   const isBolt = BOLT_SPELLS.has(spellId);
   const element = SPELL_ELEMENT[spellId];
 

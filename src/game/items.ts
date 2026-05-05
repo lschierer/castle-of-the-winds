@@ -126,6 +126,26 @@ export interface Item {
   weaponClass?: number;
   /** Sprite icon filename (e.g. 'sword.png'). Used for ground/inventory display. */
   icon?: string;
+  /**
+   * Remaining charges — only on wands and staves.  Help topic 017:
+   * "wands and staves have a limited number of charges".  Decrement on
+   * each activation; when 0 the item still exists (engraved with the
+   * spell) but won't fire until recharged or replaced.
+   */
+  charges?: number;
+  /**
+   * Container weight reported to its parent regardless of contents.
+   * When set, the container reports exactly this weight no matter what's
+   * inside.  Used by Packs of Holding (the magical effect).
+   * Help topic 073 "Wt. Fx" column.
+   */
+  fixedReportedWeight?: number;
+  /**
+   * Container bulk reported to its parent regardless of contents.
+   * Used by chests (a chest's bulk doesn't compress with empty space)
+   * and Packs of Holding.  Help topic 073 "Bulk Fx" column.
+   */
+  fixedReportedBulk?: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -135,35 +155,71 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
 }
 
+/**
+ * Weight of a single unit "as the parent slot sees it".  For most items
+ * this is just `item.weight`.  For containers it includes their contents
+ * unless `fixedReportedWeight` is set (Pack of Holding), in which case
+ * the container reports a constant weight regardless of payload.
+ * Help topic 073.
+ */
+export function reportedUnitWeight(item: Item): number {
+  if (item.fixedReportedWeight !== undefined) return item.fixedReportedWeight;
+  if (!item.slots) return item.weight;
+  return item.weight + item.slots.reduce((acc, s) => acc + slotWeight(s), 0);
+}
+
+/** Bulk variant of reportedUnitWeight.  Chests use fixedReportedBulk. */
+export function reportedUnitBulk(item: Item): number {
+  if (item.fixedReportedBulk !== undefined) return item.fixedReportedBulk;
+  if (!item.slots) return item.bulk;
+  return item.bulk + item.slots.reduce((acc, s) => acc + slotBulk(s), 0);
+}
+
 /** Total weight of all items in a slot (stack weight = unit weight × quantity). */
 export function slotWeight(slot: ContainerSlot): number {
-  return slot.items.reduce((acc, it) => acc + it.weight * it.quantity, 0);
+  return slot.items.reduce((acc, it) => acc + reportedUnitWeight(it) * it.quantity, 0);
 }
 
 /** Total bulk of all items in a slot. Stackable items each contribute their unit bulk. */
 export function slotBulk(slot: ContainerSlot): number {
-  return slot.items.reduce((acc, it) => acc + it.bulk * it.quantity, 0);
+  return slot.items.reduce((acc, it) => acc + reportedUnitBulk(it) * it.quantity, 0);
 }
 
-/** Total weight of all items in all slots of a container. */
+/** Total weight of all items in all slots of a container (excludes intrinsic). */
 export function containerWeight(item: Item): number {
   if (!item.slots) return 0;
+  if (item.fixedReportedWeight !== undefined) {
+    // The fixed value already covers contents + intrinsic; return just
+    // the contents portion so callers that combine intrinsic + contents
+    // see a consistent total.
+    return Math.max(0, item.fixedReportedWeight - item.weight);
+  }
   return item.slots.reduce((acc, s) => acc + slotWeight(s), 0);
 }
 
-/** Total bulk of all items in all slots of a container. */
+/** Total bulk of all items in all slots of a container (excludes intrinsic). */
 export function containerBulk(item: Item): number {
   if (!item.slots) return 0;
+  if (item.fixedReportedBulk !== undefined) {
+    return Math.max(0, item.fixedReportedBulk - item.bulk);
+  }
   return item.slots.reduce((acc, s) => acc + slotBulk(s), 0);
 }
 
 /**
  * Check whether an item (single unit) can be added to a slot.
  * Returns true if neither weight nor bulk limit would be exceeded.
+ *
+ * For containers (a chest, a sub-bag), we check the *reported* weight
+ * and bulk — the values that include the container's contents (or the
+ * fixed-Wt / fixed-Bulk magical override).  Otherwise a full chest
+ * would appear to fit anywhere its empty shell fits.
  */
 export function canAddToSlot(slot: ContainerSlot, item: Item): boolean {
-  if (slot.maxWeight !== undefined && slotWeight(slot) + item.weight > slot.maxWeight) return false;
-  if (slot.maxBulk  !== undefined && slotBulk(slot)  + item.bulk  > slot.maxBulk)  return false;
+  const w = reportedUnitWeight(item);
+  const b = reportedUnitBulk(item);
+  if (slot.maxWeight !== undefined && slotWeight(slot) + w > slot.maxWeight) return false;
+  if (slot.maxBulk  !== undefined && slotBulk(slot)  + b > slot.maxBulk)  return false;
   if (slot.maxCount !== undefined && slot.items.length >= slot.maxCount) return false;
   if (slot.coinKind && item.coinKind !== slot.coinKind) return false;
   if (slot.accepts.length > 0 && !slot.accepts.includes(item.kind)) return false;
@@ -266,6 +322,18 @@ export interface PackSpec {
   magical?: boolean;
   /** Display name shown when unidentified (the mundane appearance). */
   unidentifiedName?: string;
+  /**
+   * Weight reported to parent regardless of contents.  Help topic 073
+   * "Wt. Fx" column — set on Packs of Holding so the container weighs
+   * a constant amount no matter what's inside.
+   */
+  fixedReportedWeight?: number;
+  /**
+   * Bulk reported to parent regardless of contents.  Help topic 073
+   * "Bulk Fx" column — set on chests (a chest's bulk doesn't compress
+   * when partially full) and Packs of Holding.
+   */
+  fixedReportedBulk?: number;
 }
 
 export const PACK_SPECS: readonly PackSpec[] = [
@@ -278,27 +346,34 @@ export const PACK_SPECS: readonly PackSpec[] = [
   { name: 'Medium Bag',         weight:   500, bulk:  700, maxPayloadWeight:  10000, maxPayloadBulk:  12000 },
   { name: 'Large Bag',          weight:   900, bulk:  900, maxPayloadWeight:  15000, maxPayloadBulk:  18000 },
   // ── Chests and caskets ───────────────────────────────────────────────────────
-  { name: 'Small Chest',        weight:  5000, bulk: 10000, maxPayloadWeight: 100000, maxPayloadBulk:  50000 },
-  { name: 'Medium Chest',       weight: 15000, bulk:  2000, maxPayloadWeight: 100000, maxPayloadBulk: 150000 },
-  { name: 'Large Chest',        weight: 25000, bulk:  4000, maxPayloadWeight: 100000, maxPayloadBulk: 250000 },
+  // Chests have fixedReportedBulk per help topic 073: their outer bulk
+  // doesn't compress regardless of how full they are.
+  { name: 'Small Chest',  weight:  5000, bulk: 10000, maxPayloadWeight: 100000, maxPayloadBulk:  50000, fixedReportedBulk:  50000 },
+  { name: 'Medium Chest', weight: 15000, bulk:  2000, maxPayloadWeight: 100000, maxPayloadBulk: 150000, fixedReportedBulk: 150000 },
+  { name: 'Large Chest',  weight: 25000, bulk:  4000, maxPayloadWeight: 100000, maxPayloadBulk: 250000, fixedReportedBulk: 250000 },
   // ── Packs of Holding (magical) ───────────────────────────────────────────────
+  // Both Wt.Fx and Bulk.Fx set: the magical effect that makes contents
+  // weightless and dimensionally compact for the carrier.
   {
     name: 'Small Pack of Holding',
     weight: 1000, bulk: 1000,
     maxPayloadWeight: 50000, maxPayloadBulk: 150000,
     magical: true, unidentifiedName: 'Small Pack',
+    fixedReportedWeight:  5000, fixedReportedBulk:  75000,
   },
   {
     name: 'Medium Pack of Holding',
     weight: 2000, bulk: 1500,
     maxPayloadWeight: 75000, maxPayloadBulk: 200000,
     magical: true, unidentifiedName: 'Medium Pack',
+    fixedReportedWeight:  7500, fixedReportedBulk: 100000,
   },
   {
     name: 'Large Pack of Holding',
     weight: 4000, bulk: 2000,
     maxPayloadWeight: 100000, maxPayloadBulk: 250000,
     magical: true, unidentifiedName: 'Large Pack',
+    fixedReportedWeight: 10000, fixedReportedBulk: 125000,
   },
 ];
 
@@ -306,7 +381,7 @@ export const BELT_SPECS: readonly BeltSpec[] = [
   { name: 'Belt',          weight: 100, bulk: 1, slots: 2, slotMaxBulk: 2 },
   { name: 'Wide Belt',     weight: 150, bulk: 1, slots: 3, slotMaxBulk: 2 },
   { name: 'War Belt',      weight: 200, bulk: 1, slots: 4, slotMaxBulk: 3 },
-  { name: 'Utility Belt',  weight: 250, bulk: 1, slots: 4, slotMaxBulk: 2 },  // 4 item slots + dedicated wand holders
+  { name: 'Utility Belt',  weight: 250, bulk: 1, slots: 10, slotMaxBulk: 2 }, // rare 10-slot belt per help topic 027
   { name: 'Wand Quiver',   weight: 200, bulk: 1, slots: 6, slotMaxBulk: 1 },  // wands/scrolls only, very slim items
 ];
 
@@ -314,7 +389,7 @@ export const BELT_SPECS: readonly BeltSpec[] = [
 export function makePack(name: string): Item {
   const spec = PACK_SPECS.find((s) => s.name === name);
   if (!spec) throw new Error(`Unknown pack: ${name}`);
-  return {
+  const item: Item = {
     id: uid(),
     kind: 'container',
     name: spec.name,
@@ -329,6 +404,9 @@ export function makePack(name: string): Item {
       { accepts: [], maxWeight: spec.maxPayloadWeight, maxBulk: spec.maxPayloadBulk, items: [] },
     ],
   };
+  if (spec.fixedReportedWeight !== undefined) item.fixedReportedWeight = spec.fixedReportedWeight;
+  if (spec.fixedReportedBulk   !== undefined) item.fixedReportedBulk   = spec.fixedReportedBulk;
+  return item;
 }
 
 /** Convenience alias — starting loadout uses the small pack. */
@@ -644,6 +722,39 @@ export function removeFromSlot(slot: ContainerSlot, itemId: string): Item | unde
   const idx = slot.items.findIndex((i) => i.id === itemId);
   if (idx === -1) return undefined;
   return slot.items.splice(idx, 1)[0];
+}
+
+// ── Sort Pack ─────────────────────────────────────────────────────────────────
+
+/**
+ * Canonical ItemKind ordering for Sort Pack (help topic 024).
+ * Equipment first, then containers, then consumables, then misc.
+ */
+const KIND_SORT_ORDER: Record<ItemKind, number> = {
+  weapon: 0, armor: 1, helm: 2, shield: 3, boots: 4, cloak: 5,
+  bracers: 6, gauntlets: 7, ring: 8, amulet: 9, belt: 10,
+  container: 11, potion: 12, scroll: 13, wand: 14, staff: 15,
+  spellbook: 16, coin: 17, misc: 18,
+};
+
+function compareItemsForSort(a: Item, b: Item): number {
+  // Identified items before unidentified ones (within a kind).
+  const k = KIND_SORT_ORDER[a.kind] - KIND_SORT_ORDER[b.kind];
+  if (k !== 0) return k;
+  if (a.identified !== b.identified) return a.identified ? -1 : 1;
+  return a.name.localeCompare(b.name);
+}
+
+/**
+ * Sort a pack's contents in place by item kind, then by name within kind,
+ * with unidentified items at the end of each kind group.  Per help topic
+ * 024 ("Sort Pack" menu command).
+ */
+export function sortPackContents(pack: Item): void {
+  if (!pack.slots) return;
+  for (const slot of pack.slots) {
+    slot.items.sort(compareItemsForSort);
+  }
 }
 
 /**

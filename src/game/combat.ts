@@ -16,6 +16,7 @@ import type { MonsterSpec, SpecialAttack } from './monsters.ts';
 import type { Item } from './items.ts';
 import { WEAPON_SPECS } from './items.ts';
 import type { ElementType } from './equipment.ts';
+import { RANGE_FALLOFF, findAttackFormula } from './binary-data/index.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -271,11 +272,22 @@ export function playerSpellAttack(
 ): CombatResult {
   const { baseDamage, element, isBolt, distance = 1 } = params;
 
-  // Bolt spells can be dodged; probability increases with distance
+  // Bolt spells: the original 1993 binary's range-falloff formula governs
+  // miss probability based purely on distance.  Reverse-engineered from the
+  // dispatcher at seg22:0x0808 (see src/game/binary-data/).
+  //
+  //   miss% = (distance − 5) × 5,  clamped to [0, 100]
+  //
+  // 0% miss within 5 cells, 25% at distance 10, 100% at >= 25.  This
+  // replaces the previous tuned dodge model for bolts.
   if (isBolt) {
-    const distancePenalty = (distance - 1) * 0.02;
-    if (isDodged(monster.dodge + distancePenalty * 100)) {
-      return { damage: 0, message: `The ${monster.name} dodges your spell.`, dodged: true };
+    const missPct = RANGE_FALLOFF.missChancePercent(distance);
+    if (missPct > 0 && rand() * 100 < missPct) {
+      return {
+        damage: 0,
+        message: `Your spell trails off short of the ${monster.name}.`,
+        dodged: true,
+      };
     }
   }
 
@@ -368,26 +380,38 @@ export function poisonTick(status: PlayerStatus): number {
 // ── Spell damage tables ───────────────────────────────────────────────────────
 
 /**
- * Base damage for each attack spell at a given character level.
- * These are approximations — tuning needed during playtesting.
+ * Spell damage rolls.  The values come from the original 1993 binary:
+ * see ATTACK_FORMULAS in src/game/binary-data/attack-formulas.ts.
  *
- * Format: [minDamage, maxDamage] — actual damage is a random value in that range.
+ * Each attack spell has a fixed maxDamage (single-target bolts) or a
+ * maxDamage + AOE-tile damage (ball spells).  Damage is rolled in
+ * 1..maxDamage uniformly — no character-level scaling, matching the
+ * original.  AOE spells use minDamageOrAoe for adjacent tiles; the
+ * caller is responsible for applying that to neighbours.
+ *
+ *   Magic Arrow      max  6
+ *   Cold Bolt        max  8
+ *   Lightning Bolt   max 10
+ *   Fire Bolt        max 12
+ *   Cold Ball        max 16, AOE  8
+ *   Ball Lightning   max 18, AOE  9
+ *   Fireball         max 20, AOE 10
+ *
+ * Transmogrify Monster does no direct damage; its effect is applied
+ * separately by the spell engine.
  */
-export const SPELL_DAMAGE: Record<string, (level: number) => [number, number]> = {
-  magic_arrow:        (l) => [l + 1, l * 2 + 2],      // 1d4-ish scaling
-  cold_bolt:          (l) => [l + 2, l * 2 + 6],
-  lightning_bolt:     (l) => [l + 3, l * 3 + 6],
-  fire_bolt:          (l) => [l + 3, l * 3 + 6],
-  cold_ball:          (l) => [l * 2 + 4, l * 4 + 8],
-  ball_lightning:     (l) => [l * 2 + 4, l * 4 + 8],
-  fireball:           (l) => [l * 2 + 5, l * 4 + 10],
-  transmogrify_monster: () => [0, 0],  // no direct damage
-};
+export function rollSpellDamage(spellId: string): number {
+  const formula = findAttackFormula(spellId);
+  if (!formula || formula.maxDamage === 0) return 0;
+  return 1 + Math.floor(rand() * formula.maxDamage);
+}
 
-/** Roll a spell's damage for the given character level. */
-export function rollSpellDamage(spellId: string, charLevel: number): number {
-  const fn = SPELL_DAMAGE[spellId];
-  if (!fn) return 0;
-  const [min, max] = fn(charLevel);
-  return min + Math.floor(rand() * (max - min + 1));
+/**
+ * Adjacent-tile damage for AOE ball spells.  Returns 0 for single-target
+ * bolts (and all non-attack spells).  The caller applies this to the 8
+ * cells surrounding the impact point.
+ */
+export function aoeAdjacentDamage(spellId: string): number {
+  const formula = findAttackFormula(spellId);
+  return formula?.minDamageOrAoe ?? 0;
 }
