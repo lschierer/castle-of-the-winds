@@ -938,12 +938,64 @@ export class GameWorld extends LitElement {
     if (state) saveGameState(state);
   }
 
-  private manualSave(): void {
+  /** File handle for save-in-place (File System Access API). */
+  private saveFileHandle: FileSystemFileHandle | null = null;
+
+  private async manualSave(): Promise<void> {
     const state = this.buildGameState();
     if (!state) return;
     saveGameState(state);
-    downloadSave(state);
-    this.pushMessage('Game saved.');
+    const data = JSON.stringify(state, null, 2);
+
+    if ('showSaveFilePicker' in window) {
+      try {
+        if (!this.saveFileHandle) {
+          const name = state.character.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+          this.saveFileHandle = await (window as unknown as { showSaveFilePicker: (opts: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
+            suggestedName: `${name}_save.json`,
+            types: [{ description: 'Save File', accept: { 'application/json': ['.json'] } }],
+          });
+        }
+        const writable = await this.saveFileHandle.createWritable();
+        await writable.write(data);
+        await writable.close();
+        this.pushMessage('Game saved.');
+      } catch (e) {
+        if ((e as Error).name !== 'AbortError') {
+          this.pushMessage('Save failed.');
+        }
+      }
+    } else {
+      // Fallback: download
+      downloadSave(state);
+      this.pushMessage('Game saved.');
+    }
+  }
+
+  private async manualLoad(): Promise<void> {
+    if (!('showOpenFilePicker' in window)) {
+      this.pushMessage('Load not supported in this browser.');
+      return;
+    }
+    try {
+      const handles = await (window as unknown as { showOpenFilePicker: (opts: unknown) => Promise<FileSystemFileHandle[]> }).showOpenFilePicker({
+        types: [{ description: 'Save File', accept: { 'application/json': ['.json'], 'application/x-yaml': ['.yaml', '.yml'] } }],
+      });
+      const handle = handles[0];
+      if (!handle) return;
+      const file = await handle.getFile();
+      const text = await file.text();
+      const state = JSON.parse(text) as GameState;
+      if (!state.character) { this.pushMessage('Invalid save file.'); return; }
+      saveGameState(state);
+      this.saveFileHandle = handle;
+      // Reload the page to reinitialize from the new state
+      window.location.reload();
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') {
+        this.pushMessage('Load failed.');
+      }
+    }
   }
 
   override connectedCallback(): void {
@@ -1081,7 +1133,12 @@ export class GameWorld extends LitElement {
     }
     if ((e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      this.manualSave();
+      void this.manualSave();
+      return;
+    }
+    if ((e.key === 'l' || e.key === 'L') && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      void this.manualLoad();
       return;
     }
     if (e.key === 'Escape') {
