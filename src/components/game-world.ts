@@ -1211,7 +1211,7 @@ export class GameWorld extends LitElement {
   private enterDungeonFloor(level: number, position?: Vec2): void {
     let floor = this.dungeonFloors.get(level);
     if (!floor) {
-      floor = generateFloor({ stage: this.currentStage, dungeonLevel: level });
+      floor = generateFloor({ stage: this.currentStage, dungeonLevel: level, ...(this.character?.difficulty && { difficulty: this.character.difficulty }) });
       this.dungeonFloors.set(level, floor);
       logger.info(`Generated ${this.currentStage} floor ${level}: ${floor.map.width}×${floor.map.height}`);
     }
