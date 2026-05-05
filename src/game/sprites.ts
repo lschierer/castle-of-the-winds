@@ -362,13 +362,13 @@ const ICON_TO_EXTRACTED: Record<string, number> = {
   'armor.png':      115,
   'armor_e2.png':   169,
   // Shields
-  'lshield.png':    119,
+  'lshield.png':    121,
   'shield.png':     119,
   'shield_2.png':   239,
   'shield_b.png':   119,
   // Helms
   'helm_b.png':     123,
-  'LHELMET.png':    123,
+  'LHELMET.png':    125,
   'helmet.png':     123,
   'helmet_s.png':   125,
   'helmet_v.png':   207,
@@ -376,36 +376,41 @@ const ICON_TO_EXTRACTED: Record<string, number> = {
   // Gauntlets
   'gauntlet.png':   129,
   'gaunt_p.png':    203,
-  'gaunt_sl.png':   279,
+  'gaunt_sl.png':   203,
   // Bracers
-  'bracers.png':    181,
+  'bracers.png':    127,
   'Bracer_e.png':   281,
   // Boots
-  'boots.png':      185,
-  'BOOtsspd.png':   193,
+  'boots.png':      135,
+  'BOOtsspd.png':   185,
   'BOOtslev.png':   187,
   // Cloaks
   'cloak.png':      131,
-  'Cloak_e.png':    195,
+  'Cloak_e.png':    197,
   // Weapons
   'dagger.png':      36,
-  'sword.png':      243,
+  'sword.png':      111,
   'mace.png':       113,
-  'spear.png':      273,
+  'spear.png':      309,
   // Coins
-  'copper.png':     325,
-  'silver.png':     325,
-  'gold.png':       323,
-  'platinum.png':   323,
+  'copper.png':     149,
+  'silver.png':     151,
+  'gold.png':       153,
+  'platinum.png':   155,
   // Consumables / misc
-  'potion.png':      93,
+  'potion.png':      97,
   'scroll.png':      99,
-  'wand.png':       255,
-  'BAG.png':        157,
-  'pile.png':       149,
+  'wand.png':       103,
+  'BAG.png':        139,
+  'pile.png':       147,
   // Rings & amulets
   'ring.png':       133,
-  'amulet.png':     161,
+  'amulet.png':     107,
+  // Belts
+  'belt.png':       137,
+  // Containers
+  'pack.png':       143,
+  'purse.png':      157,
 };
 
 /** Returns the full icon URL for a named icon file, preferring extracted CotW sprites. */

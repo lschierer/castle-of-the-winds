@@ -5,8 +5,8 @@
  * then converts to our TileMap format with monsters and loot.
  *
  * Dungeon structure (Castle of the Winds canon):
- *   Mine     — 8 floors  (floor 1 fixed spawn; floors 1-3 no upstairs)
- *                          Scrap of Parchment on floor 8 (deepest)
+ *   Mine     — 4 floors  (floor 1 fixed spawn; floors 1-3 no upstairs)
+ *                          Scrap of Parchment on floor 4 (deepest)
  *   Fortress — 11 floors (floor 1 fixed spawn; Hrungnir + ogre guards on floor 11)
  *   Castle   — 25 floors (boss encounters at floors 16, 18, 20, 22, 25)
  *
@@ -17,6 +17,7 @@
 import { Map as RotMap } from 'rot-js';
 import type { Tile, TileMap, Vec2 } from './tile-map.ts';
 import type { MonsterInstance } from './combat.ts';
+import type { Difficulty } from './character.ts';
 import { monstersForDepth } from './monsters.ts';
 import { generateTileLoot } from './loot.ts';
 import type { Item } from './items.ts';
@@ -74,6 +75,7 @@ let monsterSeq = 1000;
 export interface GenerateFloorOptions {
   dungeonLevel: number;
   stage?: GameStage;
+  difficulty?: Difficulty;
   /** Override map width. Defaults to stage-appropriate size capped at 64. */
   width?: number;
   /** Override map height. Defaults to stage-appropriate size capped at 64. */
@@ -191,6 +193,19 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
         }
       }
     });
+  }
+
+  // Convert some doors to secret doors based on difficulty
+  const secretChance = opts.difficulty === 'hard' ? 0.5
+    : opts.difficulty === 'easy' ? 0.1 : 0.25;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const tile = getTile(grid, x, y);
+      if (tile?.feature === 'door' && Math.random() < secretChance) {
+        tile.feature = 'secret-door';
+        tile.walkable = false;
+      }
+    }
   }
 
   // ── Stairs up ────────────────────────────────────────────────────────────────

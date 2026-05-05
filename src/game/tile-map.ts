@@ -19,6 +19,7 @@ export type Terrain =
 export type Feature =
   | 'wall'           // generic building wall / dungeon wall
   | 'door'           // building entrance
+  | 'secret-door'    // hidden door — looks like wall until searched
   | 'well'
   | 'stairs-up'
   | 'stairs-down'
