@@ -367,7 +367,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     name: 'Ogre',
     minLevel: 4, maxLevel: 14,
     hp: 45, attack: 20, ac: 24, dodge: 8, xp: 16,
-    icon: '/assets/sprites/icons/Monsters/icon_415.png',
+    icon: '/assets/sprites/icons/ogre.png',
     description: 'A brutish humanoid, roughly equivalent to a fifth-level adventurer. Usually armoured.',
     loot: [
       { chance: 0.70, coins: { kind: 'silver', min:  5, max: 25 } },
@@ -427,7 +427,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     name: 'Rat-Man',
     minLevel: 2, maxLevel: 9,
     hp: 20, attack: 10, ac: 0, dodge: 12, xp: 10,
-    icon: '/assets/sprites/icons/Monsters/icon_455.png',
+    icon: '/assets/sprites/icons/ratman.png',
     description: 'A rat-human hybrid. Drops copper coins.',
     loot: [
       { chance: 1.00, coins: { kind: 'copper', min:  5, max: 30 } },
@@ -438,7 +438,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     name: 'Wolf-Man',
     minLevel: 5, maxLevel: 14,
     hp: 48, attack: 20, ac: 70, dodge: 14, xp: 25,
-    icon: '/assets/sprites/icons/Monsters/icon_451.png',
+    icon: '/assets/sprites/icons/wolfman.png',
     description: 'A wolf-human hybrid. Equivalent to a seventh-level adventurer with light armour.',
     loot: [
       { chance: 0.70, coins: { kind: 'copper', min:  5, max: 20 } },
@@ -451,7 +451,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     minLevel: 6, maxLevel: 16,
     hp: 55, attack: 22, ac: 30, dodge: 10, xp: 40,
     extraAttacks: 1,
-    icon: '/assets/sprites/icons/Monsters/icon_453.png',
+    icon: '/assets/sprites/icons/bearman.png',
     description: 'A bear-human hybrid with two attacks per turn. High constitution.',
     loot: [
       { chance: 0.70, coins: { kind: 'silver', min:  5, max: 20 } },
@@ -467,7 +467,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     minLevel: 6, maxLevel: 16,
     hp: 55, attack: 22, ac: 6, dodge: 8, xp: 70,
     specials: ['ranged_stone'],
-    icon: '/assets/sprites/icons/Monsters/icon_415.png',
+    icon: '/assets/sprites/icons/hgiant.png',
     description: 'The smallest of the Jotuns. Usually wears leather armour and carries a club.',
     loot: [
       { chance: 0.80, coins: { kind: 'silver', min: 10, max: 30 } },
@@ -482,7 +482,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     minLevel: 8, maxLevel: 18,
     hp: 65, attack: 26, ac: 3, dodge: 8, xp: 90,
     specials: ['ranged_stone'],
-    icon: '/assets/sprites/icons/Monsters/icon_415.png',
+    icon: '/assets/sprites/icons/sgiant.png',
     description: 'Rarely armoured but carries a large club. Throws boulders.',
     loot: [
       { chance: 0.80, coins: { kind: 'silver', min: 10, max: 40 } },
@@ -498,7 +498,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 80, attack: 30, ac: 30, dodge: 9, xp: 120,
     specials: ['ranged_ice'],
     affinities: [...immune('cold'), ...vulnerable('fire')],
-    icon: '/assets/sprites/icons/Monsters/icon_415.png',
+    icon: '/assets/sprites/icons/frgiant.png',
     description: 'An ice giant in chain or scale armour, armed with an axe, spear, or broadsword. Throws ice instead of stone.',
     loot: [
       { chance: 0.80, coins: { kind: 'gold',     min:  5, max: 25 } },
@@ -514,7 +514,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 90, attack: 34, ac: 42, dodge: 9, xp: 150,
     specials: ['breath_fire'],
     affinities: [...immune('fire'), ...vulnerable('cold')],
-    icon: '/assets/sprites/icons/Monsters/icon_415.png',
+    icon: '/assets/sprites/icons/figiant.png',
     description: 'The most powerful Jotun. Wears metal armour and wields a sword or morning star. May cast fireball.',
     loot: [
       { chance: 0.80, coins: { kind: 'gold',     min:  5, max: 30 } },
@@ -580,7 +580,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 18, attack: 9, ac: 0, dodge: 16, xp: 32,
     specials: ['drain_str', 'drain_dex'],
     affinities: [...immune('cold')],
-    icon: '/assets/sprites/icons/Monsters/icon_457.png',
+    icon: '/assets/sprites/icons/SHADE.png',
     description: 'A stronger shadow. Immune to cold. Can drain both Strength and Dexterity.',
     loot: [
       { chance: 0.20, randomKind: 'weapon' },
@@ -594,7 +594,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 24, attack: 12, ac: 0, dodge: 18, xp: 50,
     specials: ['drain_str', 'drain_dex'],
     affinities: [...immune('cold')],
-    icon: '/assets/sprites/icons/Monsters/icon_445.png',
+    icon: '/assets/sprites/icons/SPECTRE.png',
     description: 'The most powerful of the shadow line. High drain probability.',
     loot: [
       { chance: 0.20, randomKind: 'weapon' },
@@ -607,7 +607,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     minLevel: 5, maxLevel: 14,
     hp: 22, attack: 2, ac: 0, dodge: 10, xp: 40,
     specials: ['drain_str', 'drain_dex', 'drain_con'],
-    icon: '/assets/sprites/icons/Monsters/icon_445.png',
+    icon: '/assets/sprites/icons/wight.png',
     description: 'Permanently drains Strength, Dexterity, and Constitution on touch. Rarely attacks with melee.',
     loot: [
       { chance: 0.15, randomKind: 'weapon' },
@@ -620,7 +620,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     minLevel: 8, maxLevel: 17,
     hp: 28, attack: 2, ac: 0, dodge: 12, xp: 35,
     specials: ['drain_str', 'drain_dex', 'drain_con'],
-    icon: '/assets/sprites/icons/Monsters/icon_445.png',
+    icon: '/assets/sprites/icons/wight.png',
     description: 'Stronger wight with more constitution.',
     loot: [
       { chance: 0.20, randomKind: 'weapon' },
@@ -633,7 +633,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     minLevel: 11, maxLevel: 20,
     hp: 35, attack: 2, ac: 0, dodge: 14, xp: 70,
     specials: ['drain_str', 'drain_dex', 'drain_con'],
-    icon: '/assets/sprites/icons/Monsters/icon_445.png',
+    icon: '/assets/sprites/icons/wight.png',
     description: 'The most powerful wight variety.',
     loot: [
       { chance: 0.25, randomKind: 'weapon' },
@@ -647,7 +647,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     minLevel: 4, maxLevel: 12,
     hp: 15, attack: 0, ac: 0, dodge: 16, xp: 30,
     specials: ['drain_mana', 'drain_int', 'phase_through_walls'],
-    icon: '/assets/sprites/icons/Monsters/icon_445.png',
+    icon: '/assets/sprites/icons/wraith.png',
     description: 'A wraith that drains Mana and Intelligence. Can pass through walls. May drop an item.',
     loot: [
       { chance: 0.50, coins: { kind: 'silver', min:  3, max: 12 } },
@@ -660,7 +660,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     minLevel: 7, maxLevel: 16,
     hp: 20, attack: 0, ac: 0, dodge: 18, xp: 45,
     specials: ['drain_mana', 'drain_int', 'phase_through_walls'],
-    icon: '/assets/sprites/icons/Monsters/icon_445.png',
+    icon: '/assets/sprites/icons/wraith.png',
     description: 'More powerful wraith. One drain attack per turn at most.',
     loot: [
       { chance: 0.60, coins: { kind: 'silver', min:  5, max: 18 } },
@@ -674,7 +674,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     minLevel: 10, maxLevel: 20,
     hp: 28, attack: 0, ac: 0, dodge: 20, xp: 65,
     specials: ['drain_mana', 'drain_int', 'phase_through_walls'],
-    icon: '/assets/sprites/icons/Monsters/icon_445.png',
+    icon: '/assets/sprites/icons/wraith.png',
     description: 'The most powerful wraith.',
     loot: [
       { chance: 0.60, coins: { kind: 'silver', min:  8, max: 25 } },
@@ -689,7 +689,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 50, attack: 18, ac: 15, dodge: 16, xp: 90,
     specials: ['drain_hp'],
     affinities: [...vulnerable('fire')],
-    icon: '/assets/sprites/icons/Monsters/icon_445.png',
+    icon: '/assets/sprites/icons/VAMPIRE.png',
     description: 'Permanently drains maximum hit points. Susceptible to fire. Drain reversible at Temple or via potion/scroll.',
     loot: [
       { chance: 0.80, coins: { kind: 'gold',   min:  5, max: 20 } },
@@ -708,7 +708,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     extraAttacks: 1,
     specials: ['teleport_allies'],
     affinities: [...immune('fire'), ...resist('cold')],
-    icon: '/assets/sprites/icons/Monsters/icon_441.png',
+    icon: '/assets/sprites/icons/BRBDEVIL.png',
     description: 'The weakest devil. Attacks with tail and claws. Immune to fire.',
     loot: [
       { chance: 0.80, coins: { kind: 'gold',   min:  3, max: 15 } },
@@ -722,7 +722,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 55, attack: 24, ac: 30, dodge: 16, xp: 85,
     specials: ['teleport_allies', 'breath_fire'],
     affinities: [...immune('fire'), ...resist('cold')],
-    icon: '/assets/sprites/icons/Monsters/icon_441.png',
+    icon: '/assets/sprites/icons/PITDEVIL.png',
     description: 'May use a fire attack and carries a low-grade weapon. High dexterity.',
     loot: [
       { chance: 0.80, coins: { kind: 'gold',     min:  5, max: 20 } },
@@ -738,7 +738,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 65, attack: 28, ac: 35, dodge: 16, xp: 110,
     specials: ['teleport_allies', 'cold_attack'],
     affinities: [...immune('fire'), ...resist('cold'), ...vulnerable('fire')], // note: immune fire AND vulnerable fire is contradictory per docs — Ice Devil is susceptible to fire unlike other Devils
-    icon: '/assets/sprites/icons/Monsters/icon_441.png',
+    icon: '/assets/sprites/icons/ICEDEVIL.png',
     description: 'Unlike other devils, susceptible to fire. Ice attack.',
     loot: [
       { chance: 0.80, coins: { kind: 'gold',     min:  5, max: 20 } },
@@ -755,7 +755,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 80, attack: 34, ac: 48, dodge: 18, xp: 150,
     specials: ['teleport_allies', 'breath_fire'],
     affinities: [...immune('fire'), ...resist('cold')],
-    icon: '/assets/sprites/icons/Monsters/icon_441.png',
+    icon: '/assets/sprites/icons/BRBDEVIL.png',
     description: 'The most powerful devil. Can summon any devil type and carry any grade of weapon or armour.',
     loot: [
       { chance: 0.90, coins: { kind: 'platinum', min:  3, max: 15 } },
@@ -772,7 +772,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     name: 'Air Elemental',
     minLevel: 5, maxLevel: 15,
     hp: 35, attack: 14, ac: 0, dodge: 22, xp: 50,
-    icon: '/assets/sprites/icons/Spells/icon_357.png',
+    icon: '/assets/sprites/icons/AIRELEM.png',
     description: 'A creature of wind. May transport the player a short distance instead of dealing damage.',
     // no loot — elemental
   },
@@ -781,7 +781,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     name: 'Earth Elemental',
     minLevel: 5, maxLevel: 15,
     hp: 50, attack: 18, ac: 60, dodge: 6, xp: 60,
-    icon: '/assets/sprites/icons/Spells/icon_357.png',
+    icon: '/assets/sprites/icons/EARTHELE.png',
     description: 'Heavy and slow. Known for breaking doors. Rarely phases through solid walls.',
     // no loot — elemental
   },
@@ -792,7 +792,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 40, attack: 0, ac: 0, dodge: 14, xp: 55,
     specials: ['fire_attack'],
     affinities: [...immune('fire'), ...vulnerable('cold')],
-    icon: '/assets/sprites/icons/Spells/icon_357.png',
+    icon: '/assets/sprites/icons/FIREELEM.png',
     description: 'Has no melee attack — deals fire damage at short range instead.',
     // no loot — elemental
   },
@@ -801,7 +801,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     name: 'Water Elemental',
     minLevel: 5, maxLevel: 15,
     hp: 38, attack: 16, ac: 0, dodge: 16, xp: 55,
-    icon: '/assets/sprites/icons/Spells/icon_357.png',
+    icon: '/assets/sprites/icons/WATERELE.png',
     description: 'Similar to an Air Elemental with a rare drowning attack.',
     // no loot — elemental
   },
@@ -817,7 +817,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     extraAttacks: 2,
     specials: ['breath_poison'],
     affinities: [...vulnerable('lightning')],
-    icon: '/assets/sprites/icons/Monsters/icon_417.png',
+    icon: '/assets/sprites/icons/gdragon.png',
     description: 'The weakest dragon breed. Three melee attacks plus a poison breath.',
     loot: [
       { chance: 1.00, coins: { kind: 'gold',   min: 10, max: 30 } },
@@ -833,7 +833,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     extraAttacks: 2,
     specials: ['breath_poison'],
     affinities: [...vulnerable('lightning')],
-    icon: '/assets/sprites/icons/Monsters/icon_417.png',
+    icon: '/assets/sprites/icons/gdragon.png',
     description: 'An aged green dragon with potent poison breath.',
     loot: [
       { chance: 1.00, coins: { kind: 'gold',     min: 20, max: 50 } },
@@ -852,7 +852,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     extraAttacks: 2,
     specials: ['breath_cold'],
     affinities: [...immune('cold'), ...vulnerable('fire')],
-    icon: '/assets/sprites/icons/Monsters/icon_417.png',
+    icon: '/assets/sprites/icons/Monsters/icon_334.png',
     description: 'Cold-breathing dragon. Immune to cold, weak against fire.',
     loot: [
       { chance: 1.00, coins: { kind: 'gold',   min: 15, max: 40 } },
@@ -869,7 +869,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 70, attack: 26, ac: 30, dodge: 12, xp: 110,
     extraAttacks: 2,
     specials: ['breath_lightning'],
-    icon: '/assets/sprites/icons/Monsters/icon_417.png',
+    icon: '/assets/sprites/icons/Monsters/icon_322.png',
     description: 'A lightning-breathing dragon. Elemental resistances unclear.',
     loot: [
       { chance: 1.00, coins: { kind: 'gold',   min: 20, max: 50 } },
@@ -887,7 +887,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     extraAttacks: 2,
     specials: ['breath_fire'],
     affinities: [...immune('fire'), ...vulnerable('cold')],
-    icon: '/assets/sprites/icons/Monsters/icon_417.png',
+    icon: '/assets/sprites/icons/Monsters/icon_321.png',
     description: 'A fire-breathing dragon. Immune to fire, weak against cold.',
     loot: [
       { chance: 1.00, coins: { kind: 'gold',     min: 25, max: 60 } },
@@ -904,7 +904,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     extraAttacks: 2,
     specials: ['breath_fire'],
     affinities: [...immune('fire'), ...vulnerable('cold')],
-    icon: '/assets/sprites/icons/Monsters/icon_417.png',
+    icon: '/assets/sprites/icons/Monsters/icon_321.png',
     description: 'The most powerful creature in the game. Extremely likely to use its fire breath.',
     loot: [
       { chance: 1.00, coins: { kind: 'platinum', min: 10, max: 30 } },
@@ -1007,7 +1007,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     name: 'Animated Iron Statue',
     minLevel: 11, maxLevel: 20,
     hp: 80, attack: 30, ac: 70, dodge: 5, xp: 115,
-    icon: '/assets/sprites/icons/Monsters/icon_447.png',
+    icon: '/assets/sprites/icons/istatue.png',
     description: 'The most powerful animated statue. Elemental resistances unknown.',
     loot: [
       { chance: 0.30, randomKind: 'weapon' },
@@ -1020,7 +1020,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     name: 'Animated Marble Statue',
     minLevel: 9, maxLevel: 18,
     hp: 70, attack: 27, ac: 62, dodge: 5, xp: 95,
-    icon: '/assets/sprites/icons/icon_18.png',
+    icon: '/assets/sprites/icons/mstatue.png',
     description: 'A reported but rare variant. Elemental affinities unknown.',
     loot: [
       { chance: 0.25, randomKind: 'weapon' },
@@ -1038,7 +1038,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 120, attack: 32, ac: 12, dodge: 8, xp: 70,
     specials: ['ranged_stone'],
     isBoss: true,
-    icon: '/assets/sprites/icons/Monsters/icon_425.png',
+    icon: '/assets/sprites/icons/HGIANTK.png',
     description: 'Boss Hill Giant at level 11 of the Fortress. Always appears with Ogres. Ranged attack slightly stronger than a normal Hill Giant.',
     loot: [
       { chance: 1.00, coins: { kind: 'gold',     min: 15, max: 30 } },
@@ -1054,7 +1054,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     hp: 140, attack: 36, ac: 12, dodge: 9, xp: 200,
     specials: ['ranged_stone'],
     isBoss: true,
-    icon: '/assets/sprites/icons/Monsters/icon_425.png',
+    icon: '/assets/sprites/icons/HGIANTK.png',
     description: 'Boss Hill Giant in the Castle. Appears with Hill Giants.',
     loot: [
       { chance: 1.00, coins: { kind: 'gold',     min: 20, max: 40 } },
@@ -1072,7 +1072,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     specials: ['teleport_allies', 'breath_fire'],
     affinities: [...immune('fire'), ...resist('cold')],
     isBoss: true,
-    icon: '/assets/sprites/icons/Monsters/icon_425.png',
+    icon: '/assets/sprites/icons/SURTUR.png',
     description: 'The final boss. A non-standard Abyss Fiend of immense power. Appears with all devil types.',
     loot: [
       { chance: 1.00, coins: { kind: 'platinum', min: 10, max: 30 } },
