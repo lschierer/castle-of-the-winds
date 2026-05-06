@@ -16,8 +16,13 @@ export const MONSTERS_FROM_BINARY: readonly BinaryMonsterRecord[] = [
   {
     id: 'giant_bat',
     name: 'Giant Bat',
-    hp: 128,               // byte+8 of stat record
-    hpPerLevel: 0,      // byte+9 — added per dungeon depth
+    // HP corrected from byte+8 (0x80 = 128) to hp_alt_word_at_2 (16).
+    // Per _re/REPORT_PHASE8_HP_FLAGS.md: byte+8 is a dual-purpose flag
+    // word in the engine, not a pure HP value.  Giant Bat's high bit
+    // is set as a behavior flag; the real HP comes from the alt word
+    // at offset +2 of the prototype record.
+    hp: 16,
+    hpPerLevel: 0,
     ac: 4,
     damageMax: 6,
     xp: 2,
