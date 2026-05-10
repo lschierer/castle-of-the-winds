@@ -1,0 +1,122 @@
+/*
+ * src/styles/theme.css
+ * Dungeons Crawl — color token system.
+ *
+ * Background, border, and text colors use actual values from the
+ * Spectrum 2 brown, yellow, and orange dark scales
+ * (@spectrum-css/tokens v16).  Status, bar, and effect colors are
+ * game-specific functional indicators kept at calibrated values.
+ *
+ * Spectrum 2 dark scale inversion: lower numbers are DARKER.
+ */
+
+:root {
+  /* ── Background palette (deep → raised) ──────────────────────────────────
+   * Spectrum 2 brown dark scale:
+   *   brown-1600 light = rgb(16,12,4)     brown-100 dark = rgb(35,24,8)
+   *   brown-200 dark   = rgb(44,31,11)    brown-300 dark = rgb(58,40,14)
+   *   brown-400 dark   = rgb(78,55,19)    brown-500 dark = rgb(98,71,30)
+   *   brown-600 dark   = rgb(115,88,47)
+   * ----------------------------------------------------------------------- */
+  --game-bg-void:          #000;          /* absolute void / empty tiles */
+  --game-bg-deep:          #100c04;       /* brown-1600 light = rgb(16,12,4) */
+  --game-bg-base:          #231808;       /* brown-100 dark   = rgb(35,24,8) */
+  --game-bg-dim:           #2c1f0b;       /* brown-200 dark   = rgb(44,31,11) */
+  --game-bg-surface:       #3a280e;       /* brown-300 dark   = rgb(58,40,14) */
+  --game-bg-surface-hover: #442f10;       /* interpolated brown-300↔400 */
+  --game-bg-elevated:      #4e3713;       /* brown-400 dark   = rgb(78,55,19) */
+  --game-bg-raised:        #62471e;       /* brown-500 dark   = rgb(98,71,30) */
+  --game-bg-raised-alt:    #73582f;       /* brown-600 dark   = rgb(115,88,47) */
+  --game-bg-btn-hover:     #4e3713;       /* brown-400 dark   = rgb(78,55,19) */
+
+  /* ── Border palette ──────────────────────────────────────────────────────
+   * Spectrum 2 brown dark scale for structural borders;
+   * yellow dark scale for gold/accent borders:
+   *   brown-200 dark  = rgb(44,31,11)   brown-300 dark  = rgb(58,40,14)
+   *   brown-400 dark  = rgb(78,55,19)   brown-500 dark  = rgb(98,71,30)
+   *   yellow-700 dark = rgb(151,97,0)   yellow-800 dark = rgb(164,106,0)
+   * ----------------------------------------------------------------------- */
+  --game-border-subtle:    #2c1f0b;       /* brown-200 dark */
+  --game-border-default:   #3a280e;       /* brown-300 dark */
+  --game-border-warm:      #4e3713;       /* brown-400 dark */
+  --game-border-strong:    #62471e;       /* brown-500 dark */
+  --game-border-accent:    #976100;       /* yellow-700 dark = rgb(151,97,0) */
+  --game-border-gold:      #a46a00;       /* yellow-800 dark = rgb(164,106,0) */
+
+  /* ── Text palette (most muted → brightest) ───────────────────────────────
+   * Spectrum 2 brown dark scale for body/secondary text;
+   * yellow dark scale for gold accents:
+   *   brown-400 dark  = rgb(78,55,19)    brown-600 dark  = rgb(115,88,47)
+   *   brown-700 dark  = rgb(132,104,61)  brown-800 dark  = rgb(143,114,69)
+   *   brown-900 dark  = rgb(163,132,84)  brown-1000 dark = rgb(181,147,98)
+   *   brown-1100 dark = rgb(199,163,112) brown-1300 dark = rgb(232,207,169)
+   *   yellow-1000 dark = rgb(203,141,0)  yellow-1200 dark = rgb(235,183,0)
+   * ----------------------------------------------------------------------- */
+  --game-text-disabled:    #4e3713;       /* brown-400 dark */
+  --game-text-muted:       #73582f;       /* brown-600 dark */
+  --game-text-dim:         #84683d;       /* brown-700 dark */
+  --game-text-secondary:   #8f7245;       /* brown-800 dark */
+  --game-text-spell-desc:  #808060;       /* spell description — olive tint */
+  --game-text-tertiary:    #a38454;       /* brown-900 dark */
+  --game-text-price:       #b59362;       /* brown-1000 dark */
+  --game-text-body:        #c7a370;       /* brown-1100 dark */
+  --game-text-accent:      #cb8d00;       /* yellow-1000 dark = rgb(203,141,0) */
+  --game-text-bright:      #e8cfa9;       /* brown-1300 dark */
+  --game-text-highlight:   #ebb700;       /* yellow-1200 dark = rgb(235,183,0) */
+
+  /* ── Status / item indicators ────────────────────────────────────────────
+   * Functional game indicators; warning uses orange-900 dark from Spectrum.
+   * ----------------------------------------------------------------------- */
+  --game-status-danger:    #a04040;       /* muted red */
+  --game-status-warning:   #e06400;       /* orange-900 dark = rgb(224,100,0) */
+  --game-status-error:     #c06040;       /* muted orange-red */
+  --game-status-broken:    #806040;       /* broken / unidentified item label */
+  --game-status-sell:      #70a870;       /* sell-price green */
+  --game-status-price:     #4a7a20;       /* buy-price green */
+  --game-status-no-buy:    #604040;       /* cannot purchase indicator */
+  --game-status-enchant:   #4080c0;       /* enchanted blue */
+
+  /* ── Health / resource bars ──────────────────────────────────────────────
+   * Game-specific functional colors for stat, health, and mana bars.
+   * ----------------------------------------------------------------------- */
+  --game-bar-stat-high:    #4a8a4a;       /* stat bar high value — muted green */
+  --game-bar-stat-mid:     #7a7030;       /* stat bar mid value — muted olive */
+  --game-bar-health:       #4a7a30;       /* health bar full */
+  --game-bar-health-low:   #7a4020;       /* health bar low */
+  --game-bar-health-crit:  #7a2020;       /* health bar critical */
+  --game-bar-mana:         #204870;       /* mana bar */
+
+  /* ── Spell / condition effect labels ─────────────────────────────────────
+   * Each effect has a distinct hue; values are muted to match the palette.
+   * ----------------------------------------------------------------------- */
+  --game-effect-poison:    #4a7a20;       /* poisoned — muted green */
+  --game-effect-shield:    #2060a0;       /* shielded — mid blue */
+  --game-effect-levitate:  #6040c0;       /* levitating — purple */
+  --game-effect-detect:    #a06020;       /* detect abilities — amber */
+  --game-effect-fire:      #c04020;       /* fire resistance — red-orange */
+  --game-effect-cold:      #2080c0;       /* cold resistance — blue */
+  --game-effect-lightning: #c0c020;       /* lightning resistance — yellow-green */
+  --game-effect-drain:     #800000;       /* stat drain — dark red */
+  --game-effect-mana-drain: #800060;      /* mana drain — dark purple */
+
+  /* ── Glow / shadow effects ───────────────────────────────────────────────
+   * Derived from --game-text-accent (yellow-1000 dark = rgb(203,141,0)).
+   * ----------------------------------------------------------------------- */
+  --game-glow-strong:      rgba(203, 141, 0, 0.6);
+  --game-glow-subtle:      rgba(203, 141, 0, 0.2);
+
+  /* ── Overlay backdrops ───────────────────────────────────────────────────
+   * spectrum-black + opacity per use case.
+   * ----------------------------------------------------------------------- */
+  --game-overlay-bg:       rgba(10, 8, 6, 0.90);   /* panel/pane overlays */
+  --game-overlay-modal:    rgba(0, 0, 0, 0.82);    /* shop / full-screen modal */
+  --game-overlay-panel:    rgba(0, 0, 0, 0.85);    /* inline panel overlay */
+  --game-overlay-action:   rgba(0, 0, 0, 0.5);     /* lightweight action menu scrim */
+
+  /* ── Map tile fills ──────────────────────────────────────────────────────
+   * Background-color tints applied to dungeon/world tiles.
+   * ----------------------------------------------------------------------- */
+  --game-tile-rock:        #c0c0c0;       /* rock wall tint */
+  --game-tile-cave:        #1a1a2e;       /* dungeon room floor tint */
+  --game-tile-cave-deep:   #0e0e1a;       /* dungeon corridor floor tint */
+}

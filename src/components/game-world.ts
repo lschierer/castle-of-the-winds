@@ -96,8 +96,8 @@ export class GameWorld extends LitElement {
       display: flex;
       width: 100%;
       height: 100%;
-      background: #0a0806;
-      color: #c8b78e;
+      background: var(--game-bg-deep);
+      color: var(--game-text-body);
       font-family: 'Courier New', Courier, monospace;
       overflow: hidden;
     }
@@ -122,8 +122,8 @@ export class GameWorld extends LitElement {
       align-items: stretch;
       gap: 2px;
       padding: 3px 4px;
-      background: #0a0806;
-      border-bottom: 1px solid #2a2010;
+      background: var(--game-bg-deep);
+      border-bottom: 1px solid var(--game-border-subtle);
       flex-shrink: 0;
     }
 
@@ -135,9 +135,9 @@ export class GameWorld extends LitElement {
 
     .spell-bar-btn {
       padding: 2px 7px;
-      background: #161208;
-      border: 1px solid #3d3020;
-      color: #8b7a50;
+      background: var(--game-bg-dim);
+      border: 1px solid var(--game-border-default);
+      color: var(--game-text-secondary);
       font-family: inherit;
       font-size: 0.62rem;
       letter-spacing: 0.04em;
@@ -147,14 +147,14 @@ export class GameWorld extends LitElement {
     }
 
     .spell-bar-btn:hover {
-      background: #2a2010;
-      color: #c8b78e;
+      background: var(--game-bg-elevated);
+      color: var(--game-text-body);
     }
 
     .spell-bar-btn.active {
-      background: #3d3020;
-      border-color: #8b6914;
-      color: #f0e0a8;
+      background: var(--game-bg-raised);
+      border-color: var(--game-border-accent);
+      color: var(--game-text-bright);
     }
 
     .spell-slots {
@@ -167,9 +167,9 @@ export class GameWorld extends LitElement {
       flex: 1;
       min-width: 0;
       padding: 2px 4px;
-      background: #0e0c09;
-      border: 1px solid #2a2010;
-      color: #4a3a20;
+      background: var(--game-bg-base);
+      border: 1px solid var(--game-border-subtle);
+      color: var(--game-text-disabled);
       font-family: inherit;
       font-size: 0.58rem;
       text-align: center;
@@ -184,20 +184,20 @@ export class GameWorld extends LitElement {
     }
 
     .spell-slot.castable {
-      border-color: #3d3020;
-      color: #c8b78e;
+      border-color: var(--game-border-default);
+      color: var(--game-text-body);
       cursor: pointer;
     }
 
     .spell-slot.castable:hover {
-      background: #2a2010;
-      border-color: #8b6914;
-      color: #f0e0a8;
+      background: var(--game-bg-elevated);
+      border-color: var(--game-border-accent);
+      color: var(--game-text-bright);
     }
 
     .spell-slot.no-mana {
-      border-color: #2a2010;
-      color: #4a3a20;
+      border-color: var(--game-border-subtle);
+      color: var(--game-text-disabled);
       cursor: default;
     }
 
@@ -233,22 +233,22 @@ export class GameWorld extends LitElement {
     [draggable="true"]:active { cursor: grabbing; }
 
     .drag-over {
-      outline: 2px solid #f0e0a8 !important;
-      background: #2a2010 !important;
+      outline: 2px solid var(--game-text-bright) !important;
+      background: var(--game-bg-elevated) !important;
     }
 
     .drop-zone {
-      border: 1px dashed #3d3020;
+      border: 1px dashed var(--game-border-default);
       padding: 6px;
       text-align: center;
       font-size: 0.6rem;
-      color: #4a3a20;
+      color: var(--game-text-disabled);
       margin-top: 4px;
     }
 
     .drop-zone.active {
-      border-color: #8b6914;
-      color: #8b7a50;
+      border-color: var(--game-border-accent);
+      color: var(--game-text-secondary);
     }
 
     /* ── Map ────────────────────────────────────────── */
@@ -259,7 +259,7 @@ export class GameWorld extends LitElement {
       justify-content: center;
       overflow: hidden;
       position: relative;
-      background: #0a0806;
+      background: var(--game-bg-deep);
     }
 
     .map-grid {
@@ -281,7 +281,7 @@ export class GameWorld extends LitElement {
       right: 0;
       text-align: center;
       font-size: 0.72rem;
-      color: #d4a820;
+      color: var(--game-text-accent);
       letter-spacing: 0.08em;
       pointer-events: none;
     }
@@ -294,8 +294,8 @@ export class GameWorld extends LitElement {
       flex-direction: column;
       gap: 0.6rem;
       padding: 0.75rem 0.65rem;
-      border-left: 1px solid #2a2010;
-      background: #0e0c09;
+      border-left: 1px solid var(--game-border-subtle);
+      background: var(--game-bg-base);
       overflow-y: auto;
     }
 
@@ -307,20 +307,20 @@ export class GameWorld extends LitElement {
 
     .stat-label {
       font-size: 0.6rem;
-      color: #6b5830;
+      color: var(--game-text-muted);
       letter-spacing: 0.1em;
       text-transform: uppercase;
     }
 
     .stat-value {
       font-size: 0.82rem;
-      color: #c8b78e;
+      color: var(--game-text-body);
     }
 
     .bar-track {
       height: 4px;
-      background: #1a1610;
-      border: 1px solid #2a2010;
+      background: var(--game-bg-surface);
+      border: 1px solid var(--game-border-subtle);
       margin-top: 1px;
       position: relative;
     }
@@ -329,17 +329,17 @@ export class GameWorld extends LitElement {
       position: absolute;
       top: 0; left: 0;
       height: 100%;
-      background: #4a7a30;
+      background: var(--game-bar-health);
       transition: width 0.15s;
     }
 
-    .bar-fill.low  { background: #7a4020; }
-    .bar-fill.crit { background: #7a2020; }
-    .bar-fill.mana { background: #204870; }
+    .bar-fill.low  { background: var(--game-bar-health-low); }
+    .bar-fill.crit { background: var(--game-bar-health-crit); }
+    .bar-fill.mana { background: var(--game-bar-mana); }
 
     .divider {
       height: 1px;
-      background: linear-gradient(to right, transparent, #3d3020 30%, #3d3020 70%, transparent);
+      background: linear-gradient(to right, transparent, var(--game-border-default) 30%, var(--game-border-default) 70%, transparent);
     }
 
     /* Keyboard hint buttons in sidebar */
@@ -352,8 +352,8 @@ export class GameWorld extends LitElement {
       flex: 1;
       padding: 0.25rem 0.3rem;
       background: transparent;
-      border: 1px solid #3d3020;
-      color: #6b5830;
+      border: 1px solid var(--game-border-default);
+      color: var(--game-text-muted);
       font-family: inherit;
       font-size: 0.65rem;
       letter-spacing: 0.06em;
@@ -364,20 +364,20 @@ export class GameWorld extends LitElement {
     }
 
     .key-hint-btn:hover {
-      background: #2a2010;
-      color: #c8b78e;
+      background: var(--game-bg-elevated);
+      color: var(--game-text-body);
     }
 
     .key-hint-btn.active {
-      background: #3d3020;
-      border-color: #8b6914;
-      color: #f0e0a8;
+      background: var(--game-bg-raised);
+      border-color: var(--game-border-accent);
+      color: var(--game-text-bright);
     }
 
     /* ── Spell list (sidebar section) ──────────────── */
     .spell-entry {
       font-size: 0.72rem;
-      color: #a09070;
+      color: var(--game-text-tertiary);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -394,7 +394,7 @@ export class GameWorld extends LitElement {
 
     .spell-cost {
       font-size: 0.65rem;
-      color: #204870;
+      color: var(--game-bar-mana);
       white-space: nowrap;
     }
 
@@ -411,12 +411,12 @@ export class GameWorld extends LitElement {
 
     .msg {
       font-size: 0.68rem;
-      color: #6a5835;
+      color: var(--game-text-muted);
       line-height: 1.3;
       word-break: break-word;
     }
 
-    .msg.fresh { color: #c8b78e; }
+    .msg.fresh { color: var(--game-text-body); }
 
     /* ── Overlays ───────────────────────────────────── */
     .overlay {
@@ -425,7 +425,7 @@ export class GameWorld extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(10, 8, 6, 0.90);
+      background: var(--game-overlay-bg);
       z-index: 10;
     }
 
@@ -434,8 +434,8 @@ export class GameWorld extends LitElement {
       max-width: 520px;
       max-height: 80vh;
       padding: 1.5rem 2rem;
-      border: 1px solid #3d3020;
-      box-shadow: 0 0 0 4px #0e0c09, 0 0 0 5px #3d3020;
+      border: 1px solid var(--game-border-default);
+      box-shadow: 0 0 0 4px var(--game-bg-base), 0 0 0 5px var(--game-border-default);
       display: flex;
       flex-direction: column;
       gap: 1rem;
@@ -450,7 +450,7 @@ export class GameWorld extends LitElement {
 
     .overlay-title {
       font-size: 0.9rem;
-      color: #d4a820;
+      color: var(--game-text-accent);
       letter-spacing: 0.2em;
       text-transform: uppercase;
       margin: 0;
@@ -458,21 +458,21 @@ export class GameWorld extends LitElement {
 
     .overlay-subtitle {
       font-size: 0.68rem;
-      color: #6b5830;
+      color: var(--game-text-muted);
       letter-spacing: 0.1em;
       text-transform: uppercase;
     }
 
     .overlay-text {
       font-size: 0.82rem;
-      color: #c8b78e;
+      color: var(--game-text-body);
       line-height: 1.7;
       white-space: pre-wrap;
     }
 
     .overlay-close {
       font-size: 0.68rem;
-      color: #6b5830;
+      color: var(--game-text-muted);
       letter-spacing: 0.12em;
       text-align: right;
       text-transform: uppercase;
@@ -481,17 +481,17 @@ export class GameWorld extends LitElement {
       align-self: flex-end;
     }
 
-    .overlay-close:hover { color: #d4a820; }
-    .overlay-close.disabled { cursor: default; color: #3d3020; }
-    .overlay-close.disabled:hover { color: #3d3020; }
+    .overlay-close:hover { color: var(--game-text-accent); }
+    .overlay-close.disabled { cursor: default; color: var(--game-border-default); }
+    .overlay-close.disabled:hover { color: var(--game-border-default); }
 
     .narrative-scroll {
       width: 88%;
       max-width: 520px;
       max-height: 80vh;
       padding: 1.5rem 2rem;
-      border: 1px solid #3d3020;
-      box-shadow: 0 0 0 4px #0e0c09, 0 0 0 5px #3d3020;
+      border: 1px solid var(--game-border-default);
+      box-shadow: 0 0 0 4px var(--game-bg-base), 0 0 0 5px var(--game-border-default);
       display: flex;
       flex-direction: column;
       gap: 1rem;
@@ -499,7 +499,7 @@ export class GameWorld extends LitElement {
     }
 
     .story-entry + .story-entry {
-      border-top: 1px solid #3d3020;
+      border-top: 1px solid var(--game-border-default);
       padding-top: 1rem;
     }
 
@@ -511,11 +511,11 @@ export class GameWorld extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(0,0,0,0.5);
+      background: var(--game-overlay-action);
     }
     .action-menu {
-      background: #1a1508;
-      border: 1px solid #5a4a2a;
+      background: var(--game-bg-surface);
+      border: 1px solid var(--game-border-strong);
       padding: 0.75rem;
       display: flex;
       flex-direction: column;
@@ -523,16 +523,16 @@ export class GameWorld extends LitElement {
       min-width: 160px;
     }
     .action-menu-title {
-      color: #d4a820;
+      color: var(--game-text-accent);
       font-size: 0.8rem;
       text-align: center;
       padding-bottom: 0.3rem;
-      border-bottom: 1px solid #3d3020;
+      border-bottom: 1px solid var(--game-border-default);
     }
     .action-menu-btn {
       background: transparent;
-      border: 1px solid #3d3020;
-      color: #c8b78e;
+      border: 1px solid var(--game-border-default);
+      color: var(--game-text-body);
       font-family: inherit;
       font-size: 0.75rem;
       padding: 0.35rem 0.5rem;
@@ -540,29 +540,29 @@ export class GameWorld extends LitElement {
       text-align: left;
     }
     .action-menu-btn:hover {
-      background: #3d3020;
-      color: #f0e0a8;
-      border-color: #8b6914;
+      background: var(--game-bg-raised);
+      color: var(--game-text-bright);
+      border-color: var(--game-border-accent);
     }
     .sort-pack-btn {
       background: transparent;
-      border: 1px solid #3d3020;
-      color: #a09070;
+      border: 1px solid var(--game-border-default);
+      color: var(--game-text-tertiary);
       font-family: inherit;
       font-size: 0.65rem;
       padding: 0.1rem 0.4rem;
       cursor: pointer;
     }
     .sort-pack-btn:hover {
-      background: #3d3020;
-      color: #f0e0a8;
-      border-color: #8b6914;
+      background: var(--game-bg-raised);
+      color: var(--game-text-bright);
+      border-color: var(--game-border-accent);
     }
 
     /* Building overlay */
     .building-services {
       font-size: 0.78rem;
-      color: #a09070;
+      color: var(--game-text-tertiary);
       line-height: 1.6;
     }
 
@@ -577,8 +577,8 @@ export class GameWorld extends LitElement {
       max-width: 640px;
       max-height: 90vh;
       padding: 1rem 1.25rem;
-      border: 1px solid #3d3020;
-      box-shadow: 0 0 0 4px #0e0c09, 0 0 0 5px #3d3020;
+      border: 1px solid var(--game-border-default);
+      box-shadow: 0 0 0 4px var(--game-bg-base), 0 0 0 5px var(--game-border-default);
       overflow-y: auto;
     }
 
@@ -602,8 +602,8 @@ export class GameWorld extends LitElement {
     .equip-slot {
       width: 72px;
       height: 72px;
-      border: 1px solid #2a2010;
-      background: #0e0c09;
+      border: 1px solid var(--game-border-subtle);
+      background: var(--game-bg-base);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -614,18 +614,18 @@ export class GameWorld extends LitElement {
     }
 
     .equip-slot:hover {
-      border-color: #5a4828;
-      background: #161209;
+      border-color: var(--game-border-strong);
+      background: var(--game-bg-dim);
     }
 
     .equip-slot.filled {
-      border-color: #5a4828;
-      background: #121008;
+      border-color: var(--game-border-strong);
+      background: var(--game-bg-dim);
     }
 
     .equip-slot.char-portrait {
       border: none;
-      background: #0a0806;
+      background: var(--game-bg-deep);
       cursor: default;
       grid-column: 2 / 5;
       grid-row: 2 / 5;
@@ -644,7 +644,7 @@ export class GameWorld extends LitElement {
 
     .equip-slot-label {
       font-size: 0.48rem;
-      color: #4a3a20;
+      color: var(--game-text-disabled);
       letter-spacing: 0.06em;
       text-transform: uppercase;
       text-align: center;
@@ -652,12 +652,12 @@ export class GameWorld extends LitElement {
     }
 
     .equip-slot.filled .equip-slot-label {
-      color: #8b6930;
+      color: var(--game-border-accent);
     }
 
     .equip-slot-name {
       font-size: 0.52rem;
-      color: #c8b78e;
+      color: var(--game-text-body);
       text-align: center;
       line-height: 1.2;
       max-width: 68px;
@@ -686,10 +686,10 @@ export class GameWorld extends LitElement {
 
     .inv-container-label {
       font-size: 0.62rem;
-      color: #6b5830;
+      color: var(--game-text-muted);
       letter-spacing: 0.12em;
       text-transform: uppercase;
-      border-bottom: 1px solid #2a2010;
+      border-bottom: 1px solid var(--game-border-subtle);
       padding-bottom: 0.15rem;
     }
 
@@ -702,8 +702,8 @@ export class GameWorld extends LitElement {
     .belt-slot {
       width: 52px;
       height: 52px;
-      border: 1px solid #2a2010;
-      background: #0e0c09;
+      border: 1px solid var(--game-border-subtle);
+      background: var(--game-bg-base);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -712,7 +712,7 @@ export class GameWorld extends LitElement {
     }
 
     .belt-slot.filled {
-      border-color: #5a4828;
+      border-color: var(--game-border-strong);
     }
 
     /* Pack item list */
@@ -724,13 +724,13 @@ export class GameWorld extends LitElement {
 
     .inv-item {
       font-size: 0.78rem;
-      color: #c8b78e;
+      color: var(--game-text-body);
       padding: 0.1rem 0.3rem;
     }
 
     .inv-empty {
       font-size: 0.72rem;
-      color: #4a3a20;
+      color: var(--game-text-disabled);
       font-style: italic;
       padding: 0.1rem 0.3rem;
     }
@@ -742,30 +742,30 @@ export class GameWorld extends LitElement {
       gap: 0.5rem 1rem;
       align-items: baseline;
       padding: 0.35rem 0;
-      border-bottom: 1px solid #1a1610;
+      border-bottom: 1px solid var(--game-bg-surface);
     }
 
     .spell-row-name {
       font-size: 0.85rem;
-      color: #f0e0a8;
+      color: var(--game-text-bright);
     }
 
     .spell-row-school {
       font-size: 0.65rem;
-      color: #6b5830;
+      color: var(--game-text-muted);
       text-transform: uppercase;
       letter-spacing: 0.08em;
     }
 
     .spell-row-cost {
       font-size: 0.72rem;
-      color: #204870;
+      color: var(--game-bar-mana);
     }
 
     .spell-row-desc {
       grid-column: 1 / -1;
       font-size: 0.72rem;
-      color: #808060;
+      color: var(--game-text-spell-desc);
       line-height: 1.4;
       margin-top: -0.1rem;
     }
@@ -1746,7 +1746,7 @@ export class GameWorld extends LitElement {
           grid-template-columns:repeat(${mw}, ${cellSize}px);
           grid-template-rows:repeat(${mh}, ${cellSize}px);
         ">${cells}</div>
-        <div class="location-banner" style="color:#f0e0a8;background:rgba(0,0,0,0.7);padding:4px 12px">
+        <div class="location-banner" style="color:var(--game-text-bright);background:rgba(0,0,0,0.7);padding:4px 12px">
           Map View — press M to return
         </div>
       </div>
@@ -1814,7 +1814,7 @@ export class GameWorld extends LitElement {
                     @click=${() => { this.shopBuy(inv, it.id); }}
                   >
                     <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
-                    <span>${displayName(it)} — <span style="color:#d4a820">${buyPrice(it)} cp</span></span>
+                    <span>${displayName(it)} — <span style="color:var(--game-text-accent)">${buyPrice(it)} cp</span></span>
                   </div>`)}
             </div>
           </div>
@@ -1843,7 +1843,7 @@ export class GameWorld extends LitElement {
                       @click=${canSell ? () => { this.shopSellAny(it, shop); } : undefined}
                     >
                       <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
-                      <span>${displayName(it)} — <span style="color:#4a7a20">${price} cp</span></span>
+                      <span>${displayName(it)} — <span style="color:var(--game-status-price)">${price} cp</span></span>
                     </div>`;
                 })}
             </div>
@@ -1864,7 +1864,7 @@ export class GameWorld extends LitElement {
           ${unidentified.length === 0 ? html`<div class="inv-empty">No unidentified items.</div>` :
             unidentified.map((it) => html`
               <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopIdentify(it); }}>
-                ${it.name} — <span style="color:#d4a820">${identifyFee()} cp</span>
+                ${it.name} — <span style="color:var(--game-text-accent)">${identifyFee()} cp</span>
               </div>`)}
           <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
         </div>
@@ -1881,11 +1881,11 @@ export class GameWorld extends LitElement {
           <p class="overlay-title">${name}</p>
           <div class="divider"></div>
           <div class="inv-item ${healCost > 0 ? '' : 'no-mana'}" style="${healCost > 0 ? 'cursor:pointer' : 'opacity:0.5'}" @click=${healCost > 0 ? () => { this.shopHeal(); } : undefined}>
-            Heal wounds — <span style="color:#d4a820">${healCost > 0 ? `${healCost} cp` : 'Fully healed'}</span>
+            Heal wounds — <span style="color:var(--game-text-accent)">${healCost > 0 ? `${healCost} cp` : 'Fully healed'}</span>
           </div>
           ${cursedItems.length > 0 ? cursedItems.map((it) => html`
             <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopUncurse(it); }}>
-              Remove curse: ${displayName(it)} — <span style="color:#d4a820">${templeUncurseCost()} cp</span>
+              Remove curse: ${displayName(it)} — <span style="color:var(--game-text-accent)">${templeUncurseCost()} cp</span>
             </div>`) : html`<div class="inv-empty">No cursed equipment.</div>`}
           <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
         </div>
@@ -1929,12 +1929,12 @@ export class GameWorld extends LitElement {
           <p class="overlay-title">${name}</p>
           <p class="building-services">Safe-keeping for your coin.  Balances transfer between branches.</p>
           <div class="divider"></div>
-          <div style="font-size:0.8rem;color:#c8b78e;margin-bottom:0.6rem">
-            <div>On hand (purse): <span style="color:#d4a820">${purseCp.toLocaleString()} cp</span></div>
-            <div>On deposit (all banks): <span style="color:#d4a820">${bankCp.toLocaleString()} cp</span></div>
+          <div style="font-size:0.8rem;color:var(--game-text-body);margin-bottom:0.6rem">
+            <div>On hand (purse): <span style="color:var(--game-text-accent)">${purseCp.toLocaleString()} cp</span></div>
+            <div>On deposit (all banks): <span style="color:var(--game-text-accent)">${bankCp.toLocaleString()} cp</span></div>
           </div>
           <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.4rem">
-            <input id="bank-deposit" type="number" min="1" placeholder="amount" style="width:6rem;background:#1a1610;border:1px solid #3d3020;color:#c8b78e;padding:0.2rem 0.3rem">
+            <input id="bank-deposit" type="number" min="1" placeholder="amount" style="width:6rem;background:var(--game-bg-surface);border:1px solid var(--game-border-default);color:var(--game-text-body);padding:0.2rem 0.3rem">
             <button class="action-menu-btn" @click=${(e: Event) => {
               const root = (e.currentTarget as HTMLElement).getRootNode() as ShadowRoot | Document;
               const input = root.querySelector('#bank-deposit') as HTMLInputElement | null;
@@ -1942,7 +1942,7 @@ export class GameWorld extends LitElement {
             }}>Deposit</button>
           </div>
           <div style="display:flex;gap:0.5rem;align-items:center">
-            <input id="bank-withdraw" type="number" min="1" placeholder="amount" style="width:6rem;background:#1a1610;border:1px solid #3d3020;color:#c8b78e;padding:0.2rem 0.3rem">
+            <input id="bank-withdraw" type="number" min="1" placeholder="amount" style="width:6rem;background:var(--game-bg-surface);border:1px solid var(--game-border-default);color:var(--game-text-body);padding:0.2rem 0.3rem">
             <button class="action-menu-btn" @click=${(e: Event) => {
               const root = (e.currentTarget as HTMLElement).getRootNode() as ShadowRoot | Document;
               const input = root.querySelector('#bank-withdraw') as HTMLInputElement | null;
@@ -1989,7 +1989,7 @@ export class GameWorld extends LitElement {
                   @click=${() => { this.shopSellAny(it, shop); }}
                 >
                   <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
-                  <span>${displayName(it)} — <span style="color:#4a7a20">${junkYardPrice(it)} cp</span></span>
+                  <span>${displayName(it)} — <span style="color:var(--game-status-price)">${junkYardPrice(it)} cp</span></span>
                 </div>`)}
           </div>
           <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
@@ -2472,7 +2472,7 @@ export class GameWorld extends LitElement {
     const items = container.slots?.flatMap((s) => s.items) ?? [];
     const close = (): void => { this.openedContainers.delete(container.id); this.requestUpdate(); };
     return html`
-      <div class="inv-container-block" style="margin-top:0.4rem;border-left:2px solid #3d3020;padding-left:0.5rem">
+      <div class="inv-container-block" style="margin-top:0.4rem;border-left:2px solid var(--game-border-default);padding-left:0.5rem">
         <div class="inv-container-label" style="display:flex;justify-content:space-between;align-items:center">
           <span>↳ ${displayName(container)}</span>
           <button class="sort-pack-btn" @click=${close} title="Close container">Close</button>
@@ -2495,7 +2495,7 @@ export class GameWorld extends LitElement {
                   @contextmenu=${(e: Event) => { this.onInspectItem(it, e); }}
                 >
                   <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
-                  <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:#a04040">(cursed)</span>` : ''}</span>
+                  <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:var(--game-status-danger)">(cursed)</span>` : ''}</span>
                 </div>
               `)}
         </div>
@@ -2520,34 +2520,34 @@ export class GameWorld extends LitElement {
     const totalBulk   = item.bulk   + (item.slots ? containerBulk(item)   : 0);
     const fmt = (g: number): string => g >= 1000 ? `${(g / 1000).toFixed(1)} kg` : `${g} g`;
     const lines: TemplateResult[] = [];
-    lines.push(html`<div><span style="color:#a09070">Kind:</span> ${item.kind}</div>`);
-    lines.push(html`<div><span style="color:#a09070">Weight:</span> ${fmt(totalWeight)}</div>`);
-    lines.push(html`<div><span style="color:#a09070">Bulk:</span> ${totalBulk.toLocaleString()}</div>`);
+    lines.push(html`<div><span style="color:var(--game-text-tertiary)">Kind:</span> ${item.kind}</div>`);
+    lines.push(html`<div><span style="color:var(--game-text-tertiary)">Weight:</span> ${fmt(totalWeight)}</div>`);
+    lines.push(html`<div><span style="color:var(--game-text-tertiary)">Bulk:</span> ${totalBulk.toLocaleString()}</div>`);
     if (item.kind === 'weapon' && item.weaponClass !== undefined) {
-      lines.push(html`<div><span style="color:#a09070">Weapon class:</span> ${item.weaponClass}</div>`);
+      lines.push(html`<div><span style="color:var(--game-text-tertiary)">Weapon class:</span> ${item.weaponClass}</div>`);
     }
     if (item.identified) {
       if (item.enchantment !== 0) {
-        lines.push(html`<div><span style="color:#a09070">Enchantment:</span> ${item.enchantment > 0 ? '+' : ''}${item.enchantment}</div>`);
+        lines.push(html`<div><span style="color:var(--game-text-tertiary)">Enchantment:</span> ${item.enchantment > 0 ? '+' : ''}${item.enchantment}</div>`);
       }
       if (item.cursed) {
-        lines.push(html`<div style="color:#a04040">Cursed</div>`);
+        lines.push(html`<div style="color:var(--game-status-danger)">Cursed</div>`);
       }
       if (item.broken) {
-        lines.push(html`<div style="color:#806040">Broken</div>`);
+        lines.push(html`<div style="color:var(--game-status-broken)">Broken</div>`);
       }
       if (item.charges !== undefined) {
-        lines.push(html`<div><span style="color:#a09070">Charges:</span> ${item.charges}</div>`);
+        lines.push(html`<div><span style="color:var(--game-text-tertiary)">Charges:</span> ${item.charges}</div>`);
       }
     } else {
-      lines.push(html`<div style="color:#806040">Unidentified</div>`);
+      lines.push(html`<div style="color:var(--game-status-broken)">Unidentified</div>`);
     }
     return html`
       <div class="action-menu-backdrop" @click=${() => { this.inspectItem = null; }}
         @contextmenu=${(e: Event) => { e.preventDefault(); this.inspectItem = null; }}>
         <div class="action-menu" @click=${(e: Event) => { e.stopPropagation(); }}>
           <div class="action-menu-title">${displayName(item)}</div>
-          <div style="padding:0.4rem 0.5rem;font-size:0.75rem;color:#c8b78e">
+          <div style="padding:0.4rem 0.5rem;font-size:0.75rem;color:var(--game-text-body)">
             ${lines}
           </div>
         </div>
@@ -2904,7 +2904,7 @@ export class GameWorld extends LitElement {
             ${this.renderEquipSlot(c.ringRight, 'Ring',      `${IC}/ring.png`,     'ring-r')}
 
             <!-- Bottom-right corner (unused) -->
-            <div style="grid-area:x; background:#0a0806"></div>
+            <div style="grid-area:x; background:var(--game-bg-deep)"></div>
           </div>
 
           <!-- Open containers below paperdoll -->
@@ -2930,8 +2930,8 @@ export class GameWorld extends LitElement {
                             @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'belt', slotIndex, item: it }, e); }}
                             @dragend=${this.onItemDragEnd.bind(this)}
                           >
-                          <span style="font-size:0.5rem;color:#c8b78e;text-align:center;padding:2px">${displayName(it)}</span>
-                        ` : html`<span style="font-size:0.5rem;color:#2a2010">—</span>`}
+                          <span style="font-size:0.5rem;color:var(--game-text-body);text-align:center;padding:2px">${displayName(it)}</span>
+                        ` : html`<span style="font-size:0.5rem;color:var(--game-border-subtle)">—</span>`}
                       </div>
                     `;
                   })}
@@ -2981,7 +2981,7 @@ export class GameWorld extends LitElement {
                             @drop=${dropOpts?.drop}
                           >
                             <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
-                            <span>${isContainer ? html`<span style="color:#a09070">${isOpen ? '▾' : '▸'}</span> ` : ''}${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:#a04040">(cursed)</span>` : ''}</span>
+                            <span>${isContainer ? html`<span style="color:var(--game-text-tertiary)">${isOpen ? '▾' : '▸'}</span> ` : ''}${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:var(--game-status-danger)">(cursed)</span>` : ''}</span>
                           </div>
                         `;
                       })}
@@ -3109,29 +3109,29 @@ export class GameWorld extends LitElement {
     if (!c || !d) return html``;
     const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     return html`
-      <div class="overlay" style="background:rgba(0,0,0,0.85)">
+      <div class="overlay" style="background:var(--game-overlay-panel)">
         <div style="
           display:flex;flex-direction:column;align-items:center;gap:1rem;
           padding:2rem 3rem;
-          border:2px solid #5a4a2a;
-          background:#0e0c09;
+          border:2px solid var(--game-border-strong);
+          background:var(--game-bg-base);
           max-width:360px;
           text-align:center;
           font-family:'Courier New',monospace;
-          color:#c8b78e;
+          color:var(--game-text-body);
         ">
-          <div style="font-size:2rem;color:#6b5830">⚰</div>
-          <div style="font-size:1.4rem;color:#d4a820;letter-spacing:0.15em">REST IN PEACE</div>
-          <div style="width:100%;height:1px;background:#3d3020"></div>
-          <div style="font-size:1.1rem;color:#f0e0a8">${c.name}</div>
-          <div style="font-size:0.8rem;color:#6b5830">Level ${c.level} Adventurer</div>
-          <div style="font-size:0.75rem;color:#a04040;margin-top:0.5rem">
+          <div style="font-size:2rem;color:var(--game-text-muted)">⚰</div>
+          <div style="font-size:1.4rem;color:var(--game-text-accent);letter-spacing:0.15em">REST IN PEACE</div>
+          <div style="width:100%;height:1px;background:var(--game-bg-raised)"></div>
+          <div style="font-size:1.1rem;color:var(--game-text-bright)">${c.name}</div>
+          <div style="font-size:0.8rem;color:var(--game-text-muted)">Level ${c.level} Adventurer</div>
+          <div style="font-size:0.75rem;color:var(--game-status-danger);margin-top:0.5rem">
             Slain by ${d.killedBy}
           </div>
-          <div style="font-size:0.7rem;color:#6b5830">${date}</div>
-          <div style="width:100%;height:1px;background:#3d3020;margin-top:0.5rem"></div>
+          <div style="font-size:0.7rem;color:var(--game-text-muted)">${date}</div>
+          <div style="width:100%;height:1px;background:var(--game-bg-raised);margin-top:0.5rem"></div>
           <button style="
-            background:transparent;border:1px solid #5a4a2a;color:#c8b78e;
+            background:transparent;border:1px solid var(--game-border-strong);color:var(--game-text-body);
             font-family:inherit;font-size:0.8rem;padding:0.5rem 1.5rem;
             cursor:pointer;letter-spacing:0.1em;
           " @click=${() => { window.location.href = '/'; }}>
@@ -3175,7 +3175,7 @@ export class GameWorld extends LitElement {
         <div class="narrative-scroll" @click=${(e: Event) => { e.stopPropagation(); }}>
           <p class="overlay-title">Review Story</p>
           ${segments.length === 0
-            ? html`<p class="overlay-text" style="color:#6b5830">No story events yet.</p>`
+            ? html`<p class="overlay-text" style="color:var(--game-text-muted)">No story events yet.</p>`
             : segments.map((seg) => html`
               <div class="story-entry">
                 <p class="overlay-subtitle">${seg.title}</p>
@@ -3191,21 +3191,21 @@ export class GameWorld extends LitElement {
   private renderStatusEffects(): TemplateResult {
     const s = this.playerStatus;
     const effects: Array<{ label: string; color: string }> = [];
-    if (s.poisoned)       effects.push({ label: 'Poisoned',       color: '#4a7a20' });
-    if (s.shielded)       effects.push({ label: 'Shielded',       color: '#2060a0' });
-    if (s.levitating)     effects.push({ label: 'Levitating',     color: '#6040c0' });
-    if (s.detectMonsters) effects.push({ label: 'Detect Monsters',color: '#a06020' });
-    if (s.detectObjects)  effects.push({ label: 'Detect Objects', color: '#a06020' });
-    if (s.detectTraps)    effects.push({ label: 'Detect Traps',   color: '#a06020' });
-    if ((s.resistFire ?? 0) > 0)      effects.push({ label: `Resist Fire ×${s.resistFire}`,      color: '#c04020' });
-    if ((s.resistCold ?? 0) > 0)      effects.push({ label: `Resist Cold ×${s.resistCold}`,      color: '#2080c0' });
-    if ((s.resistLightning ?? 0) > 0) effects.push({ label: `Resist Lightning ×${s.resistLightning}`, color: '#c0c020' });
-    if ((s.drainedStr ?? 0) > 0)  effects.push({ label: `STR drained −${s.drainedStr}`, color: '#a04040' });
-    if ((s.drainedDex ?? 0) > 0)  effects.push({ label: `DEX drained −${s.drainedDex}`, color: '#a04040' });
-    if ((s.drainedCon ?? 0) > 0)  effects.push({ label: `CON drained −${s.drainedCon}`, color: '#800000' });
-    if ((s.drainedInt ?? 0) > 0)  effects.push({ label: `INT drained −${s.drainedInt}`, color: '#800000' });
-    if ((s.drainedMana ?? 0) > 0) effects.push({ label: `Mana drained −${s.drainedMana}`, color: '#800060' });
-    if ((s.drainedMaxHp ?? 0) > 0) effects.push({ label: `Max HP drained −${s.drainedMaxHp}`, color: '#800000' });
+    if (s.poisoned)       effects.push({ label: 'Poisoned',       color: 'var(--game-effect-poison)' });
+    if (s.shielded)       effects.push({ label: 'Shielded',       color: 'var(--game-effect-shield)' });
+    if (s.levitating)     effects.push({ label: 'Levitating',     color: 'var(--game-effect-levitate)' });
+    if (s.detectMonsters) effects.push({ label: 'Detect Monsters',color: 'var(--game-effect-detect)' });
+    if (s.detectObjects)  effects.push({ label: 'Detect Objects', color: 'var(--game-effect-detect)' });
+    if (s.detectTraps)    effects.push({ label: 'Detect Traps',   color: 'var(--game-effect-detect)' });
+    if ((s.resistFire ?? 0) > 0)      effects.push({ label: `Resist Fire ×${s.resistFire}`,      color: 'var(--game-effect-fire)' });
+    if ((s.resistCold ?? 0) > 0)      effects.push({ label: `Resist Cold ×${s.resistCold}`,      color: 'var(--game-effect-cold)' });
+    if ((s.resistLightning ?? 0) > 0) effects.push({ label: `Resist Lightning ×${s.resistLightning}`, color: 'var(--game-effect-lightning)' });
+    if ((s.drainedStr ?? 0) > 0)  effects.push({ label: `STR drained −${s.drainedStr}`, color: 'var(--game-status-danger)' });
+    if ((s.drainedDex ?? 0) > 0)  effects.push({ label: `DEX drained −${s.drainedDex}`, color: 'var(--game-status-danger)' });
+    if ((s.drainedCon ?? 0) > 0)  effects.push({ label: `CON drained −${s.drainedCon}`, color: 'var(--game-effect-drain)' });
+    if ((s.drainedInt ?? 0) > 0)  effects.push({ label: `INT drained −${s.drainedInt}`, color: 'var(--game-effect-drain)' });
+    if ((s.drainedMana ?? 0) > 0) effects.push({ label: `Mana drained −${s.drainedMana}`, color: 'var(--game-effect-mana-drain)' });
+    if ((s.drainedMaxHp ?? 0) > 0) effects.push({ label: `Max HP drained −${s.drainedMaxHp}`, color: 'var(--game-effect-drain)' });
     if (effects.length === 0) return html``;
     return html`
       <div class="divider"></div>
@@ -3268,20 +3268,20 @@ export class GameWorld extends LitElement {
         <div class="overlay-box" style="min-width:340px" @click=${(e: Event) => { e.stopPropagation(); }}>
           <p class="overlay-title">Customize Spell Bar</p>
           <div class="divider"></div>
-          <p style="font-size:0.68rem;color:#8b7a50;margin:0 0 0.5rem">
+          <p style="font-size:0.68rem;color:var(--game-text-secondary);margin:0 0 0.5rem">
             Click a slot, then click a spell to assign it. Click a slot again to clear it.
           </p>
 
           <div style="display:flex;gap:1rem">
             <!-- Slots column -->
             <div style="display:flex;flex-direction:column;gap:3px;min-width:140px">
-              <span style="font-size:0.6rem;color:#6b5830;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2px">Slots</span>
+              <span style="font-size:0.6rem;color:var(--game-text-muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2px">Slots</span>
               ${this.quickSpells.map((spellId, i) => {
                 const sp = spellId ? spellById(spellId) : null;
                 const isSelected = this.customizingSlot === i;
                 return html`<div
                   class="spell-row castable"
-                  style="cursor:pointer;${isSelected ? 'background:#2a2010;border-color:#8b6914;' : ''}"
+                  style="cursor:pointer;${isSelected ? 'background:var(--game-bg-elevated);border-color:var(--game-border-accent);' : ''}"
                   @click=${() => {
                     if (this.customizingSlot === i) {
                       // Second click on same slot = clear it
@@ -3293,16 +3293,16 @@ export class GameWorld extends LitElement {
                     }
                   }}
                 >
-                  <span class="spell-row-name" style="min-width:1.2rem;color:#6b5830">${i + 1}.</span>
+                  <span class="spell-row-name" style="min-width:1.2rem;color:var(--game-text-muted)">${i + 1}.</span>
                   <span class="spell-row-name">${sp ? sp.name : '—'}</span>
-                  ${isSelected ? html`<span style="font-size:0.58rem;color:#f0e0a8;margin-left:auto">← pick</span>` : ''}
+                  ${isSelected ? html`<span style="font-size:0.58rem;color:var(--game-text-bright);margin-left:auto">← pick</span>` : ''}
                 </div>`;
               })}
             </div>
 
             <!-- Known spells column -->
             <div style="display:flex;flex-direction:column;gap:3px;flex:1">
-              <span style="font-size:0.6rem;color:#6b5830;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2px">Known Spells</span>
+              <span style="font-size:0.6rem;color:var(--game-text-muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2px">Known Spells</span>
               ${c.spells.length === 0
                 ? html`<div class="inv-empty">No spells learned.</div>`
                 : c.spells.map((id) => {
@@ -3320,7 +3320,7 @@ export class GameWorld extends LitElement {
                       } : undefined}
                     >
                       <span class="spell-row-name">${sp.name}</span>
-                      <span class="spell-row-cost" style="${alreadySlotted >= 0 ? 'color:#8b6914' : ''}">${alreadySlotted >= 0 ? `slot ${alreadySlotted + 1}` : `${sp.baseMana} mp`}</span>
+                      <span class="spell-row-cost" style="${alreadySlotted >= 0 ? 'color:var(--game-border-accent)' : ''}">${alreadySlotted >= 0 ? `slot ${alreadySlotted + 1}` : `${sp.baseMana} mp`}</span>
                     </div>`;
                   })}
             </div>
@@ -3721,7 +3721,7 @@ export class GameWorld extends LitElement {
             ${coinsIn(c.purse, 'silver')   > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'silver').toLocaleString()} sp</span>` : ''}
             ${coinsIn(c.purse, 'gold')     > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'gold').toLocaleString()} gp</span>` : ''}
             ${coinsIn(c.purse, 'platinum') > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'platinum').toLocaleString()} pp</span>` : ''}
-          ` : html`<span class="stat-value" style="color:#4a3a20">No purse</span>`}
+          ` : html`<span class="stat-value" style="color:var(--game-text-disabled)">No purse</span>`}
         </div>
 
         <div class="divider"></div>
@@ -3789,7 +3789,7 @@ export class GameWorld extends LitElement {
             ${this.mapMode ? this.renderMiniMap() : this.renderMap()}
 
             ${this.castingSpell
-              ? html`<div class="location-banner" style="color:#f0e0a8;background:rgba(0,0,0,0.7);padding:4px 12px">⚡ Choose direction — arrow keys / numpad · Esc to cancel</div>`
+              ? html`<div class="location-banner" style="color:var(--game-text-bright);background:rgba(0,0,0,0.7);padding:4px 12px">⚡ Choose direction — arrow keys / numpad · Esc to cancel</div>`
               : this.locationName
               ? html`<div class="location-banner">${this.locationName}</div>`
               : ''}
