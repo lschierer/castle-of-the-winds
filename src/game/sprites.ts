@@ -43,7 +43,7 @@ const VOID_STYLE: TileStyle = {
   backgroundSize: TILE32,
   backgroundPosition: POS_00,
   backgroundRepeat: REPEAT_NO,
-  backgroundColor: '#000',
+  backgroundColor: 'var(--game-bg-void)',
 };
 
 const ROCK_WALL_STYLE: TileStyle = {
@@ -51,7 +51,7 @@ const ROCK_WALL_STYLE: TileStyle = {
   backgroundSize: TILE32,
   backgroundPosition: POS_00,
   backgroundRepeat: REPEAT_NO,
-  backgroundColor: '#c0c0c0',
+  backgroundColor: 'var(--game-tile-rock)',
 };
 
 // ── Terrain base sprites ──────────────────────────────────────────────────────
@@ -165,9 +165,9 @@ function terrainBase(tile: Tile): TileStyle {
     const style = singleLayer(sprite.src, sprite.size, sprite.repeat);
     // Room floors get a slightly lighter tint than corridor floors
     if (tile.terrain === 'floor' && tile.roomId !== undefined) {
-      style.backgroundColor = '#1a1a2e';
+      style.backgroundColor = 'var(--game-tile-cave)';
     } else if (tile.terrain === 'floor') {
-      style.backgroundColor = '#0e0e1a';
+      style.backgroundColor = 'var(--game-tile-cave-deep)';
     }
     return style;
   }

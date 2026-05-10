@@ -73,17 +73,17 @@ export class ShopScreen extends LitElement {
       display: flex;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.82);
+      background: var(--game-overlay-modal);
       align-items: center;
       justify-content: center;
       z-index: 100;
       font-family: 'Courier New', Courier, monospace;
-      color: #c8b78e;
+      color: var(--game-text-body);
     }
 
     .shop-box {
-      background: #12100c;
-      border: 1px solid #5a4a2a;
+      background: var(--game-bg-dim);
+      border: 1px solid var(--game-border-strong);
       width: min(900px, 95vw);
       max-height: 90vh;
       display: flex;
@@ -96,22 +96,22 @@ export class ShopScreen extends LitElement {
       align-items: baseline;
       justify-content: space-between;
       padding: 10px 14px 6px;
-      border-bottom: 1px solid #3a2e18;
+      border-bottom: 1px solid var(--game-border-warm);
     }
 
     .shop-title {
       font-size: 1rem;
-      color: #d4a820;
+      color: var(--game-text-accent);
       letter-spacing: 0.05em;
       margin: 0;
     }
 
     .shop-close {
-      color: #7a6a4a;
+      color: var(--game-text-dim);
       cursor: pointer;
       font-size: 0.75rem;
     }
-    .shop-close:hover { color: #d4a820; }
+    .shop-close:hover { color: var(--game-text-accent); }
 
     .shop-panels {
       display: flex;
@@ -123,7 +123,7 @@ export class ShopScreen extends LitElement {
     /* ── Left panel: shop stock ─── */
     .panel-shop {
       flex: 1;
-      border-right: 1px solid #3a2e18;
+      border-right: 1px solid var(--game-border-warm);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -139,11 +139,11 @@ export class ShopScreen extends LitElement {
 
     .panel-heading {
       font-size: 0.65rem;
-      color: #7a6a4a;
+      color: var(--game-text-dim);
       letter-spacing: 0.08em;
       text-transform: uppercase;
       padding: 6px 10px 4px;
-      border-bottom: 1px solid #2a2010;
+      border-bottom: 1px solid var(--game-border-subtle);
       flex-shrink: 0;
     }
 
@@ -162,32 +162,32 @@ export class ShopScreen extends LitElement {
       font-size: 0.7rem;
       line-height: 1.4;
     }
-    .item-row:hover { background: #1e1a10; }
-    .item-row.selected { background: #2a2010; color: #f0d870; }
+    .item-row:hover { background: var(--game-bg-surface-hover); }
+    .item-row.selected { background: var(--game-bg-elevated); color: var(--game-text-highlight); }
 
     .item-name { flex: 1; }
     .item-price {
-      color: #a89060;
+      color: var(--game-text-price);
       white-space: nowrap;
       min-width: 60px;
       text-align: right;
     }
-    .item-price.sell { color: #70a870; }
-    .item-price.no-buy { color: #604040; }
+    .item-price.sell { color: var(--game-status-sell); }
+    .item-price.no-buy { color: var(--game-status-no-buy); }
 
-    .cursed-tag  { color: #a04040; font-size: 0.6rem; margin-left: 4px; }
-    .ench-tag    { color: #4080c0; font-size: 0.6rem; margin-left: 4px; }
+    .cursed-tag  { color: var(--game-status-danger); font-size: 0.6rem; margin-left: 4px; }
+    .ench-tag    { color: var(--game-status-enchant); font-size: 0.6rem; margin-left: 4px; }
 
     .container-label {
       font-size: 0.6rem;
-      color: #5a4a2a;
+      color: var(--game-border-strong);
       padding: 4px 10px 2px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
     }
 
     .panel-footer {
-      border-top: 1px solid #2a2010;
+      border-top: 1px solid var(--game-border-subtle);
       padding: 6px 10px;
       display: flex;
       align-items: center;
@@ -198,25 +198,25 @@ export class ShopScreen extends LitElement {
     }
 
     .btn {
-      background: #2a2010;
-      border: 1px solid #5a4a2a;
-      color: #c8b78e;
+      background: var(--game-bg-elevated);
+      border: 1px solid var(--game-border-strong);
+      color: var(--game-text-body);
       font-family: inherit;
       font-size: 0.7rem;
       padding: 3px 10px;
       cursor: pointer;
     }
-    .btn:hover:not(:disabled) { background: #3a3018; color: #d4a820; }
+    .btn:hover:not(:disabled) { background: var(--game-bg-btn-hover); color: var(--game-text-accent); }
     .btn:disabled { opacity: 0.35; cursor: default; }
-    .btn.primary { border-color: #a08030; }
+    .btn.primary { border-color: var(--game-border-gold); }
 
     .coins-display {
-      color: #a89060;
+      color: var(--game-text-price);
       font-size: 0.65rem;
     }
 
     .feedback {
-      color: #c06040;
+      color: var(--game-status-error);
       font-size: 0.65rem;
       font-style: italic;
       padding: 0 10px 6px;
@@ -226,7 +226,7 @@ export class ShopScreen extends LitElement {
 
     .empty-msg {
       padding: 10px;
-      color: #4a3a20;
+      color: var(--game-text-disabled);
       font-size: 0.65rem;
       font-style: italic;
     }
@@ -556,7 +556,7 @@ export class ShopScreen extends LitElement {
             <div class="panel-heading">Your items</div>
             <div class="item-list">
               ${rep.bannedFromSelling ? html`
-                <div class="empty-msg" style="color:#a04040">
+                <div class="empty-msg" style="color:var(--game-status-danger)">
                   The shopkeeper refuses to buy from you.
                 </div>
               ` : ''}

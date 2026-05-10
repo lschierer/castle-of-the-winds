@@ -43,7 +43,7 @@ export class CharacterCreation extends LitElement {
       justify-content: center;
       width: 100%;
       height: 100%;
-      background: #0e0c09;
+      background: var(--game-bg-base);
       overflow-y: auto;
       padding: 1.5rem 0;
       box-sizing: border-box;
@@ -54,8 +54,8 @@ export class CharacterCreation extends LitElement {
       flex-direction: column;
       gap: 1.25rem;
       padding: 2rem 2.5rem;
-      border: 1px solid #3d3020;
-      box-shadow: 0 0 0 4px #0e0c09, 0 0 0 5px #3d3020;
+      border: 1px solid var(--game-border-default);
+      box-shadow: 0 0 0 4px var(--game-bg-base), 0 0 0 5px var(--game-border-default);
       width: 90%;
       max-width: 560px;
       box-sizing: border-box;
@@ -64,7 +64,7 @@ export class CharacterCreation extends LitElement {
     h2 {
       margin: 0;
       font-size: 1rem;
-      color: #d4a820;
+      color: var(--game-text-accent);
       letter-spacing: 0.25em;
       text-transform: uppercase;
       text-align: center;
@@ -73,7 +73,7 @@ export class CharacterCreation extends LitElement {
     .divider {
       width: 100%;
       height: 1px;
-      background: linear-gradient(to right, transparent, #3d3020 20%, #3d3020 80%, transparent);
+      background: linear-gradient(to right, transparent, var(--game-border-default) 20%, var(--game-border-default) 80%, transparent);
     }
 
     /* ── Name ─────────────────────────────────────────── */
@@ -85,15 +85,15 @@ export class CharacterCreation extends LitElement {
 
     label {
       font-size: 0.72rem;
-      color: #6b5830;
+      color: var(--game-text-muted);
       letter-spacing: 0.15em;
       text-transform: uppercase;
     }
 
     input[type='text'] {
-      background: #0e0c09;
-      border: 1px solid #5a4a2a;
-      color: #c8b78e;
+      background: var(--game-bg-base);
+      border: 1px solid var(--game-border-strong);
+      color: var(--game-text-body);
       font-family: inherit;
       font-size: 1rem;
       padding: 0.4rem 0.6rem;
@@ -103,7 +103,7 @@ export class CharacterCreation extends LitElement {
     }
 
     input[type='text']:focus {
-      border-color: #d4a820;
+      border-color: var(--game-text-accent);
     }
 
     /* ── Gender ───────────────────────────────────────── */
@@ -116,8 +116,8 @@ export class CharacterCreation extends LitElement {
       flex: 1;
       padding: 0.4rem;
       background: transparent;
-      border: 1px solid #3d3020;
-      color: #6b5830;
+      border: 1px solid var(--game-border-default);
+      color: var(--game-text-muted);
       font-family: inherit;
       font-size: 0.82rem;
       letter-spacing: 0.1em;
@@ -127,14 +127,14 @@ export class CharacterCreation extends LitElement {
     }
 
     .gender-btn:hover {
-      border-color: #5a4a2a;
-      color: #c8b78e;
+      border-color: var(--game-border-strong);
+      color: var(--game-text-body);
     }
 
     .gender-btn.selected {
-      background: #3d3020;
-      border-color: #8b6914;
-      color: #f0e0a8;
+      background: var(--game-bg-raised);
+      border-color: var(--game-border-accent);
+      color: var(--game-text-bright);
     }
 
     /* ── Difficulty ───────────────────────────────────── */
@@ -147,8 +147,8 @@ export class CharacterCreation extends LitElement {
       flex: 1;
       padding: 0.4rem 0.25rem;
       background: transparent;
-      border: 1px solid #3d3020;
-      color: #6b5830;
+      border: 1px solid var(--game-border-default);
+      color: var(--game-text-muted);
       font-family: inherit;
       font-size: 0.82rem;
       letter-spacing: 0.1em;
@@ -158,19 +158,19 @@ export class CharacterCreation extends LitElement {
     }
 
     .difficulty-btn:hover {
-      border-color: #5a4a2a;
-      color: #c8b78e;
+      border-color: var(--game-border-strong);
+      color: var(--game-text-body);
     }
 
     .difficulty-btn.selected {
-      background: #3d3020;
-      border-color: #8b6914;
-      color: #f0e0a8;
+      background: var(--game-bg-raised);
+      border-color: var(--game-border-accent);
+      color: var(--game-text-bright);
     }
 
     .difficulty-hint {
       font-size: 0.68rem;
-      color: #6b5830;
+      color: var(--game-text-muted);
       font-style: italic;
       margin-top: 0.2rem;
     }
@@ -184,7 +184,7 @@ export class CharacterCreation extends LitElement {
 
     .panel-label {
       font-size: 0.72rem;
-      color: #6b5830;
+      color: var(--game-text-muted);
       letter-spacing: 0.15em;
       text-transform: uppercase;
     }
@@ -196,11 +196,11 @@ export class CharacterCreation extends LitElement {
 
     .pool-value {
       font-size: 1rem;
-      color: #f0e0a8;
+      color: var(--game-text-bright);
     }
 
-    .pool-value.low { color: #c07030; }
-    .pool-value.empty { color: #a04040; }
+    .pool-value.low { color: var(--game-status-warning); }
+    .pool-value.empty { color: var(--game-status-danger); }
 
     /* ── Stat rows ────────────────────────────────────── */
     .stat-list {
@@ -219,7 +219,7 @@ export class CharacterCreation extends LitElement {
 
     .stat-name {
       font-size: 0.85rem;
-      color: #c8b78e;
+      color: var(--game-text-body);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -230,8 +230,8 @@ export class CharacterCreation extends LitElement {
       width: 100%;
       padding: 0.15rem 0;
       background: transparent;
-      border: 1px solid #3d3020;
-      color: #6b5830;
+      border: 1px solid var(--game-border-default);
+      color: var(--game-text-muted);
       font-family: inherit;
       font-size: 0.75rem;
       cursor: pointer;
@@ -241,9 +241,9 @@ export class CharacterCreation extends LitElement {
     }
 
     .adj-btn:hover:not(:disabled) {
-      background: #3d3020;
-      color: #c8b78e;
-      border-color: #5a4a2a;
+      background: var(--game-bg-raised);
+      color: var(--game-text-body);
+      border-color: var(--game-border-strong);
     }
 
     .adj-btn:disabled {
@@ -253,15 +253,15 @@ export class CharacterCreation extends LitElement {
 
     .stat-value {
       font-size: 0.95rem;
-      color: #f0e0a8;
+      color: var(--game-text-bright);
       text-align: center;
       font-variant-numeric: tabular-nums;
     }
 
     .stat-bar-track {
       height: 6px;
-      background: #1a1610;
-      border: 1px solid #2a2010;
+      background: var(--game-bg-surface);
+      border: 1px solid var(--game-border-subtle);
       position: relative;
       overflow: hidden;
     }
@@ -274,10 +274,10 @@ export class CharacterCreation extends LitElement {
       transition: width 0.1s;
     }
 
-    .stat-bar-fill.high   { background: #4a8a4a; }
-    .stat-bar-fill.mid    { background: #7a7030; }
-    .stat-bar-fill.low    { background: #7a4020; }
-    .stat-bar-fill.min    { background: #5a2020; }
+    .stat-bar-fill.high   { background: var(--game-bar-stat-high); }
+    .stat-bar-fill.mid    { background: var(--game-bar-stat-mid); }
+    .stat-bar-fill.low    { background: var(--game-bar-health-low); }
+    .stat-bar-fill.min    { background: var(--game-bar-health-crit); }
 
     /* ── Derived ──────────────────────────────────────── */
     .derived-panel {
@@ -285,8 +285,8 @@ export class CharacterCreation extends LitElement {
       grid-template-columns: repeat(5, 1fr);
       gap: 0.4rem 0.5rem;
       padding: 0.6rem 0.75rem;
-      border: 1px solid #1f1c15;
-      background: #0a0906;
+      border: 1px solid var(--game-border-subtle);
+      background: var(--game-bg-deep);
     }
 
     .derived-item {
@@ -297,20 +297,20 @@ export class CharacterCreation extends LitElement {
 
     .derived-label {
       font-size: 0.68rem;
-      color: #6b5830;
+      color: var(--game-text-muted);
       letter-spacing: 0.1em;
       text-transform: uppercase;
     }
 
     .derived-value {
       font-size: 1rem;
-      color: #c8b78e;
+      color: var(--game-text-body);
     }
 
     /* ── Spell selection (phase 2) ────────────────────── */
     .spell-intro {
       font-size: 0.82rem;
-      color: #c8b78e;
+      color: var(--game-text-body);
       line-height: 1.6;
     }
 
@@ -322,7 +322,7 @@ export class CharacterCreation extends LitElement {
 
     .spell-card {
       padding: 0.65rem 0.85rem;
-      border: 1px solid #3d3020;
+      border: 1px solid var(--game-border-default);
       background: transparent;
       cursor: pointer;
       text-align: left;
@@ -334,38 +334,38 @@ export class CharacterCreation extends LitElement {
     }
 
     .spell-card:hover {
-      background: #1a1610;
-      border-color: #5a4a2a;
+      background: var(--game-bg-surface);
+      border-color: var(--game-border-strong);
     }
 
     .spell-card.selected {
-      background: #2a1e08;
-      border-color: #d4a820;
+      background: var(--game-bg-elevated);
+      border-color: var(--game-text-accent);
     }
 
     .spell-card-name {
       font-size: 0.9rem;
-      color: #f0e0a8;
+      color: var(--game-text-bright);
       font-weight: bold;
     }
 
     .spell-card-school {
       font-size: 0.65rem;
-      color: #6b5830;
+      color: var(--game-text-muted);
       letter-spacing: 0.1em;
       text-transform: uppercase;
     }
 
     .spell-card-desc {
       font-size: 0.72rem;
-      color: #a09070;
+      color: var(--game-text-tertiary);
       line-height: 1.4;
       margin-top: 0.15rem;
     }
 
     .spell-card-cost {
       font-size: 0.68rem;
-      color: #204870;
+      color: var(--game-bar-mana);
       margin-top: 0.1rem;
     }
 
@@ -379,8 +379,8 @@ export class CharacterCreation extends LitElement {
       flex: 1;
       padding: 0.55rem 1rem;
       background: transparent;
-      border: 1px solid #5a4a2a;
-      color: #c8b78e;
+      border: 1px solid var(--game-border-strong);
+      color: var(--game-text-body);
       font-family: inherit;
       font-size: 0.85rem;
       letter-spacing: 0.12em;
@@ -390,22 +390,22 @@ export class CharacterCreation extends LitElement {
     }
 
     .action-btn:hover:not(:disabled) {
-      background: #5a4a2a;
-      color: #f0e0a8;
-      border-color: #8b6914;
+      background: var(--game-border-strong);
+      color: var(--game-text-bright);
+      border-color: var(--game-border-accent);
     }
 
     .action-btn.secondary {
-      border-color: #3d3020;
-      color: #6b5830;
+      border-color: var(--game-border-default);
+      color: var(--game-text-muted);
     }
 
     .action-btn.secondary:hover {
-      background: #3d3020;
-      color: #c8b78e;
+      background: var(--game-bg-raised);
+      color: var(--game-text-body);
     }
 
-    .action-btn.primary { border-color: #8b6914; }
+    .action-btn.primary { border-color: var(--game-border-accent); }
 
     .action-btn:disabled {
       opacity: 0.35;
@@ -414,7 +414,7 @@ export class CharacterCreation extends LitElement {
 
     .validation-msg {
       font-size: 0.75rem;
-      color: #a04040;
+      color: var(--game-status-danger);
       text-align: center;
       margin: 0;
     }

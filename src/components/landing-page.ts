@@ -19,7 +19,7 @@ export class LandingPage extends LitElement {
       justify-content: center;
       width: 100%;
       height: 100%;
-      background: #0e0c09;
+      background: var(--game-bg-base);
     }
 
     .shell {
@@ -28,10 +28,10 @@ export class LandingPage extends LitElement {
       align-items: center;
       gap: 2.5rem;
       padding: 3rem 4rem;
-      border: 1px solid #3d3020;
+      border: 1px solid var(--game-border-default);
       box-shadow:
-        0 0 0 4px #0e0c09,
-        0 0 0 5px #3d3020,
+        0 0 0 4px var(--game-bg-base),
+        0 0 0 5px var(--game-border-default),
         inset 0 0 40px rgba(0, 0, 0, 0.6);
       max-width: 480px;
       width: 90%;
@@ -47,24 +47,24 @@ export class LandingPage extends LitElement {
     .rune-bar {
       font-size: 1rem;
       letter-spacing: 0.5em;
-      color: #5a4510;
+      color: var(--game-text-muted);
       user-select: none;
     }
 
     h1 {
       margin: 0;
       font-size: clamp(1.8rem, 5vw, 2.8rem);
-      color: #d4a820;
+      color: var(--game-text-accent);
       text-shadow:
-        0 0 10px rgba(212, 168, 32, 0.6),
-        0 0 30px rgba(212, 168, 32, 0.2);
+        0 0 10px var(--game-glow-strong),
+        0 0 30px var(--game-glow-subtle);
       letter-spacing: 0.25em;
       text-align: center;
     }
 
     .subtitle {
       font-size: 0.8rem;
-      color: #6b5830;
+      color: var(--game-text-muted);
       letter-spacing: 0.15em;
       font-style: italic;
     }
@@ -72,7 +72,7 @@ export class LandingPage extends LitElement {
     .divider {
       width: 100%;
       height: 1px;
-      background: linear-gradient(to right, transparent, #3d3020 20%, #3d3020 80%, transparent);
+      background: linear-gradient(to right, transparent, var(--game-border-default) 20%, var(--game-border-default) 80%, transparent);
     }
 
     .menu {
@@ -87,8 +87,8 @@ export class LandingPage extends LitElement {
       width: 100%;
       padding: 0.65rem 1rem;
       background: transparent;
-      border: 1px solid #5a4a2a;
-      color: #c8b78e;
+      border: 1px solid var(--game-border-strong);
+      color: var(--game-text-body);
       font-family: inherit;
       font-size: 0.95rem;
       letter-spacing: 0.12em;
@@ -98,28 +98,28 @@ export class LandingPage extends LitElement {
     }
 
     button:hover {
-      background: #5a4a2a;
-      color: #f0e0a8;
-      border-color: #8b6914;
+      background: var(--game-border-strong);
+      color: var(--game-text-bright);
+      border-color: var(--game-border-accent);
     }
 
     button:active {
-      background: #3d3020;
+      background: var(--game-bg-raised);
     }
 
     button.secondary {
-      border-color: #3d3020;
-      color: #6b5830;
+      border-color: var(--game-border-default);
+      color: var(--game-text-muted);
     }
 
     button.secondary:hover {
-      background: #3d3020;
-      color: #c8b78e;
-      border-color: #5a4a2a;
+      background: var(--game-bg-raised);
+      color: var(--game-text-body);
+      border-color: var(--game-border-strong);
     }
 
     .error-msg {
-      color: #a04040;
+      color: var(--game-status-danger);
       font-size: 0.8rem;
       text-align: center;
     }
