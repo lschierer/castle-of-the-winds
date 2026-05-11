@@ -218,7 +218,9 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   if (!firstRoom) throw new Error('rot.js produced no rooms');
   const stairsUp = roomCenter(firstRoom);
 
-  const canAscend = !(stage === 'mine' && dungeonLevel < MINE_UPSTAIRS_FROM_FLOOR);
+  // Floor 1 always gets a stairs-up (it's the mine entrance back to the surface).
+  // Floors 2–(MINE_UPSTAIRS_FROM_FLOOR-1) are one-way: no ascent until the deeper threshold.
+  const canAscend = !(stage === 'mine' && dungeonLevel > 1 && dungeonLevel < MINE_UPSTAIRS_FROM_FLOOR);
   if (canAscend) {
     setTile(grid, stairsUp.x, stairsUp.y, { terrain: 'floor', walkable: true, feature: 'stairs-up', items: [] });
   }
