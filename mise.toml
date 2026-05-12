@@ -1,8 +1,8 @@
 [tools]
 jq = "latest"
-node = "24.14.1"
-pnpm = "latest"
-rust = "1.91.1"
+node = "24"
+pnpm = "11"
+rust = "1.91"
 watchexec = "latest"
 yq = "latest"
 
