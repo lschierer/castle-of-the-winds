@@ -6,6 +6,10 @@ rust = "1.91"
 watchexec = "latest"
 yq = "latest"
 
+[tasks.web]
+run = "pnpm dev"
+description = "Start Greenwood dev server (web-only, no native window)"
+
 [tasks.dev]
 run = "pnpm tauri dev"
 description = "Start Tauri development (Vite dev server + native window)"

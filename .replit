@@ -1,0 +1,7 @@
+# .replit
+run = "mise install && mise run web"
+
+[bash]
+# This automatically activates mise for the interactive shell
+startup = "eval \"$(mise activate bash)\""
+
