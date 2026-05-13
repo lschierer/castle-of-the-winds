@@ -11,7 +11,7 @@
 import type { Item, ItemKind } from './items.ts';
 import { identifyItem, displayName } from './items.ts';
 import type { Character, ShopReputation } from './character.ts';
-import { ALL_EQUIPMENT_SPECS, type EquipmentSpec, specForItem, makeEquipmentItem } from './equipment.ts';
+import { ALL_EQUIPMENT_SPECS, type EquipmentSpec, specForItem, makeEquipmentItem, pickEquipmentIcon } from './equipment.ts';
 import { makeWeapon, randomWeaponName, addCoins, removeCoins, coinsIn, addToContainer, makePack, makeBelt, COIN_VALUE_CP } from './items.ts';
 import { townStockLevel, type TownTier } from './progression.ts';
 
@@ -467,7 +467,7 @@ function makeStockItem(kind: ItemKind, stockLevel: number): Item {
     const spec = pick(catalog);
     const item = makeEquipmentItem(spec.kind, stockLevel);
     item.name = spec.name;
-    if (spec.icon !== undefined) item.icon = spec.icon;
+    item.icon = pickEquipmentIcon(spec, 0, false);
     item.weight = spec.weight;
     item.bulk = spec.bulk;
     item.identified = true;
