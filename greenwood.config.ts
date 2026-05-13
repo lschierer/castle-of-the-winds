@@ -97,7 +97,7 @@ const loglevelEsmShim = {
 export default {
   port: 8080,
   devServer: {
-    port: 5000,
+    port: 1984,
   },
   useTsc: true,
   plugins: [binaryMapsJson, loglevelEsmShim],
