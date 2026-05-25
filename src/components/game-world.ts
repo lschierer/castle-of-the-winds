@@ -1797,13 +1797,13 @@ export class GameWorld extends LitElement {
         let color: string;
         if (x === pos.x && y === pos.y) {
           color = '#ff0';
-        } else if (!tile.explored) {
+        } else if (!tile.explored && tile.feature !== 'secret-door') {
           color = '#000';
         } else if (tile.feature === 'stairs-up') {
           color = '#0f0';
         } else if (tile.feature === 'stairs-down') {
           color = '#f00';
-        } else if (tile.feature === 'door') {
+        } else if (tile.feature === 'door' || tile.feature === 'secret-door') {
           color = '#a86';
         } else if (tile.feature === 'wall') {
           color = '#555';
