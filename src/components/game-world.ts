@@ -973,28 +973,44 @@ export class GameWorld extends LitElement {
   }
 
   private async manualLoad(): Promise<void> {
-    if (!('showOpenFilePicker' in window)) {
-      this.pushMessage('Load not supported in this browser.');
-      return;
-    }
-    try {
-      const handles = await (window as unknown as { showOpenFilePicker: (opts: unknown) => Promise<FileSystemFileHandle[]> }).showOpenFilePicker({
-        types: [{ description: 'Save File', accept: { 'application/json': ['.json'], 'application/x-yaml': ['.yaml', '.yml'] } }],
-      });
-      const handle = handles[0];
-      if (!handle) return;
-      const file = await handle.getFile();
-      const text = await file.text();
-      const state = JSON.parse(text) as GameState;
-      if (!state.character) { this.pushMessage('Invalid save file.'); return; }
-      saveGameState(state);
-      this.saveFileHandle = handle;
-      // Reload the page to reinitialize from the new state
-      window.location.reload();
-    } catch (e) {
-      if ((e as Error).name !== 'AbortError') {
-        this.pushMessage('Load failed.');
+    if ('showOpenFilePicker' in window) {
+      try {
+        const handles = await (window as unknown as { showOpenFilePicker: (opts: unknown) => Promise<FileSystemFileHandle[]> }).showOpenFilePicker({
+          types: [{ description: 'Save File', accept: { 'application/json': ['.json'], 'application/x-yaml': ['.yaml', '.yml'] } }],
+        });
+        const handle = handles[0];
+        if (!handle) return;
+        const file = await handle.getFile();
+        const text = await file.text();
+        const state = JSON.parse(text) as GameState;
+        if (!state.character) { this.pushMessage('Invalid save file.'); return; }
+        saveGameState(state);
+        this.saveFileHandle = handle;
+        window.location.reload();
+      } catch (e) {
+        if ((e as Error).name !== 'AbortError') {
+          this.pushMessage('Load failed.');
+        }
       }
+    } else {
+      // Fallback: use a hidden file input (works in Tauri webview and all browsers)
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,.yaml,.yml';
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const state = JSON.parse(text) as GameState;
+          if (!state.character) { this.pushMessage('Invalid save file.'); return; }
+          saveGameState(state);
+          window.location.reload();
+        } catch {
+          this.pushMessage('Load failed.');
+        }
+      };
+      input.click();
     }
   }
 
