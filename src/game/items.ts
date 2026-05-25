@@ -593,6 +593,69 @@ export function makeLootWeapon(dungeonLevel: number): Item {
   return makeWeapon(randomWeaponName(maxTier), undefined, dungeonLevel);
 }
 
+// ── Scrolls & Potions ─────────────────────────────────────────────────────────
+
+export function makeScroll(spellId: string, spellName: string): Item {
+  return {
+    id: uid(),
+    kind: 'scroll',
+    name: `Scroll of ${spellName}`,
+    weight: 50,
+    bulk: 1,
+    quantity: 1,
+    identified: false,
+    cursed: false,
+    broken: false,
+    enchantment: 0,
+    icon: '/assets/sprites/icons/Items/icon_141.png',
+    charges: 1,
+  };
+}
+
+/** Potion spell IDs that map to learnable healing/buff spells. */
+const POTION_SPELL_NAMES: Record<string, string> = {
+  heal_minor_wounds: 'Potion of Minor Healing',
+  heal_medium_wounds: 'Potion of Medium Healing',
+  heal_major_wounds: 'Potion of Major Healing',
+  healing: 'Potion of Full Healing',
+  neutralize_poison: 'Potion of Neutralize Poison',
+  phase_door: 'Potion of Phase Door',
+  shield: 'Potion of Shielding',
+  resist_fire: 'Potion of Resist Fire',
+  resist_cold: 'Potion of Resist Cold',
+  resist_lightning: 'Potion of Resist Lightning',
+};
+
+/** Permanent stat potions (unlearnable, extremely rare). */
+export const STAT_POTIONS = [
+  'Potion of Increase Strength',
+  'Potion of Increase Intelligence',
+  'Potion of Increase Constitution',
+  'Potion of Increase Dexterity',
+] as const;
+
+export function makePotion(name: string): Item {
+  return {
+    id: uid(),
+    kind: 'potion',
+    name,
+    weight: 200,
+    bulk: 1,
+    quantity: 1,
+    identified: false,
+    cursed: false,
+    broken: false,
+    enchantment: 0,
+    icon: '/assets/sprites/icons/Items/icon_145.png',
+  };
+}
+
+export function makePotionForSpell(spellId: string): Item | null {
+  const name = POTION_SPELL_NAMES[spellId];
+  if (!name) return null;
+  return makePotion(name);
+}
+
 // ── Starting loadout ──────────────────────────────────────────────────────────
 
 /**

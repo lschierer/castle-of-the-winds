@@ -23,8 +23,9 @@
  */
 
 import type { Item, ItemKind } from './items.ts';
-import { makeCoinStack, makeLootWeapon, makePack } from './items.ts';
+import { makeCoinStack, makeLootWeapon, makePack, makeScroll, makePotion, makePotionForSpell, STAT_POTIONS } from './items.ts';
 import { makeEquipmentItem } from './equipment.ts';
+import { SPELLS } from './spells.ts';
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -35,8 +36,8 @@ function roll(): number { return Math.random(); }
  * Weighted toward armor/weapons at low levels; broader variety at depth.
  */
 const EQUIP_KINDS_BY_LEVEL: Array<{ maxLevel: number; pool: ItemKind[] }> = [
-  { maxLevel:  4, pool: ['armor', 'armor', 'weapon', 'shield', 'helm'] },
-  { maxLevel:  8, pool: ['armor', 'weapon', 'shield', 'helm', 'gauntlets', 'boots'] },
+  { maxLevel:  4, pool: ['armor', 'armor', 'weapon', 'shield', 'helm', 'cloak'] },
+  { maxLevel:  8, pool: ['armor', 'weapon', 'shield', 'helm', 'gauntlets', 'boots', 'cloak'] },
   { maxLevel: 14, pool: ['armor', 'weapon', 'shield', 'helm', 'gauntlets', 'bracers', 'boots', 'cloak'] },
   { maxLevel: 99, pool: ['armor', 'weapon', 'shield', 'helm', 'gauntlets', 'bracers', 'boots', 'cloak'] },
 ];
@@ -95,6 +96,47 @@ function tryMagicPack(level: number): Item | null {
   return null;
 }
 
+// ── Scroll & Potion generation ────────────────────────────────────────────────
+
+/** Generate a random scroll appropriate for the dungeon level. */
+function randomScroll(level: number): Item {
+  const r = roll();
+  // Rare chance of unlearnable map scrolls
+  if (r < 0.03) return makeScroll('map_level', 'Map Level');
+  if (r < 0.10) return makeScroll('map_quadrant', 'Map Quadrant');
+  // Pick a learnable spell with level <= floor-appropriate character level
+  const maxSpellLevel = Math.min(5, Math.ceil(level / 3));
+  const eligible = SPELLS.filter((s) => s.level > 0 && s.level <= maxSpellLevel);
+  const spell = eligible[Math.floor(roll() * eligible.length)];
+  if (!spell) return makeScroll('magic_arrow', 'Magic Arrow');
+  return makeScroll(spell.id, spell.name);
+}
+
+/** Generate a random potion appropriate for the dungeon level. */
+function randomPotion(level: number): Item {
+  const r = roll();
+  // ~25% chance of useless water
+  if (r < 0.25) return makePotion('Distillation of Water');
+  // Extremely rare stat potions (rarer at shallow depths)
+  const statChance = level <= 8 ? 0.005 : level <= 19 ? 0.015 : 0.03;
+  if (roll() < statChance) {
+    const stat = STAT_POTIONS[Math.floor(roll() * STAT_POTIONS.length)]!;
+    return makePotion(stat);
+  }
+  // Spell-based potions scaled to depth
+  const maxSpellLevel = Math.min(5, Math.ceil(level / 3));
+  const potionSpells = SPELLS.filter((s) =>
+    s.level > 0 && s.level <= maxSpellLevel && (
+      s.school === 'defense' || s.id === 'phase_door' || s.id === 'shield'
+    ));
+  const spell = potionSpells[Math.floor(roll() * potionSpells.length)];
+  if (spell) {
+    const potion = makePotionForSpell(spell.id);
+    if (potion) return potion;
+  }
+  return makePotion('Potion of Minor Healing');
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export interface FloorLootOptions {
@@ -127,31 +169,33 @@ export function generateTileLoot(opts: FloorLootOptions): Item[] {
 
   const items: Item[] = [];
 
-  // One roll for the main item type
+  // Coin probability: common in mine (15%), rare in fortress (5%), very rare in castle (2%)
+  const coinChance = level <= 8 ? 0.15 : level <= 19 ? 0.05 : 0.02;
   const r = roll();
 
-  if (r < 0.35) {
+  if (r < 0.25) {
     // Weapon
     items.push(makeLootWeapon(level));
-  } else if (r < 0.60) {
-    // Equipment piece (armor, shield, helm, etc.)
+  } else if (r < 0.45) {
+    // Equipment piece (armor, shield, helm, cloak, etc.)
     const kind = randomEquipKind(level);
     if (kind === 'weapon') {
       items.push(makeLootWeapon(level));
     } else {
       items.push(makeEquipmentItem(kind, level));
     }
-  } else if (r < 0.80) {
-    // Coin pile (dropped by a slain adventurer or monster)
+  } else if (r < 0.45 + coinChance) {
+    // Coin pile
     const kind = coinKindForLevel(level);
     items.push(makeCoinStack(kind, coinAmount(level)));
+  } else if (r < 0.75) {
+    // Scroll
+    items.push(randomScroll(level));
   } else if (r < 0.90) {
-    // Coin pile + small item (adventurer's pack contents)
-    const kind = coinKindForLevel(level);
-    items.push(makeCoinStack(kind, coinAmount(level)));
-    items.push(makeLootWeapon(level));
+    // Potion
+    items.push(randomPotion(level));
   }
-  // else: empty tile (most calls)
+  // else: empty tile
 
   // Independent low-probability roll for a magical pack
   const magicPack = tryMagicPack(level);
