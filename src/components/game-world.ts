@@ -1539,7 +1539,10 @@ export class GameWorld extends LitElement {
     const totalCarryWeightGrams = carriedSlots.reduce(
       (sum, slot) => sum + (slot ? reportedUnitWeight(slot) : 0), 0,
     );
-    const result = playerMeleeAttack(c, c.weapon, spec, this.playerStatus, totalCarryWeightGrams);
+    const result = playerMeleeAttack(c, c.weapon, spec, this.playerStatus, {
+      dungeonLevel: this.currentDungeonLevel,
+      equipmentAC: this.playerAC,
+    }, totalCarryWeightGrams);
     this.pushMessage(result.message);
 
     if (!result.dodged && result.damage > 0) {
@@ -1580,6 +1583,11 @@ export class GameWorld extends LitElement {
     let updatedChar = { ...c };
     let updatedStatus = { ...this.playerStatus };
     let charChanged = false;
+    // Per-turn swarm counter: increments by 10 each time a monster attempts
+    // a melee attack this turn.  Resets here at the start of the player's
+    // monster phase.  Mirrors `DAT_0x4D28` in the EXE
+    // (REPORT_PHASE10_COMBAT.md §3).
+    let swarmCounter = 0;
 
     for (let i = 0; i < updatedMonsters.length; i++) {
       const m = updatedMonsters[i];
@@ -1617,7 +1625,12 @@ export class GameWorld extends LitElement {
 
       // Adjacent to player → attack
       if (dist === 1 || (Math.abs(dx0) <= 1 && Math.abs(dy0) <= 1 && dist <= 2)) {
-        const result = monsterMeleeAttack(spec, 0, updatedChar, this.playerAC, updatedStatus);
+        const result = monsterMeleeAttack(spec, 0, updatedChar, updatedStatus, {
+          dungeonLevel: this.currentDungeonLevel,
+          equipmentAC: this.playerAC,
+          swarmCounter,
+        });
+        swarmCounter += 10;
         const dir = monsterDirectionLabel(dx0, dy0);
         const keyHint = diagonalKeyHint(dx0, dy0);
         const dirSuffix = dir

@@ -1,17 +1,32 @@
 /**
  * Combat resolution — melee and spell attacks.
  *
- * AC model (both player and monster):
- *   AC is a percentage (0–100) that scales down incoming damage:
- *     netDamage = max(1, round(rawDamage × (1 − AC/100)))
- *   Equipment AC 0–54 means 0–54% damage reduction.
- *   Monster AC 0–80 works the same way (lightly armoured = 0–10%,
- *   heavily armoured = 60–80%, requiring spells to kill efficiently).
+ * Formulas ported from the 1993 binary; see docs/re-findings/REPORT_PHASE10_COMBAT.md
+ * and docs/re-findings/REPORT_PHASE11_PLAYER_COMBAT.md.
  *
- *   Player melee rawDamage = 1 + rand(0..WC×3−1) + STR mod + enchantment
- *   Monster melee rawDamage = 1 + rand(0..attack−1) + enchantment
+ * Key shape (asymmetric by design in the original):
  *
- *   Spell damage bypasses AC entirely (affinities apply instead).
+ *   monster-to-hit (squared, d100):
+ *     T = 10 * monster.offensiveAC + swarmCounter - playerSpeed + 265
+ *     threshold = max(1, T*T / 1000 + (dungeonLevel - 1) * GAME_DH_A4)
+ *     hit if rand(100) < threshold
+ *
+ *   player-to-hit (linear, d100):
+ *     T = (player.level - monster.defensiveAC + 9) * 5
+ *         + playerSpeed
+ *         + slayAffixToHit
+ *         + (1 - dungeonLevel) * GAME_DH_A6
+ *     hit if rand(100) < max(1, T)
+ *
+ *   damage roll (both sides, NdM):
+ *     damage = N + sum-of-N rand(0..M-1) + flat_bonuses
+ *
+ *   AC does NOT reduce damage after a hit. Phase 11 hypothesis: equipment AC
+ *   maps to a movement-speed bonus, which both formulas consume.
+ *
+ *   Spell damage bypasses AC entirely; resists are right-shifts on damage
+ *   (1 resist stack = halve), vulnerability is left-shift (1 vuln stack = double)
+ *   or ×4/3 for the spell-class resist mask.
  */
 
 import type { Character } from './character.ts';
@@ -86,18 +101,24 @@ export interface CombatResult {
 /** Flat damage bonus per point of Strength above 50. */
 const STR_BONUS_SCALE = 0.2;
 
-/** Dodge probability: base + dodge_rating * scale. */
-const DODGE_BASE = 0.05;
-const DODGE_SCALE = 0.005;
+/**
+ * Difficulty / depth-scaling constants. EXE values at autodata 0x00A4..0x00B0.
+ * All zero in the default save state ("Practice" mode); harder difficulties
+ * presumably write non-zero values during character creation.
+ * See REPORT_PHASE11_PLAYER_COMBAT.md §6.
+ */
+const GAME_DH_A4 = 0; // monster to-hit per-level bonus (squared-T addend)
+const GAME_DH_A6 = 0; // player to-hit per-level penalty (linear-T addend)
 
-/** AC reduces damage 1:1 but cannot make damage go below 1 on a successful hit. */
-// (handled inline)
-
-/** Bonus/penalty multiplier for elemental affinities. */
+/**
+ * Elemental affinity multiplier on spell damage.
+ * Phase 10 §1.4: spell resist halves; vulnerability multiplies by 4/3
+ * (from EXE's `(damage << 2) / 3`).
+ */
 const AFFINITY_MOD: Record<'immune' | 'resist' | 'vulnerable', number> = {
   immune: 0,
   resist: 0.5,
-  vulnerable: 2.0,
+  vulnerable: 4 / 3,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -117,14 +138,6 @@ function strDamageBonus(str: number): number {
 }
 
 /**
- * Dexterity hit chance modifier.
- * Returns a fraction of the base dodge roll that dex removes.
- */
-function dexHitBonus(dex: number): number {
-  return Math.floor((dex - 50) * 0.3);
-}
-
-/**
  * Carrying weight penalty to effective Strength.
  * Every 1000 g over (STR×30) reduces effective STR by 1.
  */
@@ -140,11 +153,90 @@ function elementalMultiplier(monster: MonsterSpec, element: ElementType): number
   return AFFINITY_MOD[aff.mod];
 }
 
+/**
+ * Approximate the EXE's "offensive AC" field (record offset +0, range 1-6)
+ * from the reimpl's abstract `monster.attack` value (range 1-25).
+ * Used in monster-to-hit as `10 * offensiveAC`.
+ * Replace with extracted per-monster value when the EXE attack-entry table is decoded.
+ */
+function offensiveAC(attack: number): number {
+  return Math.max(1, Math.min(6, Math.ceil(attack / 4)));
+}
 
-/** True if the attack is dodged given the defender's dodge rating. */
-function isDodged(dodgeRating: number, hitBonus = 0): boolean {
-  const chance = Math.min(0.75, DODGE_BASE + dodgeRating * DODGE_SCALE - hitBonus * 0.01);
-  return rand() < chance;
+/**
+ * Approximate the EXE's "defensive AC" field (record offset +2, range 2-12)
+ * from the reimpl's `monster.dodge` value (range ~5-20).
+ * Used in player-to-hit as `(level - defensiveAC + 9) * 5`.
+ */
+function defensiveAC(dodge: number): number {
+  return Math.max(2, Math.min(12, Math.ceil(dodge / 2)));
+}
+
+/**
+ * Approximate (N, M) dice from a reimpl monster's abstract `attack` value.
+ * EXE stores per-attack (N, M) explicitly in 4-byte attack entries; until
+ * that data is extracted from the binary, this mapping keeps damage means
+ * roughly aligned with the old 1d(attack) formula while adding NdM variance
+ * that the original game uses.  See REPORT_PHASE10_COMBAT.md §7.
+ */
+function attackToNdM(attack: number): { n: number; m: number } {
+  if (attack <= 3) return { n: 1, m: Math.max(1, attack) };
+  if (attack <= 6) return { n: 2, m: Math.max(1, Math.floor(attack / 2)) };
+  if (attack <= 9) return { n: 2, m: Math.max(1, Math.ceil(attack / 2)) };
+  return { n: 3, m: Math.max(1, Math.ceil(attack / 3)) };
+}
+
+/**
+ * Weapon dice (N, M, base) approximation from a weapon class.
+ * EXE values come from DAT_0x0090 (M), 0x0092 (N), 0x0094 (base) — set by
+ * the equip code path which we haven't traced yet.  For now we keep the
+ * old reimpl formula's mean and range (`1d(wc*3)`) but shape it as `1 + N`
+ * dice of M sides so the NdM apply path works uniformly.
+ */
+function weaponDice(weaponClass: number): { n: number; m: number; base: number } {
+  const wc = Math.max(0, weaponClass);
+  if (wc === 0) return { n: 1, m: 2, base: 0 }; // unarmed / broken weapon
+  return { n: 1, m: wc * 3, base: 0 };
+}
+
+/**
+ * Roll NdM: damage = N + sum-of-N rand(0..M-1).
+ * Matches the EXE's apply-damage loop in FUN_1090_224c and FUN_1040_140c.
+ * Range [N, N*M], mean N*(M+1)/2.
+ */
+function rollNdM(n: number, m: number): number {
+  if (n <= 0 || m <= 0) return Math.max(0, n);
+  let damage = n;
+  for (let i = 0; i < n; i++) damage += Math.floor(rand() * m);
+  return damage;
+}
+
+// ── Combat context (per-call) ─────────────────────────────────────────────────
+
+/**
+ * Per-attack context passed by the caller.  Encapsulates the bits of game
+ * state the EXE's combat formulas need (depth multiplier, equipment-AC-as-speed,
+ * and the per-turn swarm counter).
+ */
+export interface CombatContext {
+  /** Current dungeon depth.  Used in difficulty-scaling terms in both to-hit
+   * formulas.  Maps to `DAT_0x4C60` in the EXE.  Surface / village = 0 or 1. */
+  dungeonLevel: number;
+  /**
+   * Sum of equipment AC values across worn slots.  Phase 11 hypothesis: in the
+   * EXE this maps to a movement-speed bonus that feeds both to-hit formulas
+   * (boost for player offense, penalty for monster offense).  AC does NOT
+   * reduce damage after a hit — that was an invented model in the old reimpl.
+   * See REPORT_PHASE11_PLAYER_COMBAT.md §5.
+   */
+  equipmentAC: number;
+  /**
+   * Per-turn swarm counter: increments by 10 each time a monster attempts a
+   * melee attack within the current player turn.  Resets to 0 when the player
+   * takes a new action.  Used additively in monster-to-hit (mobbing penalty).
+   * Maps to `-DAT_0x4D28` in the EXE.  See REPORT_PHASE10_COMBAT.md §3.
+   */
+  swarmCounter?: number;
 }
 
 // ── Player melee attack on a monster ─────────────────────────────────────────
@@ -152,58 +244,75 @@ function isDodged(dodgeRating: number, hitBonus = 0): boolean {
 /**
  * Resolve the player's melee attack against a monster.
  *
- * @param char     Full character state (stats, weapon, etc.).
- * @param weapon   The equipped weapon item (or null for unarmed).
- * @param monster  The MonsterSpec being attacked.
- * @param status   Current player status effects.
- * @param totalCarryWeightGrams  Total weight of all carried items.
- * @returns CombatResult describing the outcome.
+ * Implements FUN_1040_1372 (to-hit) + FUN_1040_140c (damage) + FUN_1040_149e
+ * (apply) from the EXE.  See REPORT_PHASE11_PLAYER_COMBAT.md §2-3.
+ *
+ *   to-hit:  T = (level - mon_def + 9) * 5 + speed + (1 - depth) * DH_A6
+ *            hit if rand(100) < max(1, T)
+ *   damage:  NdM (weapon dice) + base + STR bonus + gauntlet bonus + enchant
+ *
+ *   The EXE has NO post-hit AC damage reduction; equipment AC enters via the
+ *   speed term in the hit roll.
+ *
+ * @param char       Full character state.
+ * @param weapon     Equipped weapon item (null = unarmed).
+ * @param monster    Target MonsterSpec.
+ * @param status     Current player status effects.
+ * @param ctx        Per-call combat context (depth, equipmentAC, swarmCounter).
+ * @param totalCarryWeightGrams  Total carried weight (encumbrance → effective STR).
  */
 export function playerMeleeAttack(
   char: Character,
   weapon: Item | null,
   monster: MonsterSpec,
   status: PlayerStatus,
+  ctx: CombatContext,
   totalCarryWeightGrams = 0,
 ): CombatResult {
   const effectiveStr = char.stats.strength
     - (status.drainedStr ?? 0)
     - carryingPenalty(char, totalCarryWeightGrams);
-  const effectiveDex = char.stats.dexterity - (status.drainedDex ?? 0);
 
-  // Dodge check
-  if (isDodged(monster.dodge, dexHitBonus(effectiveDex))) {
-    return { damage: 0, message: `${monster.name} dodges your attack.`, dodged: true };
+  // To-hit: LINEAR formula.
+  //   T = (level - mon_def + 9) * 5 + speed + (1 - depth) * DH_A6
+  // EXE uses `monster.byte+0x1a` (recent-action timer) as a small subtractive
+  // term — we don't model that yet (monster timing isn't tracked instance-side).
+  const monDef = defensiveAC(monster.dodge);
+  const playerSpeed = (char.derived?.speed ?? 0) + ctx.equipmentAC;
+  const slayAffixToHit = 0; // TODO: when slay-X affixes are implemented, sum to-hit bonuses
+  const T = (char.level - monDef + 9) * 5
+          + playerSpeed
+          + slayAffixToHit
+          + (1 - ctx.dungeonLevel) * GAME_DH_A6;
+  const threshold = Math.max(1, T);
+  if (rand() * 100 >= threshold) {
+    return { damage: 0, message: `You miss the ${monster.name}.`, dodged: true };
   }
 
-  // Weapon damage from weapon class
-  let rawDamage = 1; // unarmed base
-  let weaponName = 'fists';
+  // Damage: NdM from weapon class + base + STR + gauntlet + enchantment + slay affixes
+  const spec = weapon ? WEAPON_SPECS.find((s) => s.name === weapon.name) : undefined;
+  const wc = weapon?.weaponClass ?? spec?.weaponClass ?? 0;
+  const { n, m, base } = weaponDice(wc);
+  let damage = rollNdM(n, m) + base;
+
+  let weaponName: string;
   if (weapon) {
-    const spec = WEAPON_SPECS.find((s) => s.name === weapon.name);
-    const wc = weapon.weaponClass ?? spec?.weaponClass ?? 2;
-    // Weapon damage: 1 + random(0..WC*3-1).  WC=3 → 1–9, WC=5 → 1–15, etc.
-    rawDamage = 1 + Math.floor(rand() * (wc * 3));
     weaponName = weapon.name;
-    // Enchantment adds flat damage
-    rawDamage += weapon.enchantment;
+    damage += weapon.enchantment;
+  } else {
+    weaponName = 'fists';
   }
 
   if (char.gauntlets) {
-    const gauntlets = char.gauntlets;
-    const gspec = GAUNTLET_SPECS.find((s) => s.name === gauntlets.name);
-    if (gspec?.damageBonus) rawDamage += gspec.damageBonus;
+    const gspec = GAUNTLET_SPECS.find((s) => s.name === char.gauntlets!.name);
+    if (gspec?.damageBonus) damage += gspec.damageBonus;
   }
 
-  // Strength bonus (halved from raw — STR 70 gives +2, STR 40 gives 0)
-  rawDamage += Math.floor(strDamageBonus(effectiveStr) / 2);
+  // STR damage bonus (kept the existing reimpl shape since EXE's STR-derived
+  // damage byte at DAT_0x4D12 is set by the stat-recompute chain we haven't fully ported).
+  damage += Math.floor(strDamageBonus(effectiveStr) / 2);
 
-  // AC reduces damage as a percentage (monster.ac 0–100 = 0–100% reduction).
-  // Direct subtraction can't work here: equipment AC (12–54+) completely
-  // nullifies monster rawDamage on the other side too, so both sides use
-  // the same percentage model for a consistent damage scale.
-  const acFactor = Math.max(0, 1 - monster.ac / 100);
-  const netDamage = Math.max(1, Math.round(rawDamage * acFactor));
+  const netDamage = Math.max(1, damage);
 
   return {
     damage: netDamage,
@@ -217,37 +326,55 @@ export function playerMeleeAttack(
 /**
  * Resolve a monster's melee attack on the player.
  *
- * @param monster     The MonsterSpec attacking.
- * @param monsterEnch Enchantment level on the monster's weapon (0 = none).
- * @param char        Full character state.
- * @param playerAC    Combined armor class from all worn equipment.
- * @param status      Current player status effects.
- * @returns CombatResult for this single attack.
+ * Implements FUN_1090_21b4 (to-hit) + FUN_1090_224c (damage) + FUN_1090_268a
+ * (apply) from the EXE.  See REPORT_PHASE10_COMBAT.md §3-4.
+ *
+ *   to-hit:  T = 10 * mon_off - speed + swarmCounter + 265
+ *            threshold = max(1, T*T / 1000 + (depth - 1) * DH_A4)
+ *            hit if rand(100) < threshold
+ *   damage:  NdM + monsterEnch  (no post-hit AC reduction; EXE doesn't have one)
+ *
+ *   The shield/spell-shield status acts as a small subtractive bonus to the
+ *   monster offensive value (best approximation of the EXE's Shield spell
+ *   behaviour, which we haven't fully traced).
+ *
+ * @param monster      The MonsterSpec attacking.
+ * @param monsterEnch  Enchantment level on the monster's weapon (0 = none).
+ * @param char         Full character state.
+ * @param status       Current player status effects.
+ * @param ctx          Per-call combat context (depth, equipmentAC, swarmCounter).
  */
 export function monsterMeleeAttack(
   monster: MonsterSpec,
   monsterEnch: number,
   char: Character,
-  playerAC: number,
   status: PlayerStatus,
+  ctx: CombatContext,
 ): CombatResult {
-  const effectiveDex = char.stats.dexterity - (status.drainedDex ?? 0);
-  const shieldBonus = status.shielded ? 5 : 0;
-
-  // Dodge check
-  if (isDodged(effectiveDex + shieldBonus)) {
-    return { damage: 0, message: `You dodge the ${monster.name}'s attack.`, dodged: true };
+  // To-hit: SQUARED-difference formula vs d100.
+  const monOff = offensiveAC(monster.attack);
+  const playerSpeed = (char.derived?.speed ?? 0) + ctx.equipmentAC;
+  const swarm = ctx.swarmCounter ?? 0;
+  const shieldPenalty = status.shielded ? 1 : 0;  // small reduction to monster's effective offensive AC
+  const T = 10 * Math.max(0, monOff - shieldPenalty)
+          + swarm
+          - playerSpeed
+          + 265;
+  const threshold = Math.max(1, (T * T) / 1000 + (ctx.dungeonLevel - 1) * GAME_DH_A4);
+  if (rand() * 100 >= threshold) {
+    return { damage: 0, message: `The ${monster.name} swings at you and misses.`, dodged: true };
   }
 
-  // Monster damage: 1d(attack) — attack is the max damage the monster deals.
-  // The old formula (attack/4 + 1d6) collapsed all monsters to a 4–9 range
-  // that could never penetrate player equipment AC (which runs 12–54+).
-  const rawDamage = 1 + Math.floor(rand() * monster.attack) + monsterEnch;
+  // Damage: NdM + monster weapon enchantment.  Original EXE applies player
+  // resist stacks here too as right-shifts (1 stack = halve, etc.); for plain
+  // physical melee the only resist channels that would apply are the global
+  // resistance buffs, and monster.attack carries no damage-type tag.  When
+  // attack-entry data is extracted from the EXE we can apply the per-element
+  // resist shifts here.  See FUN_1090_224c in REPORT_PHASE10_COMBAT.md §4.
+  const { n, m } = attackToNdM(monster.attack);
+  const rawDamage = rollNdM(n, m) + monsterEnch;
 
-  // Player AC reduces damage as a percentage (same model as player→monster).
-  // playerAC 0–100 = 0–100% reduction; clamped so it never exceeds 95%.
-  const acFactor = Math.max(0, 1 - Math.min(playerAC, 95) / 100);
-  const netDamage = Math.max(1, Math.round(rawDamage * acFactor));
+  const netDamage = Math.max(1, rawDamage);
 
   // Poison special
   let specialTriggered: SpecialAttack | undefined;
