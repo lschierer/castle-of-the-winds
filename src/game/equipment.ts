@@ -78,7 +78,13 @@ export function specForItem(item: Item, catalog: readonly EquipmentSpec[]): Equi
 
 export const ARMOR_SPECS: readonly EquipmentSpec[] = [
   { name: 'Rusty Armour',           kind: 'armor', ac:  0, weight: 10000, bulk: 30000, icon: '/assets/sprites/icons/Armor/icon_115.png', baseSellPrice: 25, tier: 1 },
-  { name: 'Leather Armour',         kind: 'armor', ac:  6, weight:  5000, bulk: 24000, icon: '/assets/sprites/icons/Armor/icon_115.png', baseBuyPrice: 1080, baseSellPrice: 600, tier: 1 },
+  {
+    name: 'Leather Armour',         kind: 'armor', ac:  6, weight:  5000, bulk: 24000,
+    icon:           '/assets/sprites/icons/Armor/icon_117.png',
+    iconEnchanted:  '/assets/sprites/icons/Armor/icon_215.png',
+    iconCursed:     '/assets/sprites/icons/Armor/icon_217.png',
+    baseBuyPrice: 1080, baseSellPrice: 600, tier: 1,
+  },
   {
     name: 'Studded Leather Armour', kind: 'armor', ac: 12, weight:  7000, bulk: 25000,
     icon:           '/assets/sprites/icons/Armor/icon_117.png',
@@ -86,7 +92,13 @@ export const ARMOR_SPECS: readonly EquipmentSpec[] = [
     iconCursed:     '/assets/sprites/icons/Armor/icon_217.png',
     baseBuyPrice: 3150, baseSellPrice: 1800, tier: 1,
   },
-  { name: 'Ring Mail',              kind: 'armor', ac: 18, weight:  8000, bulk: 30000, icon: '/assets/sprites/icons/Armor/icon_169.png', baseBuyPrice: 6300, baseSellPrice: 3600, tier: 2 },
+  {
+    name: 'Ring Mail',              kind: 'armor', ac: 18, weight:  8000, bulk: 30000,
+    icon:           '/assets/sprites/icons/Armor/icon_117.png',
+    iconEnchanted:  '/assets/sprites/icons/Armor/icon_215.png',
+    iconCursed:     '/assets/sprites/icons/Armor/icon_217.png',
+    baseBuyPrice: 6300, baseSellPrice: 3600, tier: 2,
+  },
   { name: 'Scale Mail',             kind: 'armor', ac: 24, weight:  9000, bulk: 30000, icon: '/assets/sprites/icons/Armor/icon_171.png', baseBuyPrice: 10800, baseSellPrice: 6000, tier: 2 },
   { name: 'Chain Mail',             kind: 'armor', ac: 30, weight: 10000, bulk: 30000, icon: '/assets/sprites/icons/Armor/icon_173.png', baseBuyPrice: 16200, baseSellPrice: 9000, tier: 3 },
   { name: 'Splint Mail',            kind: 'armor', ac: 36, weight: 12000, bulk: 40000, icon: '/assets/sprites/icons/Armor/icon_173.png', baseBuyPrice: 27000, baseSellPrice: 15000, tier: 3 },

@@ -695,7 +695,8 @@ export class GameWorld extends LitElement {
 
     /* Belt slot row */
     .belt-slots {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, 52px);
       gap: 4px;
     }
 
@@ -717,9 +718,9 @@ export class GameWorld extends LitElement {
 
     /* Pack item list */
     .pack-items {
-      display: flex;
-      flex-direction: column;
-      gap: 0.15rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, 52px);
+      gap: 4px;
     }
 
     .inv-item {
@@ -3048,6 +3049,7 @@ export class GameWorld extends LitElement {
 
     // Belt slots
     const beltSlots = c.belt?.slots ?? [];
+    const beltItems: Item[] = beltSlots.flatMap((s) => s.items);
 
     // Character portrait icon
     const portraitSrc = `${IC}/${c.gender === 'female' ? 'woman' : 'man'}.png`;
@@ -3144,32 +3146,24 @@ export class GameWorld extends LitElement {
 
           <!-- Open containers below paperdoll -->
           <div class="inv-containers">
-            ${beltSlots.length > 0 ? html`
+            ${beltItems.length > 0 ? html`
               <div class="inv-container-block">
                 <div class="inv-container-label">Belt — ${c.belt?.name ?? 'Belt'}</div>
                 <div class="belt-slots">
-                  ${beltSlots.map((slot, slotIndex) => {
-                    const it = slot.items[0] ?? null;
-                    return html`
-                      <div
-                        class="belt-slot ${it ? 'filled' : ''}"
-                        @dragover=${this.onDropZoneDragOver.bind(this)}
-                        @dragleave=${this.onDropZoneDragLeave.bind(this)}
-                        @drop=${(e: DragEvent) => { this.onDropBeltSlot(slotIndex, e); }}
-                        @click=${it ? (e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'belt' }; } : undefined}
-                        @contextmenu=${it ? (e: Event) => { this.onInspectItem(it, e); } : undefined}
-                      >
-                        ${it ? html`
-                          <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt=""
-                            draggable="true"
-                            @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'belt', slotIndex, item: it }, e); }}
-                            @dragend=${this.onItemDragEnd.bind(this)}
-                          >
-                          <span style="font-size:0.5rem;color:var(--game-text-body);text-align:center;padding:2px">${displayName(it)}</span>
-                        ` : html`<span style="font-size:0.5rem;color:var(--game-border-subtle)">—</span>`}
-                      </div>
-                    `;
-                  })}
+                  ${beltItems.map((it) => html`
+                    <div
+                      class="belt-slot filled"
+                      style="cursor:pointer"
+                      @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'belt' }; }}
+                      @contextmenu=${(e: Event) => { this.onInspectItem(it, e); }}
+                      draggable="true"
+                      @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'belt', slotIndex: 0, item: it }, e); }}
+                      @dragend=${this.onItemDragEnd.bind(this)}
+                    >
+                      <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
+                      <span style="font-size:0.5rem;color:var(--game-text-body);text-align:center;padding:2px">${displayName(it)}</span>
+                    </div>
+                  `)}
                 </div>
               </div>
             ` : ''}
@@ -3194,9 +3188,6 @@ export class GameWorld extends LitElement {
                     : packItems.map((it) => {
                         const isContainer = it.slots !== undefined;
                         const isOpen = isContainer && this.openedContainers.has(it.id);
-                        // Container rows get @drop so dragging onto a closed
-                        // container icon puts the item inside (help topic 027
-                        // shortcut), and a small ▸/▾ marker to indicate state.
                         const dropOpts = isContainer ? {
                           dragover: this.onDropZoneDragOver.bind(this),
                           dragleave: this.onDropZoneDragLeave.bind(this),
@@ -3204,8 +3195,8 @@ export class GameWorld extends LitElement {
                         } : null;
                         return html`
                           <div
-                            class="inv-item"
-                            style="cursor:pointer;display:flex;align-items:center;gap:4px"
+                            class="belt-slot filled"
+                            style="cursor:pointer"
                             draggable="true"
                             @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'pack', item: it }, e); }}
                             @dragend=${this.onItemDragEnd.bind(this)}
@@ -3216,7 +3207,7 @@ export class GameWorld extends LitElement {
                             @drop=${dropOpts?.drop}
                           >
                             <img class="inv-item-icon" src="${resolveItemIcon(it.icon ?? (it.kind + '.png'))}" alt="">
-                            <span>${isContainer ? html`<span style="color:var(--game-text-tertiary)">${isOpen ? '▾' : '▸'}</span> ` : ''}${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:var(--game-status-danger)">(cursed)</span>` : ''}</span>
+                            <span style="font-size:0.5rem;color:var(--game-text-body);text-align:center;padding:2px">${isContainer ? (isOpen ? '▾ ' : '▸ ') : ''}${displayName(it)}</span>
                           </div>
                         `;
                       })}
