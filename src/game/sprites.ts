@@ -260,7 +260,8 @@ export function monsterSpriteSrc(monsterId: string): string | undefined {
 
 // ── Ground item icons ─────────────────────────────────────────────────────────
 
-import type { Item } from './items.ts';
+import { type Item, WEAPON_SPECS } from './items.ts';
+import { ALL_EQUIPMENT_SPECS, pickEquipmentIcon } from './equipment.ts';
 
 const PILE_ICON = '/assets/sprites/icons/Items/icon_147.png';
 
@@ -325,6 +326,63 @@ const LEGACY_ICON: Record<string, string> = {
 export function resolveItemIcon(icon: string): string {
   if (icon.startsWith('/')) return icon;
   return LEGACY_ICON[icon] ?? '/assets/sprites/icons/Items/icon_147.png';
+}
+
+// ── Spec-based icon resolution ────────────────────────────────────────────────
+
+const COIN_ICONS: Record<string, string> = {
+  copper:   '/assets/sprites/icons/Items/icon_149.png',
+  silver:   '/assets/sprites/icons/Items/icon_151.png',
+  gold:     '/assets/sprites/icons/Items/icon_153.png',
+  platinum: '/assets/sprites/icons/Items/icon_155.png',
+};
+
+/**
+ * Resolve the correct icon for an item based on its spec, enchantment, and state.
+ * This replaces the stored `item.icon` field — call at render time.
+ */
+export function getItemIcon(item: Item): string {
+  // Coins: by denomination
+  if (item.kind === 'coin' && item.coinKind) {
+    return COIN_ICONS[item.coinKind] ?? '/assets/sprites/icons/Items/icon_149.png';
+  }
+  // Scrolls
+  if (item.kind === 'scroll') return '/assets/sprites/icons/Items/icon_141.png';
+  // Potions
+  if (item.kind === 'potion') return '/assets/sprites/icons/Items/icon_145.png';
+  // Containers (packs, bags, chests, purses)
+  if (item.kind === 'container') {
+    const n = item.name.toLowerCase();
+    if (n.includes('purse'))  return '/assets/sprites/icons/Containers/icon_157.png';
+    if (n.includes('chest'))  return '/assets/sprites/icons/Containers/icon_141.png';
+    if (n.includes('bag'))    return '/assets/sprites/icons/Containers/icon_139.png';
+    return '/assets/sprites/icons/Containers/icon_143.png';
+  }
+  // Belt-kind items
+  if (item.kind === 'belt') return '/assets/sprites/icons/Containers/icon_137.png';
+  // Weapons: resolve by name/type
+  if (item.kind === 'weapon') {
+    const spec = WEAPON_SPECS.find((s) => s.name === item.name);
+    const n = item.name.toLowerCase();
+    if (n.includes('hammer'))       return '/assets/sprites/icons/Weapons/icon_291.png';
+    if (n.includes('club'))         return '/assets/sprites/icons/Weapons/icon_315.png';
+    if (n.includes('flail'))        return '/assets/sprites/icons/Weapons/icon_297.png';
+    if (n.includes('battle axe'))   return '/assets/sprites/icons/Weapons/icon_109.png';
+    if (n.includes('axe'))          return '/assets/sprites/icons/Weapons/icon_109.png';
+    if (n.includes('morning star')) return '/assets/sprites/icons/Weapons/icon_113.png';
+    if (n.includes('quarterstaff')) return '/assets/sprites/icons/Weapons/icon_309.png';
+    if (spec?.weaponType === 'blunt')   return '/assets/sprites/icons/Weapons/icon_113.png';
+    if (spec?.weaponType === 'polearm') return '/assets/sprites/icons/Weapons/icon_309.png';
+    return '/assets/sprites/icons/Weapons/icon_111.png';
+  }
+  // Equipment: look up spec and use pickEquipmentIcon
+  const eqSpec = ALL_EQUIPMENT_SPECS.find((s) => s.name === item.name);
+  if (eqSpec) {
+    const ench = item.identified ? item.enchantment : 0;
+    return pickEquipmentIcon(eqSpec, ench, item.broken);
+  }
+  // Fallback
+  return item.icon ? resolveItemIcon(item.icon) : '/assets/sprites/icons/Items/icon_147.png';
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
