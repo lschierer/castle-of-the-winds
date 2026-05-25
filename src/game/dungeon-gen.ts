@@ -25,7 +25,6 @@ import { ARMOR_SPECS } from './equipment.ts';
 import {
   itemQualityLevel,
   totalFloorsForStage,
-  MINE_UPSTAIRS_FROM_FLOOR,
   MINE_PARCHMENT_FLOOR,
   FORTRESS_BOSS_FLOOR,
   type GameStage,
@@ -86,6 +85,8 @@ export interface GenerateFloorOptions {
   width?: number;
   /** Override map height. Defaults to stage-appropriate size capped at 64. */
   height?: number;
+  /** Whether the floor above has a secondary stairs-down pointing here. */
+  parentHasSecondaryDown?: boolean;
 }
 
 export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
@@ -229,7 +230,7 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
 
   // Secondary stairs-up in room[1], paired with the previous floor's stairsDown2.
   let stairsUp2: Vec2 | undefined;
-  if (rooms.length >= 4) {
+  if (opts.parentHasSecondaryDown && rooms.length >= 4) {
     const secondRoom = rooms[1];
     if (secondRoom) {
       stairsUp2 = roomCenter(secondRoom);

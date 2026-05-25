@@ -1435,10 +1435,12 @@ export class GameWorld extends LitElement {
   private ensureFloor(level: number): DungeonFloor {
     let floor = this.dungeonFloors.get(level);
     if (!floor) {
+      const parentFloor = level > 1 ? this.dungeonFloors.get(level - 1) : undefined;
       floor = generateFloor({
         stage: this.currentStage,
         dungeonLevel: level,
         ...(this.character?.difficulty && { difficulty: this.character.difficulty }),
+        parentHasSecondaryDown: !!parentFloor?.stairsDown2,
       });
       this.dungeonFloors.set(level, floor);
       logger.info(`Generated ${this.currentStage} floor ${level}: ${floor.map.width}×${floor.map.height}`);
