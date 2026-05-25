@@ -46,7 +46,7 @@ import {
   resetVisitPrices,
   purseTotalCopper, bankTotalCopper, bankDeposit, bankWithdraw,
 } from '../game/shop.ts';
-import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk, PACK_SPECS, reportedUnitWeight } from '../game/items.ts';
+import { coinsIn, type Item, type ContainerSlot, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk, PACK_SPECS, reportedUnitWeight, canAddToSlot } from '../game/items.ts';
 import {
   type MonsterInstance,
   type PlayerStatus,
@@ -2317,6 +2317,46 @@ export class GameWorld extends LitElement {
     this.requestUpdate();
   }
 
+  private doMoveToBelt(item: Item, source: 'pack' | 'belt'): void {
+    const c = this.character;
+    if (!c?.belt) return;
+    const sourceContainer = source === 'belt' ? c.belt
+      : this.actionItem?.containerId
+        ? this.findSubContainerInPack(this.actionItem.containerId) ?? c.pack
+        : c.pack;
+    if (!sourceContainer) return;
+    const removed = removeFromContainer(sourceContainer, item.id);
+    if (!removed) return;
+    if (addToContainer(c.belt, removed)) {
+      this.pushMessage(`${displayName(removed)} → belt.`);
+    } else {
+      // Shouldn't happen since we checked canAddToSlot, but just in case
+      addToContainer(sourceContainer, removed);
+      this.pushMessage('No room on belt.');
+    }
+    this.actionItem = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  private doMoveToBeltFromGround(item: Item): void {
+    const c = this.character;
+    if (!c?.belt) return;
+    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+    const idx = tile.items.findIndex((it) => it.id === item.id);
+    if (idx < 0) return;
+    tile.items.splice(idx, 1);
+    if (addToContainer(c.belt, item)) {
+      this.pushMessage(`${displayName(item)} → belt.`);
+    } else {
+      tile.items.push(item);
+      this.pushMessage('No room on belt.');
+    }
+    this.actionItem = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
   /** Move all coins from a found purse into the player's equipped purse. */
   private transferCoins(fromPurse: Item, toPurse: Item): number {
     let total = 0;
@@ -2550,6 +2590,10 @@ export class GameWorld extends LitElement {
       } else if (a.item.kind in this.KIND_TO_SLOT) {
         actions.push({ label: 'Equip', handler: () => { this.doEquipFromPack(a.item); } });
       }
+      // Offer "To Belt" if the player has a belt and the item can fit
+      if (this.character?.belt?.slots?.some((s: ContainerSlot) => canAddToSlot(s, a.item))) {
+        actions.push({ label: 'To Belt', handler: () => { this.doMoveToBelt(a.item, src); } });
+      }
       actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
     } else {
       if (a.item.name === 'Scrap of Parchment') {
@@ -2562,6 +2606,9 @@ export class GameWorld extends LitElement {
         actions.push({ label: 'Swap Pack', handler: () => { this.doSwapGroundPack(a.item); } });
       } else if (a.item.kind in this.KIND_TO_SLOT) {
         actions.push({ label: 'Equip', handler: () => { this.doEquipFromGround(a.item); } });
+      }
+      if (this.character?.belt?.slots?.some((s: ContainerSlot) => canAddToSlot(s, a.item))) {
+        actions.push({ label: 'To Belt', handler: () => { this.doMoveToBeltFromGround(a.item); } });
       }
       actions.push({ label: 'Pick up', handler: () => { this.doPickup(a.item); } });
     }
