@@ -581,7 +581,16 @@ export function makeWeapon(name: string, weight?: number, dungeonLevel?: number)
  * Create a loot weapon: random name appropriate to level, unidentified.
  */
 export function makeLootWeapon(dungeonLevel: number): Item {
-  return makeWeapon(randomWeaponName(dungeonLevel), undefined, dungeonLevel);
+  // Map quality level → max weapon tier, matching makeEquipmentItem's formula.
+  // Quality goes 1–4 (mine), 5–13 (fortress), 14–25 (castle).
+  // Without this, quality level 2 allows Mace/Flail and quality 3 allows Broad Sword —
+  // way too powerful for mine floors 2–3.
+  const maxTier = dungeonLevel <= 2 ? 1
+    : dungeonLevel <= 4 ? 2
+    : dungeonLevel <= 8 ? 3
+    : dungeonLevel <= 14 ? 4
+    : 5;
+  return makeWeapon(randomWeaponName(maxTier), undefined, dungeonLevel);
 }
 
 // ── Starting loadout ──────────────────────────────────────────────────────────
