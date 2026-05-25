@@ -2729,6 +2729,85 @@ export class GameWorld extends LitElement {
     const c = this.character;
     if (!c) return;
 
+    // Phase Door: teleport 5-10 tiles to a random walkable spot
+    if (spellId === 'phase_door') {
+      const spell = spellById(spellId);
+      if (!spell) return;
+      if (c.mana < spell.baseMana) { this.pushMessage('Not enough mana!'); return; }
+      this.character = { ...c, mana: c.mana - spell.baseMana };
+      // Try random directions to find a walkable landing spot
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 5 + Math.floor(Math.random() * 6); // 5-10
+        const tx = this.pos.x + Math.round(Math.cos(angle) * dist);
+        const ty = this.pos.y + Math.round(Math.sin(angle) * dist);
+        if (isWalkable(this.map, tx, ty) && !this.monsters.some((m) => m.x === tx && m.y === ty)) {
+          this.moveTo(tx, ty);
+          this.pushMessage(`You cast ${spell.name}. You teleport!`);
+          this.autoSave();
+          this.runMonsterTurns();
+          this.requestUpdate();
+          return;
+        }
+      }
+      this.pushMessage(`You cast ${spell.name}. Nothing happens.`);
+      this.autoSave();
+      this.runMonsterTurns();
+      this.requestUpdate();
+      return;
+    }
+
+    // Teleport: random walkable tile at least 10 squares away
+    if (spellId === 'teleport') {
+      const spell = spellById(spellId);
+      if (!spell) return;
+      if (c.mana < spell.baseMana) { this.pushMessage('Not enough mana!'); return; }
+      this.character = { ...c, mana: c.mana - spell.baseMana };
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const tx = Math.floor(Math.random() * this.map.width);
+        const ty = Math.floor(Math.random() * this.map.height);
+        const dist = Math.abs(tx - this.pos.x) + Math.abs(ty - this.pos.y);
+        if (dist >= 10 && isWalkable(this.map, tx, ty) && !this.monsters.some((m) => m.x === tx && m.y === ty)) {
+          this.moveTo(tx, ty);
+          this.pushMessage(`You cast ${spell.name}. You teleport far away!`);
+          this.autoSave();
+          this.runMonsterTurns();
+          this.requestUpdate();
+          return;
+        }
+      }
+      this.pushMessage(`You cast ${spell.name}. Nothing happens.`);
+      this.autoSave();
+      this.runMonsterTurns();
+      this.requestUpdate();
+      return;
+    }
+
+    // Rune of Return: surface ↔ deepest visited dungeon floor
+    if (spellId === 'rune_of_return') {
+      const spell = spellById(spellId);
+      if (!spell) return;
+      if (c.mana < spell.baseMana) { this.pushMessage('Not enough mana!'); return; }
+      this.character = { ...c, mana: c.mana - spell.baseMana };
+      if (this.currentDungeonLevel > 0) {
+        // In dungeon: return to surface
+        this.pushMessage(`You cast ${spell.name}. You are whisked to the surface!`);
+        this.enterMap('farm-map', { x: 24, y: 2 });
+      } else {
+        // On surface: go to deepest visited floor
+        const deepest = Math.max(0, ...this.dungeonFloors.keys());
+        if (deepest > 0) {
+          this.pushMessage(`You cast ${spell.name}. You return to the depths!`);
+          this.enterDungeonFloor(deepest);
+        } else {
+          this.pushMessage(`You cast ${spell.name}. You have nowhere to return to.`);
+        }
+      }
+      this.autoSave();
+      this.requestUpdate();
+      return;
+    }
+
     const result = castSpell(c, spellId, target, this.monsters, this.playerStatus);
     for (const msg of result.messages) this.pushMessage(msg);
     this.character = result.character;
