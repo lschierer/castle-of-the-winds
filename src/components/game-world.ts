@@ -46,7 +46,7 @@ import {
   resetVisitPrices,
   purseTotalCopper, bankTotalCopper, bankDeposit, bankWithdraw,
 } from '../game/shop.ts';
-import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk, PACK_SPECS } from '../game/items.ts';
+import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk, PACK_SPECS, reportedUnitWeight } from '../game/items.ts';
 import {
   type MonsterInstance,
   type PlayerStatus,
@@ -1231,7 +1231,25 @@ export class GameWorld extends LitElement {
       return;
     }
 
-    if (!isWalkable(this.map, nx, ny)) return;
+    if (!isWalkable(this.map, nx, ny)) {
+      // If a monster is diagonally adjacent (but not in this exact direction),
+      // tell the player so they're not left guessing.
+      const diagMonster = this.monsters.find((m) => {
+        const mdx = m.x - this.pos.x;
+        const mdy = m.y - this.pos.y;
+        return Math.abs(mdx) <= 1 && Math.abs(mdy) <= 1 && mdx !== 0 && mdy !== 0 && m.hp > 0;
+      });
+      if (diagMonster) {
+        const spec = monsterById(diagMonster.specId);
+        const name = spec?.name ?? 'monster';
+        const mdx = diagMonster.x - this.pos.x;
+        const mdy = diagMonster.y - this.pos.y;
+        const dir = monsterDirectionLabel(-mdx, -mdy);
+        const key = diagonalKeyHint(-mdx, -mdy);
+        this.pushMessage(`A ${name} lurks to the ${dir} — press ${key} to attack.`);
+      }
+      return;
+    }
 
     this.moveTo(nx, ny);
 
@@ -1467,7 +1485,14 @@ export class GameWorld extends LitElement {
     const spec = monsterById(target.specId);
     if (!spec) return;
 
-    const result = playerMeleeAttack(c, c.weapon, spec, this.playerStatus);
+    const carriedSlots = [
+      c.weapon, c.freeHand, c.armor, c.helm, c.shield, c.boots, c.cloak,
+      c.bracers, c.gauntlets, c.ringLeft, c.ringRight, c.amulet, c.belt, c.purse, c.pack,
+    ];
+    const totalCarryWeightGrams = carriedSlots.reduce(
+      (sum, slot) => sum + (slot ? reportedUnitWeight(slot) : 0), 0,
+    );
+    const result = playerMeleeAttack(c, c.weapon, spec, this.playerStatus, totalCarryWeightGrams);
     this.pushMessage(result.message);
 
     if (!result.dodged && result.damage > 0) {
@@ -1546,7 +1571,14 @@ export class GameWorld extends LitElement {
       // Adjacent to player → attack
       if (dist === 1 || (Math.abs(dx0) <= 1 && Math.abs(dy0) <= 1 && dist <= 2)) {
         const result = monsterMeleeAttack(spec, 0, updatedChar, this.playerAC, updatedStatus);
-        this.pushMessage(result.message);
+        const dir = monsterDirectionLabel(dx0, dy0);
+        const keyHint = diagonalKeyHint(dx0, dy0);
+        const dirSuffix = dir
+          ? keyHint
+            ? ` (from the ${dir} — press ${keyHint})`
+            : ` (from the ${dir})`
+          : '';
+        this.pushMessage(result.message + dirSuffix);
 
         if (!result.dodged && result.damage > 0) {
           updatedChar = { ...updatedChar, hitPoints: updatedChar.hitPoints - result.damage };
@@ -3817,6 +3849,30 @@ export class GameWorld extends LitElement {
       </div>
     `;
   }
+}
+
+// ── Direction helpers ─────────────────────────────────────────────────────────
+
+/**
+ * dx0 = player.x − monster.x, dy0 = player.y − monster.y.
+ * Returns a compass label for the direction FROM THE PLAYER toward the monster.
+ */
+function monsterDirectionLabel(dx0: number, dy0: number): string {
+  const h = dx0 > 0 ? 'west' : dx0 < 0 ? 'east' : '';
+  const v = dy0 > 0 ? 'north' : dy0 < 0 ? 'south' : '';
+  return v && h ? `${v}${h}` : v || h;
+}
+
+/**
+ * For diagonal attacks, returns the numpad/vi key(s) the player should press.
+ * Returns empty string for cardinal attacks (arrow keys are self-evident).
+ */
+function diagonalKeyHint(dx0: number, dy0: number): string {
+  if (dx0 === 0 || dy0 === 0) return '';
+  if (dx0 > 0 && dy0 > 0) return '7/y';  // northwest
+  if (dx0 < 0 && dy0 > 0) return '9/u';  // northeast
+  if (dx0 > 0 && dy0 < 0) return '1/b';  // southwest
+  return '3/n';                            // southeast
 }
 
 // ── Key map ───────────────────────────────────────────────────────────────────

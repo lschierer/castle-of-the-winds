@@ -1,17 +1,18 @@
 /**
- * Override stats on the existing MONSTERS array with values from
+ * Supplement the existing MONSTERS array with binary-only fields from
  * MONSTERS_FROM_BINARY at module load time.
  *
  * Per-field policy:
- *   hp, hpPerLevel, ac, damageMax, xp — replaced when the binary value is
- *     non-zero.  When the binary value is 0 (Animals like Gray Wolf, where
- *     the binary's HP byte is 0 and HP is presumably computed elsewhere by
- *     the engine), the existing tuned value is kept as a fallback.
- *   resistMask — added as a new (optional) field; the existing affinities
- *     array is left untouched.
- *
- * After this module is imported once, `monsterById('goblin').hp` returns the
- * binary value (8) instead of the tuned value (6), etc.
+ *   hp, ac — NOT overridden. The binary uses a completely different damage
+ *     scale (original engine does ~16+ damage per hit; ours does 1-6 for
+ *     Magic Arrow). Binary hp=8 for goblin means ~0.5 hits; our tuned hp=31
+ *     means ~9 hits, which matches the intended "several rounds of combat"
+ *     feel. Overriding with binary values made monsters randomly too easy
+ *     or too hard depending on whether the binary had a non-zero value.
+ *   xp — NOT overridden. Tuned values account for our combat pacing.
+ *   hpPerLevel, damageMax, resistMask — added as supplemental reference
+ *     fields; not currently used by the combat engine but available for
+ *     future scaling and resistance lookups.
  */
 
 import type { MonsterSpec } from '../monsters.ts';
@@ -29,7 +30,7 @@ declare module '../monsters.ts' {
   }
 }
 
-/** Apply binary overrides to a (readonly) MonsterSpec array in place. */
+/** Supplement a (readonly) MonsterSpec array with binary-only reference fields in place. */
 export function applyBinaryStatsToMonsters(monsters: readonly MonsterSpec[]): void {
   const byId = new Map(MONSTERS_FROM_BINARY.map((m) => [m.id, m] as const));
 
@@ -37,12 +38,8 @@ export function applyBinaryStatsToMonsters(monsters: readonly MonsterSpec[]): vo
     const bin = byId.get(m.id);
     if (!bin) continue;
 
-    // Non-zero overrides only (preserve tuned fallback when binary is empty).
-    if (bin.hp > 0) (m as { hp: number }).hp = bin.hp;
-    if (bin.ac > 0) (m as { ac: number }).ac = bin.ac;
-    if (bin.xp > 0) (m as { xp: number }).xp = bin.xp;
-
-    // Always add the binary-only fields.
+    // Add supplemental reference fields only — do NOT override hp, ac, or xp.
+    // See module doc comment for the scale mismatch rationale.
     m.hpPerLevel = bin.hpPerLevel;
     m.damageMax = bin.damageMax;
     m.resistMask = bin.resistMask;

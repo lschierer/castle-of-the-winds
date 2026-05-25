@@ -44,6 +44,8 @@ export interface EquipmentSpec {
    * Negative values for cursed items.
    */
   statBonus?: Partial<Record<'strength' | 'intelligence' | 'constitution' | 'dexterity', number>>;
+  /** Flat bonus added to melee attack raw damage when worn. */
+  damageBonus?: number;
   /** Sprite icon filename for ground/inventory display (normal / unenchanted). */
   icon?: string;
   /** Icon variant for enchanted (enchantment > 0) versions. Falls back to icon. */
@@ -200,9 +202,9 @@ export const GAUNTLET_SPECS: readonly EquipmentSpec[] = [
   { name: 'Gauntlets of Protection',             kind: 'gauntlets', ac: 10, weight: 500, bulk: 2000, icon: '/assets/sprites/icons/Gauntlets/icon_201.png', baseBuyPrice: 2625, baseSellPrice: 1500, tier: 3 },
   { name: 'Gauntlets of Strong Protection',      kind: 'gauntlets', ac: 10, weight: 500, bulk: 2000, icon: '/assets/sprites/icons/Gauntlets/icon_201.png', baseBuyPrice: 6300, baseSellPrice: 3600, tier: 4 },
   { name: 'Gauntlets of Very Strong Protection', kind: 'gauntlets', ac: 10, weight: 500, bulk: 2000, icon: '/assets/sprites/icons/Gauntlets/icon_201.png', baseBuyPrice: 12420, baseSellPrice: 6900, tier: 5 },
-  { name: 'Gauntlets of Slaying',                kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, icon: '/assets/sprites/icons/Gauntlets/icon_203.png', baseBuyPrice: 3780, baseSellPrice: 2100, tier: 3 },
-  { name: 'Gauntlets of Strong Slaying',         kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, icon: '/assets/sprites/icons/Gauntlets/icon_203.png', baseBuyPrice: 7560, baseSellPrice: 4200, tier: 4 },
-  { name: 'Gauntlets of Very Strong Slaying',    kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, icon: '/assets/sprites/icons/Gauntlets/icon_203.png', baseBuyPrice: 13125, baseSellPrice: 7500, tier: 5 },
+  { name: 'Gauntlets of Slaying',                kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, icon: '/assets/sprites/icons/Gauntlets/icon_203.png', damageBonus: 3, baseBuyPrice: 3780, baseSellPrice: 2100, tier: 3 },
+  { name: 'Gauntlets of Strong Slaying',         kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, icon: '/assets/sprites/icons/Gauntlets/icon_203.png', damageBonus: 5, baseBuyPrice: 7560, baseSellPrice: 4200, tier: 4 },
+  { name: 'Gauntlets of Very Strong Slaying',    kind: 'gauntlets', ac:  0, weight: 500, bulk: 2000, icon: '/assets/sprites/icons/Gauntlets/icon_203.png', damageBonus: 7, baseBuyPrice: 13125, baseSellPrice: 7500, tier: 5 },
   { name: 'Gauntlets of Dexterity', kind: 'gauntlets', ac: 5, weight: 500, bulk: 2000, icon: '/assets/sprites/icons/Gauntlets/icon_201.png', statBonus: { dexterity: 5 }, baseBuyPrice: 3240, baseSellPrice: 1800, tier: 3 },
   { name: 'Gauntlets of Strength',  kind: 'gauntlets', ac: 5, weight: 500, bulk: 2000, icon: '/assets/sprites/icons/Gauntlets/icon_201.png', statBonus: { strength: 5 }, baseBuyPrice: 3240, baseSellPrice: 1800, tier: 3 },
 ];

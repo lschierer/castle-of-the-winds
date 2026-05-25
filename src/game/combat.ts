@@ -1,14 +1,17 @@
 /**
  * Combat resolution — melee and spell attacks.
  *
- * Mechanics per docs/Game Play.md:
- *   Melee damage = dice roll (weapon) + STR modifier − weight penalty
- *                  reduced by monster AC + dodge check
- *   Magic damage = spell base × affinity modifier, dodge check for bolts
- *   Both: monster constitution (HP) reduced by net damage
+ * AC model (both player and monster):
+ *   AC is a percentage (0–100) that scales down incoming damage:
+ *     netDamage = max(1, round(rawDamage × (1 − AC/100)))
+ *   Equipment AC 0–54 means 0–54% damage reduction.
+ *   Monster AC 0–80 works the same way (lightly armoured = 0–10%,
+ *   heavily armoured = 60–80%, requiring spells to kill efficiently).
  *
- * These are intentionally simplified for the first pass.  Numbers will be
- * tuned during playtesting once monsters are rendered in the dungeon.
+ *   Player melee rawDamage = 1 + rand(0..WC×3−1) + STR mod + enchantment
+ *   Monster melee rawDamage = 1 + rand(0..attack−1) + enchantment
+ *
+ *   Spell damage bypasses AC entirely (affinities apply instead).
  */
 
 import type { Character } from './character.ts';
@@ -16,6 +19,7 @@ import type { MonsterSpec, SpecialAttack } from './monsters.ts';
 import type { Item } from './items.ts';
 import { WEAPON_SPECS } from './items.ts';
 import type { ElementType } from './equipment.ts';
+import { GAUNTLET_SPECS } from './equipment.ts';
 import { RANGE_FALLOFF, findAttackFormula } from './binary-data/index.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -178,19 +182,27 @@ export function playerMeleeAttack(
   if (weapon) {
     const spec = WEAPON_SPECS.find((s) => s.name === weapon.name);
     const wc = weapon.weaponClass ?? spec?.weaponClass ?? 2;
-    // Weapon damage: 1 + random(0..WC*3-1). Matches original's damage scale
-    // where monsters with damageMax 6 hit for 1-6 and have 8-128 HP.
+    // Weapon damage: 1 + random(0..WC*3-1).  WC=3 → 1–9, WC=5 → 1–15, etc.
     rawDamage = 1 + Math.floor(rand() * (wc * 3));
     weaponName = weapon.name;
     // Enchantment adds flat damage
     rawDamage += weapon.enchantment;
   }
 
+  if (char.gauntlets) {
+    const gspec = GAUNTLET_SPECS.find((s) => s.name === char.gauntlets!.name);
+    if (gspec?.damageBonus) rawDamage += gspec.damageBonus;
+  }
+
   // Strength bonus (halved from raw — STR 70 gives +2, STR 40 gives 0)
   rawDamage += Math.floor(strDamageBonus(effectiveStr) / 2);
 
-  // AC reduction (net damage >= 1 on a connected hit)
-  const netDamage = Math.max(1, rawDamage - monster.ac);
+  // AC reduces damage as a percentage (monster.ac 0–100 = 0–100% reduction).
+  // Direct subtraction can't work here: equipment AC (12–54+) completely
+  // nullifies monster rawDamage on the other side too, so both sides use
+  // the same percentage model for a consistent damage scale.
+  const acFactor = Math.max(0, 1 - monster.ac / 100);
+  const netDamage = Math.max(1, Math.round(rawDamage * acFactor));
 
   return {
     damage: netDamage,
@@ -226,12 +238,15 @@ export function monsterMeleeAttack(
     return { damage: 0, message: `You dodge the ${monster.name}'s attack.`, dodged: true };
   }
 
-  // Monster damage: attack/4 as base strength + 1d6 + enchantment
-  const roll = 1 + Math.floor(rand() * 6);
-  const rawDamage = Math.floor(monster.attack / 4) + monsterEnch + roll;
+  // Monster damage: 1d(attack) — attack is the max damage the monster deals.
+  // The old formula (attack/4 + 1d6) collapsed all monsters to a 4–9 range
+  // that could never penetrate player equipment AC (which runs 12–54+).
+  const rawDamage = 1 + Math.floor(rand() * monster.attack) + monsterEnch;
 
-  // Player AC reduction
-  const netDamage = Math.max(1, rawDamage - playerAC);
+  // Player AC reduces damage as a percentage (same model as player→monster).
+  // playerAC 0–100 = 0–100% reduction; clamped so it never exceeds 95%.
+  const acFactor = Math.max(0, 1 - Math.min(playerAC, 95) / 100);
+  const netDamage = Math.max(1, Math.round(rawDamage * acFactor));
 
   // Poison special
   let specialTriggered: SpecialAttack | undefined;

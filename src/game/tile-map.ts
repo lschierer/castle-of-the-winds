@@ -170,7 +170,7 @@ export function revealAround(map: TileMap, px: number, py: number, radius = 10):
   // If player is in a room, reveal the entire room + its walls
   const playerTile = getTileAt(map, px, py);
   if (playerTile.roomId !== undefined) {
-    if (!map.revealedRooms) map.revealedRooms = new Set();
+    if (!(map.revealedRooms instanceof Set)) map.revealedRooms = new Set();
     revealRoom(map, playerTile.roomId);
     map.revealedRooms.add(playerTile.roomId);
   }
