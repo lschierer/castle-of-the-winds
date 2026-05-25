@@ -170,7 +170,7 @@ export function buyPrice(item: Item): number {
 
 /** Get the sell price for an item (what the shop pays). */
 export function sellPrice(item: Item): number {
-  if (item.cursed) return 0;
+  if (item.cursed && item.identified) return 0;
   if (item.broken) return 0;
   const spec = specForItem(item, ALL_EQUIPMENT_SPECS);
   if (spec?.baseSellPrice) {
