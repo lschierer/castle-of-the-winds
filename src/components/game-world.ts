@@ -2783,17 +2783,20 @@ export class GameWorld extends LitElement {
     const turnsNeeded = Math.ceil((c.maxHitPoints - c.hitPoints) / 2);
     let interrupted = false;
     for (let t = 0; t < turnsNeeded; t++) {
-      // 5% chance per turn of being interrupted by a nearby monster
-      if (this.monsters.length > 0 && Math.random() < 0.05) {
+      // 5% chance per turn of being interrupted by a monster with line of sight
+      const nearby = this.monsters.some((m) =>
+        hasLineOfSight(this.map, this.pos.x, this.pos.y, m.x, m.y));
+      if (nearby && Math.random() < 0.05) {
         interrupted = true;
         this.pushMessage('Your rest is interrupted!');
         break;
       }
-      c.hitPoints = Math.min(c.maxHitPoints, c.hitPoints + 2);
+      this.character = { ...this.character!, hitPoints: Math.min(this.character!.maxHitPoints, this.character!.hitPoints + 2) };
       this.runMonsterTurns();
+      if (this.dead) return;
     }
     if (!interrupted) {
-      this.pushMessage(`You rest until healed. HP: ${c.hitPoints}/${c.maxHitPoints}`);
+      this.pushMessage(`You rest until healed. HP: ${this.character!.hitPoints}/${this.character!.maxHitPoints}`);
     }
     this.autoSave();
     this.requestUpdate();
@@ -2812,18 +2815,21 @@ export class GameWorld extends LitElement {
     const turnsNeeded = Math.ceil(Math.max(hpNeeded / 2, mpNeeded));
     let interrupted = false;
     for (let t = 0; t < turnsNeeded; t++) {
-      // 10% chance per turn of interrupt during sleep
-      if (this.monsters.length > 0 && Math.random() < 0.10) {
+      // 10% chance per turn of interrupt by a monster with line of sight
+      const nearby = this.monsters.some((m) =>
+        hasLineOfSight(this.map, this.pos.x, this.pos.y, m.x, m.y));
+      if (nearby && Math.random() < 0.10) {
         interrupted = true;
         this.pushMessage('Your sleep is interrupted by a noise!');
         break;
       }
-      c.hitPoints = Math.min(c.maxHitPoints, c.hitPoints + 2);
-      c.mana = Math.min(c.maxMana, c.mana + 1);
+      const cur = this.character!;
+      this.character = { ...cur, hitPoints: Math.min(cur.maxHitPoints, cur.hitPoints + 2), mana: Math.min(cur.maxMana, cur.mana + 1) };
       this.runMonsterTurns();
+      if (this.dead) return;
     }
     if (!interrupted) {
-      this.pushMessage(`You sleep until restored. HP: ${c.hitPoints}/${c.maxHitPoints}, Mana: ${c.mana}/${c.maxMana}`);
+      this.pushMessage(`You sleep until restored. HP: ${this.character!.hitPoints}/${this.character!.maxHitPoints}, Mana: ${this.character!.mana}/${this.character!.maxMana}`);
     }
     this.autoSave();
     this.requestUpdate();
