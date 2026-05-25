@@ -37,54 +37,65 @@ export interface DungeonProgression {
   localDepth: number;
 }
 
-const MINE_MONSTERS = new Set([
-  'giant_bat',
-  'giant_rat',
-  'wild_dog',
-  'gray_wolf',
-  'white_wolf',
-  'large_snake',
-  'viper',
-  'giant_scorpion',
-  'giant_trapdoor_spider',
-  'huge_lizard',
-  'kobold',
-  'goblin',
-  'goblin_fighter',
-  'hobgoblin',
-  'bandit',
-  'rat_man',
-  'skeleton',
-  'walking_corpse',
-]);
+/**
+ * Monster spawn families — from the binary's family-list table at seg19:0x070A.
+ * Within each family, members are ordered weakest → strongest.
+ * The spawner picks a family, then selects a member based on depth.
+ */
+const SPAWN_FAMILIES: readonly { members: string[] }[] = [
+  // Humans (4)
+  { members: ['thief', 'bandit', 'evil_warrior', 'berserker'] },
+  // Humanoids (8)
+  { members: ['goblin', 'kobold', 'hobgoblin', 'goblin_fighter', 'rat_man', 'wolf_man', 'bear_man'] },
+  // Giants/Trolls (3)
+  { members: ['ogre', 'troll', 'hill_giant'] },
+  // Reptiles (3)
+  { members: ['large_snake', 'viper', 'huge_lizard'] },
+  // Slimes (2)
+  { members: ['slime', 'gelatinous_glob'] },
+  // Undead (7)
+  { members: ['skeleton', 'walking_corpse', 'ghost', 'tunnel_wight', 'barrow_wight', 'pale_wraith', 'shadow'] },
+  // Animals (9)
+  { members: ['giant_rat', 'wild_dog', 'giant_bat', 'carrion_creeper', 'gray_wolf', 'white_wolf', 'bear', 'manticore'] },
+  // Insects (3)
+  { members: ['giant_scorpion', 'giant_trapdoor_spider'] },
+  // Constructs (2)
+  { members: ['wooden_statue', 'bronze_statue'] },
+];
 
-const FORTRESS_EXTRA_MONSTERS = new Set([
-  'bear',
-  'evil_warrior',
-  'ogre',
-  'thief',
-  'troll',
-  'wizard',
-  'wolf_man',
-  'bear_man',
-  'hill_giant',
-  'ghost',
-  'shadow',
-  'shade',
-  'barrow_wight',
-  'tunnel_wight',
-  'pale_wraith',
-  'carrion_creeper',
-  'gelatinous_glob',
-  'manticore',
-  'slime',
-  'wooden_statue',
-  'bronze_statue',
-]);
+/**
+ * Select monsters for a dungeon floor using the family-based spawn table.
+ * Picks from families, selecting members whose position in the family
+ * is appropriate for the effective danger level.
+ */
+export function monsterAllowedInStage(monster: MonsterSpec, stage: GameStage): boolean {
+  if (monster.isBoss) return false;
+  // All family members are valid in all stages — depth filtering handles difficulty
+  const dangerCap = stage === 'mine' ? 8 : stage === 'fortress' ? 19 : 44;
+  return monster.minLevel <= dangerCap;
+}
+
+/**
+ * Get eligible monsters for a depth by selecting from families.
+ * For each family, only members up to the depth-appropriate index are eligible.
+ */
+export function eligibleMonstersForDepth(stage: GameStage, localDepth: number): string[] {
+  const danger = effectiveDangerLevel(stage, localDepth);
+  const eligible: string[] = [];
+  for (const family of SPAWN_FAMILIES) {
+    // How deep into this family we can reach: scale by danger level
+    // At danger 1, only index 0 (weakest). At danger 8, ~half the family. At danger 20+, all.
+    const maxIndex = Math.min(family.members.length - 1, Math.floor((danger - 1) * family.members.length / 20));
+    for (let i = 0; i <= maxIndex; i++) {
+      const id = family.members[i];
+      if (id) eligible.push(id);
+    }
+  }
+  return eligible;
+}
 
 export function effectiveDangerLevel(stage: GameStage, localDepth: number): number {
   const depth = Math.max(1, localDepth);
-  // Continuous danger scale across all three stages:
   //   Mine     floors 1-8  → danger  1-8
   //   Fortress floors 1-11 → danger  9-19
   //   Castle   floors 1-25 → danger 20-44
@@ -101,15 +112,6 @@ export function itemQualityLevel(stage: GameStage, localDepth: number): number {
   if (stage === 'mine') return Math.min(4, depth);
   if (stage === 'fortress') return Math.min(13, depth + 4);
   return Math.min(25, depth + 13);
-}
-
-export function monsterAllowedInStage(monster: MonsterSpec, stage: GameStage): boolean {
-  if (monster.isBoss) return false;
-  if (stage === 'mine') return MINE_MONSTERS.has(monster.id);
-  if (stage === 'fortress') {
-    return MINE_MONSTERS.has(monster.id) || FORTRESS_EXTRA_MONSTERS.has(monster.id);
-  }
-  return true;
 }
 
 export function townStockLevel(tier: TownTier): number {

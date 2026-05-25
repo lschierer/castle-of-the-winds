@@ -22,7 +22,7 @@ import type { ElementType, ResistMod } from './equipment.ts';
 import { makeEquipmentItem } from './equipment.ts';
 import type { CoinKind, ItemKind, Item } from './items.ts';
 import { makeCoinStack, makeLootWeapon } from './items.ts';
-import { effectiveDangerLevel, monsterAllowedInStage, type GameStage } from './progression.ts';
+import { eligibleMonstersForDepth, type GameStage } from './progression.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -1100,12 +1100,9 @@ export function monstersForLevel(level: number): MonsterSpec[] {
 
 /** Return monsters appropriate to a game stage and depth within that stage. */
 export function monstersForDepth(stage: GameStage, localDepth: number): MonsterSpec[] {
-  const level = effectiveDangerLevel(stage, localDepth);
-  return MONSTERS.filter(
-    (m) => monsterAllowedInStage(m, stage) &&
-      m.minLevel <= level &&
-      (m.maxLevel === undefined || m.maxLevel >= level),
-  );
+  const eligible = eligibleMonstersForDepth(stage, localDepth);
+  const eligibleSet = new Set(eligible);
+  return MONSTERS.filter((m) => eligibleSet.has(m.id));
 }
 
 // ── Loot roll ─────────────────────────────────────────────────────────────────
