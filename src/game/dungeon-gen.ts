@@ -36,8 +36,14 @@ import {
 export interface DungeonFloor {
   map: TileMap;
   monsters: MonsterInstance[];
+  /** Primary stairs-up: first room. Entry point when descending from above via primary stairs. */
   stairsUp: Vec2;
+  /** Secondary stairs-up: second room. Entry point when descending via secondary stairs. */
+  stairsUp2?: Vec2;
+  /** Primary stairs-down: last room. */
   stairsDown?: Vec2;
+  /** Secondary stairs-down: mid room. */
+  stairsDown2?: Vec2;
 }
 
 type RotRoom = ReturnType<InstanceType<typeof RotMap.Digger>['getRooms']>[number];
@@ -210,37 +216,55 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
 
   // ── Stairs up ────────────────────────────────────────────────────────────────
   //
-  // Stairs-up position is always recorded (it's the player spawn when descending
-  // to this floor from above).  The tile feature is only set when the player can
-  // actually ascend — mine floors 1-3 are one-way downward level gating.
+  // Primary stairs-up: always in the first room — this is the spawn point when
+  // the player descends from the floor above via the primary staircase.
+  // Secondary stairs-up: in the second room — paired with stairsDown2 on the
+  // floor above.  Requires ≥ 4 rooms to avoid index collisions with the
+  // mid-room and last-room staircases.
 
   const firstRoom = rooms[0];
   if (!firstRoom) throw new Error('rot.js produced no rooms');
   const stairsUp = roomCenter(firstRoom);
+  setTile(grid, stairsUp.x, stairsUp.y, { terrain: 'floor', walkable: true, feature: 'stairs-up', items: [] });
 
-  // All floors get a stairs-up so the player can always backtrack.
-  // (MINE_UPSTAIRS_FROM_FLOOR = 2 makes the one-way condition vacuous for mine floors.)
-  const canAscend = !(stage === 'mine' && dungeonLevel > 1 && dungeonLevel < MINE_UPSTAIRS_FROM_FLOOR);
-  if (canAscend) {
-    setTile(grid, stairsUp.x, stairsUp.y, { terrain: 'floor', walkable: true, feature: 'stairs-up', items: [] });
+  // Secondary stairs-up in room[1], paired with the previous floor's stairsDown2.
+  let stairsUp2: Vec2 | undefined;
+  if (rooms.length >= 4) {
+    const secondRoom = rooms[1];
+    if (secondRoom) {
+      stairsUp2 = roomCenter(secondRoom);
+      const existing = getTile(grid, stairsUp2.x, stairsUp2.y);
+      if (existing && existing.feature === undefined) {
+        setTile(grid, stairsUp2.x, stairsUp2.y, { terrain: 'floor', walkable: true, feature: 'stairs-up', items: [] });
+      } else {
+        stairsUp2 = undefined; // tile already used; skip secondary
+      }
+    }
   }
 
   // ── Stairs down ───────────────────────────────────────────────────────────────
+  //
+  // Primary stairs-down: last room — takes the player to stairsUp on the next floor.
+  // Secondary stairs-down: mid room — takes the player to stairsUp2 on the next floor.
+  // Both require ≥ 4 rooms so that room indices don't collide with the stairs-up rooms.
 
   let stairsDown: Vec2 | undefined;
+  let stairsDown2: Vec2 | undefined;
   if (dungeonLevel < totalFloors && rooms.length > 1) {
     const lastRoom = rooms[rooms.length - 1];
     if (lastRoom) {
       stairsDown = roomCenter(lastRoom);
       setTile(grid, stairsDown.x, stairsDown.y, { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] });
 
-      // Second stairway down in the middle room (canonical CotW has two exits per floor)
-      if (rooms.length > 2) {
+      // Secondary stairway down in the middle room (canonical CotW has two exits per floor).
+      // Requires ≥ 4 rooms so the mid index doesn't overlap rooms 0, 1, or last.
+      if (rooms.length >= 4) {
         const midRoom = rooms[Math.floor(rooms.length / 2)];
         if (midRoom) {
           const mid = roomCenter(midRoom);
           const existing = getTile(grid, mid.x, mid.y);
           if (existing && existing.feature === undefined) {
+            stairsDown2 = mid;
             setTile(grid, mid.x, mid.y, { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] });
           }
         }
@@ -274,9 +298,14 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
     entryPosition: stairsUp,
   };
 
-  return stairsDown === undefined
-    ? { map, monsters, stairsUp }
-    : { map, monsters, stairsUp, stairsDown };
+  return {
+    map,
+    monsters,
+    stairsUp,
+    ...(stairsUp2   !== undefined && { stairsUp2 }),
+    ...(stairsDown  !== undefined && { stairsDown }),
+    ...(stairsDown2 !== undefined && { stairsDown2 }),
+  };
 }
 
 // ── Monster spawning ──────────────────────────────────────────────────────────

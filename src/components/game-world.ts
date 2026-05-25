@@ -1381,12 +1381,7 @@ export class GameWorld extends LitElement {
   }
 
   private enterDungeonFloor(level: number, position?: Vec2): void {
-    let floor = this.dungeonFloors.get(level);
-    if (!floor) {
-      floor = generateFloor({ stage: this.currentStage, dungeonLevel: level, ...(this.character?.difficulty && { difficulty: this.character.difficulty }) });
-      this.dungeonFloors.set(level, floor);
-      logger.info(`Generated ${this.currentStage} floor ${level}: ${floor.map.width}×${floor.map.height}`);
-    }
+    const floor = this.ensureFloor(level);
     this.map = floor.map;
     this.moveTo(
       position ? position.x : floor.stairsUp.x,
@@ -1420,6 +1415,21 @@ export class GameWorld extends LitElement {
     }
   }
 
+  /** Get a dungeon floor, generating it if this is the first visit. */
+  private ensureFloor(level: number): DungeonFloor {
+    let floor = this.dungeonFloors.get(level);
+    if (!floor) {
+      floor = generateFloor({
+        stage: this.currentStage,
+        dungeonLevel: level,
+        ...(this.character?.difficulty && { difficulty: this.character.difficulty }),
+      });
+      this.dungeonFloors.set(level, floor);
+      logger.info(`Generated ${this.currentStage} floor ${level}: ${floor.map.width}×${floor.map.height}`);
+    }
+    return floor;
+  }
+
   private descendStairs(): void {
     const nextLevel = this.currentDungeonLevel + 1;
     if (nextLevel > totalFloorsForStage(this.currentStage)) {
@@ -1430,8 +1440,17 @@ export class GameWorld extends LitElement {
     const currentFloor = this.dungeonFloors.get(this.currentDungeonLevel);
     if (currentFloor) currentFloor.monsters = this.monsters;
 
+    // Determine which staircase the player is using: primary (stairsDown) or secondary (stairsDown2).
+    const useSecondary = !!currentFloor?.stairsDown2
+      && this.pos.x === currentFloor.stairsDown2.x
+      && this.pos.y === currentFloor.stairsDown2.y;
+
+    // Ensure the next floor exists, then route to the matching stairs-up.
+    const nextFloor = this.ensureFloor(nextLevel);
+    const spawnPos = useSecondary && nextFloor.stairsUp2 ? nextFloor.stairsUp2 : nextFloor.stairsUp;
+
     this.pushMessage('You descend deeper into the mine…');
-    this.enterDungeonFloor(nextLevel);
+    this.enterDungeonFloor(nextLevel, spawnPos);
   }
 
   private ascendStairs(): void {
@@ -1452,10 +1471,18 @@ export class GameWorld extends LitElement {
       this.enterMap('farm-map', { x: 24, y: 2 });
       return;
     }
+
+    // Determine which stairs-up the player is on, then route to the matching stairs-down above.
+    const useSecondary = !!currentFloor?.stairsUp2
+      && this.pos.x === currentFloor.stairsUp2.x
+      && this.pos.y === currentFloor.stairsUp2.y;
+
     const prevLevel = this.currentDungeonLevel - 1;
-    this.pushMessage('You ascend the stairs…');
     const prevFloor = this.dungeonFloors.get(prevLevel);
-    this.enterDungeonFloor(prevLevel, prevFloor?.stairsDown);
+    const spawnPos = useSecondary && prevFloor?.stairsDown2 ? prevFloor.stairsDown2 : prevFloor?.stairsDown;
+
+    this.pushMessage('You ascend the stairs…');
+    this.enterDungeonFloor(prevLevel, spawnPos);
   }
 
   // ── Combat helpers ────────────────────────────────────────────────────────
