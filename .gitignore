@@ -1,5 +1,8 @@
 *.sublime-workspace
 
+data/binaries
+extractions
+
 # Dependencies
 node_modules/
 .pnp/
