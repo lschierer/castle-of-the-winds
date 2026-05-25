@@ -14,8 +14,8 @@ export function totalFloorsForStage(stage: GameStage): number {
   return 25;
 }
 
-/** Mine floors 1–3 have no upstairs (one-way early-game level gating). */
-export const MINE_UPSTAIRS_FROM_FLOOR = 4;
+/** All mine floors have upstairs (matching original CotW bidirectional stairs). */
+export const MINE_UPSTAIRS_FROM_FLOOR = 2;
 
 /** Scrap of Parchment appears on the deepest mine floor. */
 export const MINE_PARCHMENT_FLOOR = 4;
