@@ -339,20 +339,20 @@ export interface PackSpec {
 
 export const PACK_SPECS: readonly PackSpec[] = [
   // ── Mundane packs (from help file) ───────────────────────────────────────────
-  { name: 'Broken Pack',        weight:  1000, bulk: 1000, maxPayloadWeight:      0, maxPayloadBulk:      0 },
-  { name: 'Small Pack',         weight:  1000, bulk: 1000, maxPayloadWeight:  12000, maxPayloadBulk:  50000 },
-  { name: 'Medium Pack',        weight:  2000, bulk: 1500, maxPayloadWeight:  22000, maxPayloadBulk:  75000 },
-  { name: 'Large Pack',         weight:  4000, bulk: 2000, maxPayloadWeight:  35000, maxPayloadBulk: 100000 },
+  { name: 'Broken Pack',        weight:  1000, bulk: 2, maxPayloadWeight:      0, maxPayloadBulk:      0 },
+  { name: 'Small Pack',         weight:  1000, bulk: 2, maxPayloadWeight:  12000, maxPayloadBulk:  50000 },
+  { name: 'Medium Pack',        weight:  2000, bulk: 3, maxPayloadWeight:  22000, maxPayloadBulk:  75000 },
+  { name: 'Large Pack',         weight:  4000, bulk: 4, maxPayloadWeight:  35000, maxPayloadBulk: 100000 },
   // ── Bags ─────────────────────────────────────────────────────────────────────
-  { name: 'Small Bag',          weight:   300, bulk:  500, maxPayloadWeight:   5000, maxPayloadBulk:   6000 },
-  { name: 'Medium Bag',         weight:   500, bulk:  700, maxPayloadWeight:  10000, maxPayloadBulk:  12000 },
-  { name: 'Large Bag',          weight:   900, bulk:  900, maxPayloadWeight:  15000, maxPayloadBulk:  18000 },
+  { name: 'Small Bag',          weight:   300, bulk: 1, maxPayloadWeight:   5000, maxPayloadBulk:   6000 },
+  { name: 'Medium Bag',         weight:   500, bulk: 1, maxPayloadWeight:  10000, maxPayloadBulk:  12000 },
+  { name: 'Large Bag',          weight:   900, bulk: 2, maxPayloadWeight:  15000, maxPayloadBulk:  18000 },
   // ── Chests and caskets ───────────────────────────────────────────────────────
   // Chests have fixedReportedBulk per help topic 073: their outer bulk
   // doesn't compress regardless of how full they are.
-  { name: 'Small Chest',  weight:  5000, bulk: 10000, maxPayloadWeight: 100000, maxPayloadBulk:  50000, fixedReportedBulk:  50000 },
-  { name: 'Medium Chest', weight: 15000, bulk:  2000, maxPayloadWeight: 100000, maxPayloadBulk: 150000, fixedReportedBulk: 150000 },
-  { name: 'Large Chest',  weight: 25000, bulk:  4000, maxPayloadWeight: 100000, maxPayloadBulk: 250000, fixedReportedBulk: 250000 },
+  { name: 'Small Chest',  weight:  5000, bulk: 6, maxPayloadWeight: 100000, maxPayloadBulk:  50000, fixedReportedBulk:  6 },
+  { name: 'Medium Chest', weight: 15000, bulk: 8, maxPayloadWeight: 100000, maxPayloadBulk: 150000, fixedReportedBulk: 8 },
+  { name: 'Large Chest',  weight: 25000, bulk: 10, maxPayloadWeight: 100000, maxPayloadBulk: 250000, fixedReportedBulk: 10 },
   // ── Packs of Holding (magical) ───────────────────────────────────────────────
   // Both Wt.Fx and Bulk.Fx set: the magical effect that makes contents
   // weightless and dimensionally compact for the carrier.

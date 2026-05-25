@@ -2283,6 +2283,40 @@ export class GameWorld extends LitElement {
     this.requestUpdate();
   }
 
+  private doEquipFromGround(item: Item): void {
+    const c = this.character;
+    if (!c) return;
+    const slotName = this.KIND_TO_SLOT[item.kind];
+    if (!slotName) return;
+    const charKey = this.EQUIP_SLOT_MAP[slotName];
+    if (!charKey) return;
+    // Remove from ground
+    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+    const idx = tile.items.findIndex((it) => it.id === item.id);
+    if (idx < 0) return;
+    tile.items.splice(idx, 1);
+    // If slot occupied, put current item in pack or drop
+    const current = (c as unknown as Record<string, Item | null>)[charKey];
+    if (current) {
+      if (c.pack && addToContainer(c.pack, current)) {
+        this.pushMessage(`${displayName(current)} → pack.`);
+      } else {
+        dropItem(this.map, this.pos.x, this.pos.y, current);
+        this.pushMessage(`${displayName(current)} dropped (pack full).`);
+      }
+    }
+    const result = equipItem(item);
+    (c as unknown as Record<string, unknown>)[charKey] = result.item;
+    if (result.stuck) {
+      this.pushMessage(`You equip the ${displayName(result.item)}… it's cursed!`);
+    } else {
+      this.pushMessage(`Equipped ${displayName(result.item)}.`);
+    }
+    this.actionItem = null;
+    this.autoSave();
+    this.requestUpdate();
+  }
+
   /** Move all coins from a found purse into the player's equipped purse. */
   private transferCoins(fromPurse: Item, toPurse: Item): number {
     let total = 0;
@@ -2526,6 +2560,8 @@ export class GameWorld extends LitElement {
         actions.push({ label: 'Swap Purse', handler: () => { this.doSwapGroundPurse(a.item); } });
       } else if (a.item.kind === 'container' && a.item.name.includes('Pack')) {
         actions.push({ label: 'Swap Pack', handler: () => { this.doSwapGroundPack(a.item); } });
+      } else if (a.item.kind in this.KIND_TO_SLOT) {
+        actions.push({ label: 'Equip', handler: () => { this.doEquipFromGround(a.item); } });
       }
       actions.push({ label: 'Pick up', handler: () => { this.doPickup(a.item); } });
     }
