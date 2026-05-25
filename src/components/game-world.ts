@@ -2825,6 +2825,11 @@ export class GameWorld extends LitElement {
       }
       const cur = this.character!;
       this.character = { ...cur, hitPoints: Math.min(cur.maxHitPoints, cur.hitPoints + 2), mana: Math.min(cur.maxMana, cur.mana + 1) };
+      // 10% chance per turn that sleep cures poison
+      if (this.playerStatus.poisoned && Math.random() < 0.10) {
+        this.playerStatus = { ...this.playerStatus, poisoned: false, poisonStrength: 0 };
+        this.pushMessage('The poison fades from your body as you sleep.');
+      }
       this.runMonsterTurns();
       if (this.dead) return;
     }
