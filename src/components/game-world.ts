@@ -838,7 +838,7 @@ export class GameWorld extends LitElement {
   @state() private mapMode = false;
 
   /** Up to 10 spell IDs pinned to the quick-cast bar (null = empty slot). */
-  @state() private quickSpells: (string | null)[] = new Array(10).fill(null);
+  @state() private quickSpells: (string | null)[] = [null, null, null, null, null, null, null, null, null, null];
 
   /** Which slot (0-9) is being reassigned in the customize overlay. */
   @state() private customizingSlot: number | null = null;
@@ -982,9 +982,9 @@ export class GameWorld extends LitElement {
         if (!handle) return;
         const file = await handle.getFile();
         const text = await file.text();
-        const state = JSON.parse(text) as GameState;
+        const state = JSON.parse(text) as Partial<GameState>;
         if (!state.character) { this.pushMessage('Invalid save file.'); return; }
-        saveGameState(state);
+        saveGameState(state as GameState);
         this.saveFileHandle = handle;
         window.location.reload();
       } catch (e) {
@@ -1002,9 +1002,9 @@ export class GameWorld extends LitElement {
         if (!file) return;
         try {
           const text = await file.text();
-          const state = JSON.parse(text) as GameState;
+          const state = JSON.parse(text) as Partial<GameState>;
           if (!state.character) { this.pushMessage('Invalid save file.'); return; }
-          saveGameState(state);
+          saveGameState(state as GameState);
           window.location.reload();
         } catch {
           this.pushMessage('Load failed.');
@@ -1037,16 +1037,17 @@ export class GameWorld extends LitElement {
       this.character = state.character;
       // Migrate stale pack slot limits from older saves
       if (this.character.pack?.slots) {
-        const spec = PACK_SPECS.find((s) => s.name === this.character!.pack!.name);
-        if (spec) {
-          for (const slot of this.character.pack.slots) {
+        const pack = this.character.pack;
+        const spec = PACK_SPECS.find((s) => s.name === pack.name);
+        if (spec && pack.slots) {
+          for (const slot of pack.slots) {
             if (slot.maxWeight !== undefined) slot.maxWeight = spec.maxPayloadWeight;
             if (slot.maxBulk !== undefined) slot.maxBulk = spec.maxPayloadBulk;
           }
         }
       }
       this.pos = state.pos;
-      this.currentStage = (state.currentStage as GameStage | undefined) ?? 'mine';
+      this.currentStage = state.currentStage;
       this.currentDungeonLevel = state.currentDungeonLevel;
       this.playerStatus = state.playerStatus;
       this.monsters = state.monsters;
@@ -1054,7 +1055,7 @@ export class GameWorld extends LitElement {
       this.parchmentRead = state.parchmentRead || false;
       this.hamletDestroyed = state.hamletDestroyed || false;
       this.storyLog = Array.isArray(state.storyLog) ? state.storyLog : [];
-      this.quickSpells = Array.isArray(state.quickSpells) ? [...state.quickSpells] : new Array(10).fill(null);
+      this.quickSpells = Array.isArray(state.quickSpells) ? [...state.quickSpells] as (string | null)[] : [null, null, null, null, null, null, null, null, null, null];
       // Restore dungeon floors
       for (const { level, floor } of state.dungeonFloors) {
         this.dungeonFloors.set(level, floor);
@@ -1358,8 +1359,8 @@ export class GameWorld extends LitElement {
     // Generated dungeon floor: mine-N, fortress-N, castle-N, or legacy dungeon-N
     const dungeonMatch = (id as string).match(/^(mine|fortress|castle|dungeon)-(\d+)$/);
     if (dungeonMatch) {
-      const stageStr = dungeonMatch[1]!;
-      const level = parseInt(dungeonMatch[2]!, 10);
+      const stageStr = dungeonMatch[1] ?? 'mine';
+      const level = parseInt(dungeonMatch[2] ?? '1', 10);
       // Map legacy 'dungeon' prefix to mine stage; clear floors when stage changes
       const newStage: GameStage = stageStr === 'dungeon' ? 'mine' : stageStr as GameStage;
       if (newStage !== this.currentStage) {
@@ -2016,7 +2017,7 @@ export class GameWorld extends LitElement {
             <input id="bank-deposit" type="number" min="1" placeholder="amount" style="width:6rem;background:var(--game-bg-surface);border:1px solid var(--game-border-default);color:var(--game-text-body);padding:0.2rem 0.3rem">
             <button class="action-menu-btn" @click=${(e: Event) => {
               const root = (e.currentTarget as HTMLElement).getRootNode() as ShadowRoot | Document;
-              const input = root.querySelector('#bank-deposit') as HTMLInputElement | null;
+              const input = root.querySelector<HTMLInputElement>('#bank-deposit');
               if (input) onDeposit(input.value);
             }}>Deposit</button>
           </div>
@@ -2024,7 +2025,7 @@ export class GameWorld extends LitElement {
             <input id="bank-withdraw" type="number" min="1" placeholder="amount" style="width:6rem;background:var(--game-bg-surface);border:1px solid var(--game-border-default);color:var(--game-text-body);padding:0.2rem 0.3rem">
             <button class="action-menu-btn" @click=${(e: Event) => {
               const root = (e.currentTarget as HTMLElement).getRootNode() as ShadowRoot | Document;
-              const input = root.querySelector('#bank-withdraw') as HTMLInputElement | null;
+              const input = root.querySelector<HTMLInputElement>('#bank-withdraw');
               if (input) onWithdraw(input.value);
             }}>Withdraw</button>
           </div>
@@ -2872,12 +2873,13 @@ export class GameWorld extends LitElement {
         this.pushMessage('Your rest is interrupted!');
         break;
       }
-      this.character = { ...this.character!, hitPoints: Math.min(this.character!.maxHitPoints, this.character!.hitPoints + 2) };
+      this.character = { ...this.character as Character, hitPoints: Math.min((this.character as Character).maxHitPoints, (this.character as Character).hitPoints + 2) };
       this.runMonsterTurns();
       if (this.dead) return;
     }
     if (!interrupted) {
-      this.pushMessage(`You rest until healed. HP: ${this.character!.hitPoints}/${this.character!.maxHitPoints}`);
+      const ch = this.character as Character;
+      this.pushMessage(`You rest until healed. HP: ${ch.hitPoints}/${ch.maxHitPoints}`);
     }
     this.autoSave();
     this.requestUpdate();
@@ -2904,7 +2906,7 @@ export class GameWorld extends LitElement {
         this.pushMessage('Your sleep is interrupted by a noise!');
         break;
       }
-      const cur = this.character!;
+      const cur = this.character as Character;
       this.character = { ...cur, hitPoints: Math.min(cur.maxHitPoints, cur.hitPoints + 2), mana: Math.min(cur.maxMana, cur.mana + 1) };
       // 10% chance per turn that sleep cures poison
       if (this.playerStatus.poisoned && Math.random() < 0.10) {
@@ -2915,7 +2917,8 @@ export class GameWorld extends LitElement {
       if (this.dead) return;
     }
     if (!interrupted) {
-      this.pushMessage(`You sleep until restored. HP: ${this.character!.hitPoints}/${this.character!.maxHitPoints}, Mana: ${this.character!.mana}/${this.character!.maxMana}`);
+      const ch = this.character as Character;
+      this.pushMessage(`You sleep until restored. HP: ${ch.hitPoints}/${ch.maxHitPoints}, Mana: ${ch.mana}/${ch.maxMana}`);
     }
     this.autoSave();
     this.requestUpdate();
@@ -3115,7 +3118,7 @@ export class GameWorld extends LitElement {
 
                   <span style="display:flex;gap:0.4rem">
                     <button class="sort-pack-btn" @click=${this.onSortPack.bind(this)} title="Sort pack contents">Sort</button>
-                    <button class="sort-pack-btn" @click=${() => { this.onToggleContainer(c.pack!.id); }} title="Hide pack pane">Close</button>
+                    <button class="sort-pack-btn" @click=${() => { if (c.pack) this.onToggleContainer(c.pack.id); }} title="Hide pack pane">Close</button>
                   </span>
                 </div>
                 <div class="pack-items"
@@ -3482,7 +3485,8 @@ export class GameWorld extends LitElement {
                       class="spell-row ${this.customizingSlot !== null ? 'castable' : ''}"
                       style="${this.customizingSlot !== null ? 'cursor:pointer' : ''}"
                       @click=${this.customizingSlot !== null ? () => {
-                        const slot = this.customizingSlot!;
+                        const slot = this.customizingSlot;
+                        if (slot === null) return;
                         this.quickSpells = this.quickSpells.map((s, j) => j === slot ? id : s);
                         this.customizingSlot = null;
                         this.autoSave();
@@ -3505,8 +3509,10 @@ export class GameWorld extends LitElement {
 
   private onItemDragStart(src: DragSrc, e: DragEvent): void {
     this.dragSrc = src;
-    e.dataTransfer!.effectAllowed = 'move';
-    e.dataTransfer!.setData('text/plain', 'drag');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'drag');
+    }
     (e.currentTarget as HTMLElement).style.opacity = '0.5';
   }
 
@@ -3518,7 +3524,7 @@ export class GameWorld extends LitElement {
   private onDropZoneDragOver(e: DragEvent): void {
     if (!this.dragSrc) return;
     e.preventDefault();
-    e.dataTransfer!.dropEffect = 'move';
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     (e.currentTarget as HTMLElement).classList.add('drag-over');
   }
 

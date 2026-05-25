@@ -159,13 +159,13 @@ export interface MonsterSpec {
 // ── Helper to DRY out immunity/vulnerability lists ────────────────────────────
 
 function immune(...elements: ElementType[]): ElementalAffinity[] {
-  return elements.map((e) => ({ element: e, mod: 'immune' as ResistMod }));
+  return elements.map((e) => ({ element: e, mod: 'immune' }));
 }
 function resist(...elements: ElementType[]): ElementalAffinity[] {
-  return elements.map((e) => ({ element: e, mod: 'resist' as ResistMod }));
+  return elements.map((e) => ({ element: e, mod: 'resist' }));
 }
 function vulnerable(...elements: ElementType[]): ElementalAffinity[] {
-  return elements.map((e) => ({ element: e, mod: 'vulnerable' as ResistMod }));
+  return elements.map((e) => ({ element: e, mod: 'vulnerable' }));
 }
 
 // ── Monster catalog ───────────────────────────────────────────────────────────

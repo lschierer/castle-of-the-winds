@@ -292,7 +292,7 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   }
 
   const map: TileMap = {
-    id: `${stage}-${dungeonLevel}` as TileMap['id'],
+    id: `${stage}-${dungeonLevel}`,
     width: w,
     height: h,
     tiles: grid,

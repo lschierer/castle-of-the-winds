@@ -190,7 +190,8 @@ export function playerMeleeAttack(
   }
 
   if (char.gauntlets) {
-    const gspec = GAUNTLET_SPECS.find((s) => s.name === char.gauntlets!.name);
+    const gauntlets = char.gauntlets;
+    const gspec = GAUNTLET_SPECS.find((s) => s.name === gauntlets.name);
     if (gspec?.damageBonus) rawDamage += gspec.damageBonus;
   }
 

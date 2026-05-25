@@ -40,7 +40,7 @@ const binaryMapsJson = {
       return url.pathname.includes('binary-maps/') && url.pathname.endsWith('_map.json');
     },
 
-    async resolve(url: URL) {
+    resolve(url: URL) {
       const filename = url.pathname.split('/').pop();
       const resolved = new URL(`./data/binary-maps/${filename}`, new URL(`file://${process.cwd()}/`));
       if (existsSync(resolved)) {

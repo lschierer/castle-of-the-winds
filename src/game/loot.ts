@@ -120,7 +120,7 @@ function randomPotion(level: number): Item {
   // Extremely rare stat potions (rarer at shallow depths)
   const statChance = level <= 8 ? 0.005 : level <= 19 ? 0.015 : 0.03;
   if (roll() < statChance) {
-    const stat = STAT_POTIONS[Math.floor(roll() * STAT_POTIONS.length)]!;
+    const stat = STAT_POTIONS[Math.floor(roll() * STAT_POTIONS.length)] ?? STAT_POTIONS[0];
     return makePotion(stat);
   }
   // Spell-based potions scaled to depth
