@@ -46,7 +46,7 @@ import {
   resetVisitPrices,
   purseTotalCopper, bankTotalCopper, bankDeposit, bankWithdraw,
 } from '../game/shop.ts';
-import { coinsIn, type Item, type ContainerSlot, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk, PACK_SPECS, reportedUnitWeight, canAddToSlot } from '../game/items.ts';
+import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk, PACK_SPECS, reportedUnitWeight } from '../game/items.ts';
 import {
   type MonsterInstance,
   type PlayerStatus,
@@ -2218,7 +2218,7 @@ export class GameWorld extends LitElement {
   private readonly KIND_TO_SLOT: Record<string, string> = {
     weapon: 'weapon', armor: 'armor', helm: 'helm', shield: 'shield',
     boots: 'boots', cloak: 'cloak', bracers: 'bracers', gauntlets: 'gauntlets',
-    ring: 'ring-l', amulet: 'amulet', belt: 'belt',
+    ring: 'ring-l', amulet: 'amulet', belt: 'belt', container: 'belt',
   };
 
   private doUnequip(): void {
@@ -2317,47 +2317,25 @@ export class GameWorld extends LitElement {
     this.requestUpdate();
   }
 
-  private doMoveToBelt(item: Item, source: 'pack' | 'belt'): void {
+  private doTransfer(item: Item, from: 'pack' | 'belt', to: 'pack' | 'belt'): void {
     const c = this.character;
-    if (!c?.belt) return;
-    const sourceContainer = source === 'belt' ? c.belt
-      : this.actionItem?.containerId
-        ? this.findSubContainerInPack(this.actionItem.containerId) ?? c.pack
-        : c.pack;
-    if (!sourceContainer) return;
-    const removed = removeFromContainer(sourceContainer, item.id);
+    if (!c) return;
+    const srcContainer = from === 'pack' ? c.pack : c.belt;
+    const dstContainer = to === 'pack' ? c.pack : c.belt;
+    if (!srcContainer || !dstContainer) return;
+    const removed = removeFromContainer(srcContainer, item.id);
     if (!removed) return;
-    if (addToContainer(c.belt, removed)) {
-      this.pushMessage(`${displayName(removed)} → belt.`);
+    if (addToContainer(dstContainer, removed)) {
+      this.pushMessage(`${displayName(removed)} → ${to}.`);
     } else {
-      // Shouldn't happen since we checked canAddToSlot, but just in case
-      addToContainer(sourceContainer, removed);
-      this.pushMessage('No room on belt.');
+      addToContainer(srcContainer, removed);
+      this.pushMessage(`No room in ${to}.`);
     }
     this.actionItem = null;
     this.autoSave();
     this.requestUpdate();
   }
 
-  private doMoveToBeltFromGround(item: Item): void {
-    const c = this.character;
-    if (!c?.belt) return;
-    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
-    const idx = tile.items.findIndex((it) => it.id === item.id);
-    if (idx < 0) return;
-    tile.items.splice(idx, 1);
-    if (addToContainer(c.belt, item)) {
-      this.pushMessage(`${displayName(item)} → belt.`);
-    } else {
-      tile.items.push(item);
-      this.pushMessage('No room on belt.');
-    }
-    this.actionItem = null;
-    this.autoSave();
-    this.requestUpdate();
-  }
-
-  /** Move all coins from a found purse into the player's equipped purse. */
   private transferCoins(fromPurse: Item, toPurse: Item): number {
     let total = 0;
     if (!fromPurse.slots || !toPurse.slots) return 0;
@@ -2587,12 +2565,16 @@ export class GameWorld extends LitElement {
         actions.push({ label: 'Swap Purse', handler: () => { this.doSwapPurse(a.item, src); } });
       } else if (a.item.kind === 'container' && a.item.name.includes('Pack')) {
         actions.push({ label: 'Swap Pack', handler: () => { this.doSwapPack(a.item, src); } });
+        actions.push({ label: 'Equip (belt)', handler: () => { this.doEquipFromPack(a.item); } });
       } else if (a.item.kind in this.KIND_TO_SLOT) {
         actions.push({ label: 'Equip', handler: () => { this.doEquipFromPack(a.item); } });
       }
-      // Offer "To Belt" if the player has a belt and the item can fit
-      if (this.character?.belt?.slots?.some((s: ContainerSlot) => canAddToSlot(s, a.item))) {
-        actions.push({ label: 'To Belt', handler: () => { this.doMoveToBelt(a.item, src); } });
+      // Transfer between containers
+      if (src === 'belt' && this.character?.pack) {
+        actions.push({ label: 'To Pack', handler: () => { this.doTransfer(a.item, 'belt', 'pack'); } });
+      }
+      if (src === 'pack' && this.character?.belt) {
+        actions.push({ label: 'To Belt', handler: () => { this.doTransfer(a.item, 'pack', 'belt'); } });
       }
       actions.push({ label: 'Drop', handler: () => { this.doDrop(); } });
     } else {
@@ -2604,11 +2586,9 @@ export class GameWorld extends LitElement {
         actions.push({ label: 'Swap Purse', handler: () => { this.doSwapGroundPurse(a.item); } });
       } else if (a.item.kind === 'container' && a.item.name.includes('Pack')) {
         actions.push({ label: 'Swap Pack', handler: () => { this.doSwapGroundPack(a.item); } });
+        actions.push({ label: 'Equip (belt)', handler: () => { this.doEquipFromGround(a.item); } });
       } else if (a.item.kind in this.KIND_TO_SLOT) {
         actions.push({ label: 'Equip', handler: () => { this.doEquipFromGround(a.item); } });
-      }
-      if (this.character?.belt?.slots?.some((s: ContainerSlot) => canAddToSlot(s, a.item))) {
-        actions.push({ label: 'To Belt', handler: () => { this.doMoveToBeltFromGround(a.item); } });
       }
       actions.push({ label: 'Pick up', handler: () => { this.doPickup(a.item); } });
     }
@@ -3600,8 +3580,9 @@ export class GameWorld extends LitElement {
   }
 
   private onItemDragEnd(e: DragEvent): void {
-    this.dragSrc = null;
     (e.currentTarget as HTMLElement).style.opacity = '';
+    // Delay clearing dragSrc so the drop handler can still read it
+    setTimeout(() => { this.dragSrc = null; }, 0);
   }
 
   private onDropZoneDragOver(e: DragEvent): void {
