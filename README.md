@@ -93,6 +93,9 @@ mise --version
 git clone <repo-url> dungeons-crawl-game
 cd dungeons-crawl-game
 
+# Clone the rot-js fork (linked as a local dependency)
+git clone -b feature/irregular-dungeon git@github.com:lschierer/rot.js.git ../rot-js-fork
+
 # Install the exact tool versions declared in mise.toml
 # (Node 24, pnpm 11, Rust 1.91, jq, yq, watchexec)
 mise install
