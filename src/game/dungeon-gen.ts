@@ -275,8 +275,8 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
 
   const lootLevel = itemQualityLevel(stage, dungeonLevel);
   // Monster count per RE phase 14: clamp(base + 5 - diff, 12 - diff, 22 - 2*diff)
-  // Difficulty: easy=0, normal=1, hard=2
-  const diff = opts.difficulty === 'easy' ? 0 : opts.difficulty === 'hard' ? 2 : 1;
+  // Difficulty: easy=0, normal=1, hard=2, expert=3
+  const diff = opts.difficulty === 'easy' ? 0 : opts.difficulty === 'hard' ? 2 : opts.difficulty === 'expert' ? 3 : 1;
   const floorBase = Math.min(12, 4 + dungeonLevel);
   const monsterCount = Math.max(12 - diff, Math.min(22 - 2 * diff, floorBase + 5 - diff));
   const monsters = spawnMonsters(grid, w, h, stage, dungeonLevel, stairsUp, monsterCount, diff);

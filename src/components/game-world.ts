@@ -79,6 +79,7 @@ const SIDEBAR_PX = 190;
 function difficultyToInt(d: Character['difficulty']): number {
   if (d === 'easy') return 0;
   if (d === 'hard') return 2;
+  if (d === 'expert') return 3;
   return 1; // 'normal' (Intermediate)
 }
 

@@ -55,7 +55,7 @@ export type Gender = 'male' | 'female';
  * Affects derived stats (harder = harsher derived values) and enemy scaling.
  * Default in CharCreation.elm is 'hard'.
  */
-export type Difficulty = 'easy' | 'normal' | 'hard';
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'expert';
 
 /** Primary stats — set by the player at character creation. */
 export interface CharacterStats {
@@ -193,6 +193,7 @@ const DIFFICULTY_MOD: Record<Difficulty, number> = {
   easy: 10,
   normal: 0,
   hard: -10,
+  expert: -10,
 };
 
 // ── Derived stat formulas ─────────────────────────────────────────────────────
@@ -443,12 +444,14 @@ export const STAT_DESCRIPTIONS: Record<StatName, string> = {
 
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   easy: 'Easy',
-  normal: 'Normal',
-  hard: 'Hard',
+  normal: 'Intermediate',
+  hard: 'Difficult',
+  expert: 'Experts Only',
 };
 
 export const DIFFICULTY_DESCRIPTIONS: Record<Difficulty, string> = {
-  easy: 'More forgiving — derived stats are boosted',
-  normal: 'Balanced — the intended experience',
-  hard: 'Punishing — derived stats are reduced (default in the original game)',
+  easy: 'Fewer traps, more treasure, weaker monsters',
+  normal: 'The default experience',
+  hard: 'More traps, less treasure, tougher monsters',
+  expert: 'Maximum traps, minimal treasure, strongest monsters',
 };
