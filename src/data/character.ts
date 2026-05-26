@@ -323,25 +323,44 @@ export function createCharacter(
  * The level 30 cap requires ~10-27 billion XP depending on difficulty,
  * indicating roughly doubling per level.
  *
- * Difficulty multipliers (approximate from the level 30 values):
- *   Easy: ~1.8x   Normal: ~1.9x   Hard: ~2.0x   Expert: ~2.05x
+ * EXE-derived XP threshold formula (FUN_seg12_0x12A4, see
+ * docs/re-findings/REPORT_PHASE15_XP_THRESHOLD.md):
+ *
+ *   p = (difficulty - 1) * DAT_0x00AE      ; DAT_00AE = 10 in shipped binary
+ *   base = 30 + p
+ *   threshold(currentLevel) = base * 2^currentLevel - (base + 10)
+ *
+ *   where currentLevel = targetLevel - 1, since the EXE reads the player's
+ *   CURRENT level when checking whether to grant the next.
+ *
+ * Per-difficulty numeric examples (XP to reach the target level):
+ *
+ *   target  Easy   Inter   Diff   Experts
+ *   ─────────────────────────────────────
+ *     2       10      20      30       40
+ *     3       50      80     110      140
+ *     5      290     440     590      740
+ *    10    20450   30680   40910    51140
+ *
+ * The reimpl exposes 'easy' | 'normal' | 'hard' which we map to EXE
+ * difficulty indices 0/1/2 (Easy/Intermediate/Difficult).  There's no
+ * 'experts only' reimpl tier yet.
  */
-const DIFFICULTY_XP_MULT: Record<string, number> = {
-  easy: 1.8,
-  normal: 1.9,
-  hard: 2.0,
+const DIFFICULTY_TO_EXE_INDEX: Record<string, number> = {
+  easy: 0,
+  normal: 1,
+  hard: 2,
 };
 
-/** XP needed to reach the given level at the given difficulty. */
+/** XP needed to reach the given level at the given difficulty.
+ * Matches FUN_seg12_0x12A4 in CASTLE1.EXE. */
 export function xpForLevel(level: number, difficulty: Difficulty = 'normal'): number {
   if (level <= 1) return 0;
-  if (level === 2) return 20;
-  const mult = DIFFICULTY_XP_MULT[difficulty] ?? 2.0;
-  let xp = 20;
-  for (let i = 3; i <= level; i++) {
-    xp = Math.floor(xp * mult);
-  }
-  return xp;
+  const exeDiff = DIFFICULTY_TO_EXE_INDEX[difficulty] ?? 1;
+  const p = (exeDiff - 1) * 10; // -10 / 0 / 10 for easy / normal / hard
+  const base = 30 + p;
+  const currentLevel = level - 1;
+  return base * Math.pow(2, currentLevel) - (base + 10);
 }
 
 /** Check if the character has enough XP to level up. */
