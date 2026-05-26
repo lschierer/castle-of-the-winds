@@ -31,6 +31,7 @@ import {
   type ShopReputation,
 } from '../game/shop.ts';
 import { saveCharacter } from '../game/save.ts';
+import { getItemIcon } from '../game/sprites.ts';
 
 // ── Event detail types ────────────────────────────────────────────────────────
 
@@ -165,6 +166,15 @@ export class ShopScreen extends LitElement {
     .item-row:hover { background: var(--game-bg-surface-hover); }
     .item-row.selected { background: var(--game-bg-elevated); color: var(--game-text-highlight); }
 
+    .item-icon {
+      width: 20px;
+      height: 20px;
+      image-rendering: pixelated;
+      object-fit: contain;
+      flex-shrink: 0;
+      opacity: 0.85;
+    }
+
     .item-name { flex: 1; }
     .item-price {
       color: var(--game-text-price);
@@ -292,6 +302,30 @@ export class ShopScreen extends LitElement {
   }
 
   /** Remove an item from the character's containers by source location. */
+  /** Replace one item in-place (used when an item is identified without being sold). */
+  private replaceInContainers(character: Character, source: ItemSource, newItem: Item): Character {
+    if (source.loc === 'pack') {
+      const pack = character.pack;
+      if (!pack?.slots) return character;
+      const newSlots = pack.slots.map((slot, si) => {
+        if (si !== source.slotIndex) return slot;
+        return {
+          ...slot,
+          items: slot.items.map((it, ii) => ii === source.itemIndex ? newItem : it),
+        };
+      });
+      return { ...character, pack: { ...pack, slots: newSlots } };
+    } else {
+      const belt = character.belt;
+      if (!belt?.slots) return character;
+      const newSlots = belt.slots.map((slot, si) => {
+        if (si !== source.slotIndex) return slot;
+        return { ...slot, items: slot.items.map((it) => it.id === newItem.id ? newItem : it) };
+      });
+      return { ...character, belt: { ...belt, slots: newSlots } };
+    }
+  }
+
   private removeFromContainers(character: Character, source: ItemSource): Character {
     if (source.loc === 'pack') {
       const pack = character.pack;
@@ -386,8 +420,28 @@ export class ShopScreen extends LitElement {
     const rep = this.reputation;
     const result = executeSell(pi.item, shop, rep);
 
-    if (!result.accepted || result.price === undefined || !result.updatedReputation || !result.identifiedItem) {
+    if (!result.accepted) {
       this.feedbackMsg = result.reason ?? 'Cannot sell that here.';
+      // If the shopkeeper discovered a curse during appraisal, update the item
+      // in inventory so the player can see it's now identified as cursed.
+      if (result.revealedCursed && result.identifiedItem) {
+        const updatedChar = this.replaceInContainers(this.character, pi.source, result.identifiedItem);
+        saveCharacter(updatedChar);
+        this.dispatchEvent(new CustomEvent<ShopSellDetail>('shop-sell', {
+          bubbles: true,
+          composed: true,
+          detail: {
+            updatedCharacter: updatedChar,
+            updatedInventory: this.shopState.inventory,
+            updatedReputation: result.updatedReputation ?? this.reputation,
+            message: this.feedbackMsg,
+          },
+        }));
+      }
+      return;
+    }
+    if (result.price === undefined || !result.updatedReputation || !result.identifiedItem) {
+      this.feedbackMsg = 'Cannot sell that here.';
       return;
     }
 
@@ -447,6 +501,7 @@ export class ShopScreen extends LitElement {
           this.feedbackMsg = '';
         }}
       >
+        <img class="item-icon" src="${getItemIcon(entry.item)}" alt="">
         <span class="item-name">${name}${ench > 0 ? html`<span class="ench-tag">+${ench}</span>` : ''}</span>
         <span class="item-price">${this.formatCp(entry.buyPrice)}</span>
       </div>
@@ -471,11 +526,14 @@ export class ShopScreen extends LitElement {
           this.feedbackMsg = '';
         }}
       >
+        <img class="item-icon" src="${getItemIcon(item)}" alt="">
         <span class="item-name">
           ${displayName(item)}
-          ${item.cursed  ? html`<span class="cursed-tag">(cursed)</span>` : ''}
-          ${item.identified && !item.cursed ? html`<span class="cursed-tag">(uncursed)</span>` : ''}
-          ${!item.identified ? html`<span class="cursed-tag">(?)</span>` : ''}
+          ${!item.identified
+            ? html`<span class="cursed-tag">(?)</span>`
+            : item.cursed
+              ? html`<span class="cursed-tag">(cursed)</span>`
+              : html`<span class="cursed-tag">(uncursed)</span>`}
         </span>
         ${sellPrice !== null
           ? html`<span class="item-price sell">${this.formatCp(sellPrice)}</span>`

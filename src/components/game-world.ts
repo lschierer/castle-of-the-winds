@@ -41,12 +41,13 @@ import { getTileStyle, monsterSpriteSrc, getItemIcon } from '../game/sprites.ts'
 import { spellById } from '../game/spells.ts';
 import { LEARNABLE_SPELLS } from '../game/spells.ts';
 import {
-  SHOPS, type ShopDef, type ShopInventory,
-  generateShopInventory, buyItem, sellItem, buyPrice, sellPrice, junkYardPrice,
-  sageIdentify, identifyFee, templeHeal, templeHealCost, templeUncurse, templeUncurseCost,
-  resetVisitPrices,
-  purseTotalCopper, bankTotalCopper, bankDeposit, bankWithdraw,
+  SHOPS, type ShopDef,
+  resetVisitPrices, makeShopState, type ShopState,
 } from '../game/shop.ts';
+import { type ShopBuyDetail, type ShopSellDetail } from './shop-screen.ts';
+import type { BuildingActionDetail } from './building-overlay.ts';
+import './shop-screen.ts';
+import './building-overlay.ts';
 import { coinsIn, type Item, addToContainer, removeFromContainer, equipItem, displayName, addCoins, sortPackContents, containerWeight, containerBulk, PACK_SPECS, reportedUnitWeight } from '../game/items.ts';
 import {
   type MonsterInstance,
@@ -87,8 +88,7 @@ type DragSrc =
   | { from: 'pack'; item: Item }
   | { from: 'sub-container'; containerId: string; item: Item }
   | { from: 'belt'; slotIndex: number; item: Item }
-  | { from: 'ground'; item: Item }
-  | { from: 'shop'; item: Item; inv: ShopInventory };
+  | { from: 'ground'; item: Item };
 
 @customElement('game-world')
 export class GameWorld extends LitElement {
@@ -155,7 +155,6 @@ export class GameWorld extends LitElement {
   @state() private dead: { killedBy: string } | null = null;
 
   /** Pending sell confirmation — click item once to select, again to confirm. */
-  @state() private pendingSellItem: Item | null = null;
 
   /** Map overview mode — zoomed out to show entire level. */
   @state() private mapMode = false;
@@ -176,7 +175,7 @@ export class GameWorld extends LitElement {
   private storyLog: string[] = [];
 
   /** Shop inventories, keyed by shop name. Generated on first visit. */
-  private shopInventories = new Map<string, ShopInventory>();
+  private shopStates = new Map<string, ShopState>();
 
   /** Generated dungeon floors for the current stage, keyed by level number. */
   private dungeonFloors = new Map<number, DungeonFloor>();
@@ -711,7 +710,7 @@ export class GameWorld extends LitElement {
           this.pushMessage('The hamlet lies in ruins. There is nothing left for you here.');
         }
         resetVisitPrices();
-        this.shopInventories.clear();
+        this.shopStates.clear();
       }
     }
     this.locationName = '';
@@ -1174,323 +1173,88 @@ export class GameWorld extends LitElement {
     const c = this.character;
     if (!b || !c) return html``;
 
-    const shop = SHOPS[b.name];
-    if (!shop) {
-      // Non-shop building (Barg's House, Farm House)
-      return html`
-        <div class="overlay" @click=${() => { this.overlay = 'none'; this.activeBuilding = null; }}>
-          <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
-            <p class="overlay-title">${b.name}</p>
-            <div class="divider"></div>
-            <p class="building-services">${b.description}</p>
-            <span class="overlay-close" @click=${() => { this.overlay = 'none'; this.activeBuilding = null; }}>[ Esc to leave ]</span>
-          </div>
-        </div>`;
-    }
-
-    // Get or generate shop inventory
-    if (!this.shopInventories.has(b.name)) {
-      this.shopInventories.set(b.name, generateShopInventory(shop));
-    }
-    const inv = this.shopInventories.get(b.name) ?? generateShopInventory(shop);
-    const packItems: Item[] = c.pack?.slots?.flatMap((s) => s.items) ?? [];
+    const shop = SHOPS[b.name] ?? null;
     const close = () => { this.overlay = 'none'; this.activeBuilding = null; };
-
-    if (shop.type === 'sage') return this.renderSageShop(b.name, c, packItems, close);
-    if (shop.type === 'temple') return this.renderTempleShop(b.name, c, close);
-    if (shop.type === 'junkyard') return this.renderJunkYard(b.name, c, packItems, close);
-    if (shop.type === 'bank') return this.renderBank(b.name, shop, c, close);
-    return this.renderTradeShop(b.name, shop, inv, c, packItems, close);
-  }
-
-  private renderTradeShop(name: string, shop: ShopDef, inv: ShopInventory, c: Character, packItems: Item[], close: () => void): TemplateResult {
+    const packItems: Item[] = c.pack?.slots?.flatMap((s) => s.items) ?? [];
     const groundItems = getTileAt(this.map, this.pos.x, this.pos.y).items;
-    const sellable = [...packItems, ...groundItems].filter((it) =>
-      it.kind !== 'coin' && (shop.buys.length === 0 || shop.buys.includes(it.kind)),
-    );
-    return html`
-      <div class="overlay" @click=${close}>
-        <div class="overlay-box inv-screen" @click=${(e: Event) => { e.stopPropagation(); }}>
-          <p class="overlay-title">${name}</p>
-          <div class="divider"></div>
-          <div class="inv-container-block">
-            <div class="inv-container-label">For Sale — drag to "Sell Items" to buy</div>
-            <div class="shop-item-list"
-              @dragover=${this.onDropZoneDragOver.bind(this)}
-              @dragleave=${this.onDropZoneDragLeave.bind(this)}
-              @drop=${(e: DragEvent) => { this.onDropShopSell(shop, e); }}
-            >
-              ${inv.items.length === 0 ? html`<div class="inv-empty">Nothing for sale.</div>` :
-                inv.items.map((it) => html`
-                  <div class="inv-item"
-                    style="cursor:grab"
-                    draggable="true"
-                    @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'shop', item: it, inv }, e); }}
-                    @dragend=${this.onItemDragEnd.bind(this)}
-                    @click=${() => { this.shopBuy(inv, it.id); }}
-                  >
-                    <img class="inv-item-icon" src="${getItemIcon(it)}" alt="">
-                    <span>${displayName(it)} — <span style="color:var(--game-text-accent)">${buyPrice(it)} cp</span></span>
-                  </div>`)}
-            </div>
-          </div>
-          <div class="inv-container-block">
-            <div class="inv-container-label">Sell Items — drag to "For Sale" to sell</div>
-            <div class="shop-item-list"
-              @dragover=${this.onDropZoneDragOver.bind(this)}
-              @dragleave=${this.onDropZoneDragLeave.bind(this)}
-              @drop=${(e: DragEvent) => { this.onDropShopBuy(e); }}
-            >
-              ${sellable.length === 0 ? html`<div class="inv-empty">Nothing to sell.</div>` :
-                sellable.map((it) => {
-                  const price = sellPrice(it);
-                  const canSell = price > 0;
-                  return html`
-                    <div class="inv-item ${canSell ? '' : 'no-mana'}"
-                      style="${canSell ? 'cursor:pointer' : 'opacity:0.5'}"
-                      draggable="${canSell ? 'true' : 'false'}"
-                      @dragstart=${canSell ? (e: DragEvent) => {
-                        const fromGround = groundItems.some((g) => g.id === it.id);
-                        this.onItemDragStart(fromGround
-                          ? { from: 'ground', item: it }
-                          : { from: 'pack', item: it }, e);
-                      } : undefined}
-                      @dragend=${this.onItemDragEnd.bind(this)}
-                      @click=${canSell ? () => { this.shopSellAny(it, shop); } : undefined}
-                    >
-                      <img class="inv-item-icon" src="${getItemIcon(it)}" alt="">
-                      <span>${displayName(it)} — <span style="color:var(--game-status-price)">${price} cp</span></span>
-                    </div>`;
-                })}
-            </div>
-          </div>
-          <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
-        </div>
-      </div>`;
+
+    // Trade shops → <shop-screen> component
+    if (shop?.type === 'trade') {
+      if (!this.shopStates.has(b.name)) {
+        this.shopStates.set(b.name, makeShopState(shop));
+      }
+      const shopState = this.shopStates.get(b.name)!;
+      return html`<shop-screen
+        .shopState=${shopState}
+        .character=${c}
+        @shop-buy=${(e: CustomEvent<ShopBuyDetail>) => { this.onShopBuy(e); }}
+        @shop-sell=${(e: CustomEvent<ShopSellDetail>) => { this.onShopSell(e); }}
+        @shop-closed=${close}
+      ></shop-screen>`;
+    }
+
+    // All other buildings (plain, sage, temple, bank, junkyard) → <building-overlay>
+    return html`<building-overlay
+      .building=${b}
+      .character=${c}
+      .shopDef=${shop}
+      .packItems=${packItems}
+      .groundItems=${groundItems}
+      @building-closed=${close}
+      @building-action=${(e: CustomEvent<BuildingActionDetail>) => { this.onBuildingAction(e); }}
+    ></building-overlay>`;
   }
 
-  private renderSageShop(name: string, c: Character, packItems: Item[], close: () => void): TemplateResult {
-    const unidentified = packItems.filter((it) => !it.identified);
-    return html`
-      <div class="overlay" @click=${close}>
-        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
-          <p class="overlay-title">${name}</p>
-          <p class="building-services">Identify an item for ${identifyFee()} cp.</p>
-          <div class="divider"></div>
-          ${unidentified.length === 0 ? html`<div class="inv-empty">No unidentified items.</div>` :
-            unidentified.map((it) => html`
-              <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopIdentify(it); }}>
-                ${it.name} — <span style="color:var(--game-text-accent)">${identifyFee()} cp</span>
-              </div>`)}
-          <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
-        </div>
-      </div>`;
+  // ── Building / shop event handlers ───────────────────────────────────────
+
+  /** shop-screen fired a successful purchase. */
+  private onShopBuy(e: CustomEvent<ShopBuyDetail>): void {
+    this.character = e.detail.updatedCharacter;
+    const b = this.activeBuilding;
+    if (b) {
+      const state = this.shopStates.get(b.name);
+      if (state) this.shopStates.set(b.name, { ...state, inventory: e.detail.updatedInventory });
+    }
+    this.autoSave();
   }
 
-  private renderTempleShop(name: string, c: Character, close: () => void): TemplateResult {
-    const healCost = templeHealCost(c);
-    const cursedItems = [c.weapon, c.armor, c.helm, c.shield, c.boots, c.cloak, c.bracers, c.gauntlets, c.ringLeft, c.ringRight, c.amulet]
-      .filter((it): it is Item => it !== null && it.cursed);
-    return html`
-      <div class="overlay" @click=${close}>
-        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
-          <p class="overlay-title">${name}</p>
-          <div class="divider"></div>
-          <div class="inv-item ${healCost > 0 ? '' : 'no-mana'}" style="${healCost > 0 ? 'cursor:pointer' : 'opacity:0.5'}" @click=${healCost > 0 ? () => { this.shopHeal(); } : undefined}>
-            Heal wounds — <span style="color:var(--game-text-accent)">${healCost > 0 ? `${healCost} cp` : 'Fully healed'}</span>
-          </div>
-          ${cursedItems.length > 0 ? cursedItems.map((it) => html`
-            <div class="inv-item" style="cursor:pointer" @click=${() => { this.shopUncurse(it); }}>
-              Remove curse: ${displayName(it)} — <span style="color:var(--game-text-accent)">${templeUncurseCost()} cp</span>
-            </div>`) : html`<div class="inv-empty">No cursed equipment.</div>`}
-          <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
-        </div>
-      </div>`;
+  /** shop-screen fired a successful sale. */
+  private onShopSell(e: CustomEvent<ShopSellDetail>): void {
+    this.character = e.detail.updatedCharacter;
+    this.pushMessage(e.detail.message);
+    this.autoSave();
   }
 
   /**
-   * Bank UI: deposit purse coins, withdraw to purse, view balance.
-   * Help topic 011: "Copper: ... plus any money you have in the bank";
-   * help topic 001 (C2): a bank "where you can leave your money for
-   * safe keeping".  Lines of credit transfer between bank locations.
+   * building-overlay completed a transaction (sage identify, temple heal/uncurse,
+   * bank deposit/withdraw, or junkyard sell).
+   * The character object has already been mutated in place by the mutable shop
+   * functions; we just need to push the message, remove any sold item from the
+   * world, and save.
    */
-  private renderBank(name: string, shop: ShopDef, c: Character, close: () => void): TemplateResult {
-    const purseCp = purseTotalCopper(c.purse);
-    const bankCp  = bankTotalCopper(c);
-    const onDeposit = (amountStr: string): void => {
-      const n = Math.floor(Number(amountStr));
-      if (!Number.isFinite(n) || n <= 0) { this.pushMessage('Enter a positive amount.'); return; }
-      if (bankDeposit(c, shop.id, n)) {
-        this.pushMessage(`Deposited ${n.toLocaleString()} cp.`);
-        this.autoSave();
-        this.requestUpdate();
-      } else {
-        this.pushMessage(`Not enough in your purse — have ${purseCp.toLocaleString()} cp.`);
-      }
-    };
-    const onWithdraw = (amountStr: string): void => {
-      const n = Math.floor(Number(amountStr));
-      if (!Number.isFinite(n) || n <= 0) { this.pushMessage('Enter a positive amount.'); return; }
-      if (bankWithdraw(c, shop.id, n)) {
-        this.pushMessage(`Withdrew ${n.toLocaleString()} cp.`);
-        this.autoSave();
-        this.requestUpdate();
-      } else {
-        this.pushMessage(`Not enough on deposit — have ${bankCp.toLocaleString()} cp.`);
-      }
-    };
-    return html`
-      <div class="overlay" @click=${close}>
-        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
-          <p class="overlay-title">${name}</p>
-          <p class="building-services">Safe-keeping for your coin.  Balances transfer between branches.</p>
-          <div class="divider"></div>
-          <div style="font-size:0.8rem;color:var(--game-text-body);margin-bottom:0.6rem">
-            <div>On hand (purse): <span style="color:var(--game-text-accent)">${purseCp.toLocaleString()} cp</span></div>
-            <div>On deposit (all banks): <span style="color:var(--game-text-accent)">${bankCp.toLocaleString()} cp</span></div>
-          </div>
-          <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.4rem">
-            <input id="bank-deposit" type="number" min="1" placeholder="amount" style="width:6rem;background:var(--game-bg-surface);border:1px solid var(--game-border-default);color:var(--game-text-body);padding:0.2rem 0.3rem">
-            <button class="action-menu-btn" @click=${(e: Event) => {
-              const root = (e.currentTarget as HTMLElement).getRootNode() as ShadowRoot | Document;
-              const input = root.querySelector<HTMLInputElement>('#bank-deposit');
-              if (input) onDeposit(input.value);
-            }}>Deposit</button>
-          </div>
-          <div style="display:flex;gap:0.5rem;align-items:center">
-            <input id="bank-withdraw" type="number" min="1" placeholder="amount" style="width:6rem;background:var(--game-bg-surface);border:1px solid var(--game-border-default);color:var(--game-text-body);padding:0.2rem 0.3rem">
-            <button class="action-menu-btn" @click=${(e: Event) => {
-              const root = (e.currentTarget as HTMLElement).getRootNode() as ShadowRoot | Document;
-              const input = root.querySelector<HTMLInputElement>('#bank-withdraw');
-              if (input) onWithdraw(input.value);
-            }}>Withdraw</button>
-          </div>
-          <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
-        </div>
-      </div>`;
-  }
-
-  private renderJunkYard(name: string, c: Character, packItems: Item[], close: () => void): TemplateResult {
-    const shop = SHOPS['Junk Yard'] ?? { id: 'Junk Yard', name: 'Junk Yard', townTier: 'hamlet' as const, stockLevel: 1, buys: [], sells: [], type: 'junkyard' as const };
-    const groundItems = getTileAt(this.map, this.pos.x, this.pos.y).items;
-    const sellable = [...packItems, ...groundItems].filter((it) => it.kind !== 'coin');
-    // If there's a replacement pack in inventory, offer to sell the equipped one too
-    const hasReplacementPack = packItems.some((it) => it.kind === 'container' && it.name.includes('Pack'));
-    if (c.pack && hasReplacementPack) {
-      sellable.unshift(c.pack); // add equipped pack at top of list
-    }
-    return html`
-      <div class="overlay" @click=${close}>
-        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
-          <p class="overlay-title">${name}</p>
-          <p class="building-services">We buy anything. 25 cp flat.</p>
-          <div class="divider"></div>
-          <div class="pack-items"
-            @dragover=${this.onDropZoneDragOver.bind(this)}
-            @dragleave=${this.onDropZoneDragLeave.bind(this)}
-            @drop=${(e: DragEvent) => { this.onDropShopSell(shop, e); }}
-          >
-            ${sellable.length === 0 ? html`<div class="inv-empty">Nothing to sell.</div>` :
-              sellable.map((it) => html`
-                <div class="inv-item"
-                  style="cursor:pointer;display:flex;align-items:center;gap:4px"
-                  draggable="true"
-                  @dragstart=${(e: DragEvent) => {
-                    const fromGround = groundItems.some((g) => g.id === it.id);
-                    this.onItemDragStart(fromGround
-                      ? { from: 'ground', item: it }
-                      : { from: 'pack', item: it }, e);
-                  }}
-                  @dragend=${this.onItemDragEnd.bind(this)}
-                  @click=${() => { this.shopSellAny(it, shop); }}
-                >
-                  <img class="inv-item-icon" src="${getItemIcon(it)}" alt="">
-                  <span>${displayName(it)} — <span style="color:var(--game-status-price)">${junkYardPrice(it)} cp</span></span>
-                </div>`)}
-          </div>
-          <span class="overlay-close" @click=${close}>[ Esc to leave ]</span>
-        </div>
-      </div>`;
-  }
-
-  // ── Shop action handlers ──────────────────────────────────────────────────
-
-  private shopBuy(inv: ShopInventory, itemId: string): void {
-    const c = this.character;
-    if (!c) return;
-    const result = buyItem(c, inv, itemId);
-    this.pushMessage(result.message);
-    if (result.success) this.autoSave();
-    this.requestUpdate();
-  }
-
-  private shopSellAny(item: Item, shop: ShopDef): void {
-    const c = this.character;
-    if (!c) return;
-
-    // First click: select for confirmation
-    if (this.pendingSellItem?.id !== item.id) {
-      this.pendingSellItem = item;
-      const price = shop.type === 'junkyard' ? junkYardPrice(item) : sellPrice(item);
-      this.pushMessage(`Sell ${displayName(item)} for ${price} cp? Click again to confirm.`);
-      this.requestUpdate();
-      return;
-    }
-
-    // Second click: execute sale
-    this.pendingSellItem = null;
-    const result = sellItem(c, item, shop);
-    if (result.success) {
-      if (c.pack) {
+  private onBuildingAction(e: CustomEvent<BuildingActionDetail>): void {
+    const { message, soldItemId } = e.detail;
+    this.pushMessage(message);
+    if (soldItemId) {
+      // Remove the sold item from pack, belt, or ground tile
+      const c = this.character;
+      if (c?.pack) {
         for (const slot of c.pack.slots ?? []) {
-          const idx = slot.items.findIndex((i) => i.id === item.id);
+          const idx = slot.items.findIndex((i) => i.id === soldItemId);
           if (idx !== -1) { slot.items.splice(idx, 1); break; }
         }
       }
-      if (c.belt) {
+      if (c?.belt) {
         for (const slot of c.belt.slots ?? []) {
-          const idx = slot.items.findIndex((i) => i.id === item.id);
+          const idx = slot.items.findIndex((i) => i.id === soldItemId);
           if (idx !== -1) { slot.items.splice(idx, 1); break; }
         }
       }
       const tile = getTileAt(this.map, this.pos.x, this.pos.y);
-      const gIdx = tile.items.findIndex((i) => i.id === item.id);
+      const gIdx = tile.items.findIndex((i) => i.id === soldItemId);
       if (gIdx !== -1) tile.items.splice(gIdx, 1);
-      this.autoSave();
     }
-    this.pushMessage(result.message);
-    this.requestUpdate();
-  }
-
-  private shopSell(item: Item, shop: ShopDef): void {
-    // Delegate to shopSellAny which handles confirmation
-    this.shopSellAny(item, shop);
-  }
-
-  private shopIdentify(item: Item): void {
-    const c = this.character;
-    if (!c) return;
-    const result = sageIdentify(c, item);
-    this.pushMessage(result.message);
-    if (result.success) this.autoSave();
-    this.requestUpdate();
-  }
-
-  private shopHeal(): void {
-    const c = this.character;
-    if (!c) return;
-    const result = templeHeal(c);
-    this.pushMessage(result.message);
-    if (result.success) this.autoSave();
-    this.requestUpdate();
-  }
-
-  private shopUncurse(item: Item): void {
-    const c = this.character;
-    if (!c) return;
-    const result = templeUncurse(c, item);
-    this.pushMessage(result.message);
-    if (result.success) this.autoSave();
+    this.autoSave();
     this.requestUpdate();
   }
 
@@ -2974,7 +2738,7 @@ export class GameWorld extends LitElement {
     e.preventDefault();
     const src = this.dragSrc;
     const c = this.character;
-    if (!src || !c || src.from === 'shop') return;
+    if (!src || !c) return;
 
     // Validate kind compatibility per slot.
     // Some slots accept multiple item kinds (free hand = anything, belt =
@@ -3074,7 +2838,7 @@ export class GameWorld extends LitElement {
     e.preventDefault();
     e.stopPropagation();
     const src = this.dragSrc;
-    if (!src || src.from === 'shop') { this.dragSrc = null; return; }
+    if (!src) { this.dragSrc = null; return; }
     if (src.item.id === containerId) {
       this.pushMessage('A container cannot hold itself.');
       this.dragSrc = null;
@@ -3113,7 +2877,6 @@ export class GameWorld extends LitElement {
     const c = this.character;
     if (!src || !c) return;
     if (src.from === 'pack') { this.dragSrc = null; return; }
-    if (src.from === 'shop') { this.onDropShopBuy(e); return; }
     if (!c.pack) { this.pushMessage('No pack equipped.'); this.dragSrc = null; return; }
 
     if (!this.removeDragSrc()) { this.dragSrc = null; return; }
@@ -3136,7 +2899,6 @@ export class GameWorld extends LitElement {
     const src = this.dragSrc;
     const c = this.character;
     if (!src || !c || !c.belt?.slots) return;
-    if (src.from === 'shop') { this.onDropShopBuy(e); return; }
 
     const slot = c.belt.slots[slotIndex];
     if (!slot) { this.dragSrc = null; return; }
@@ -3165,50 +2927,13 @@ export class GameWorld extends LitElement {
     this.requestUpdate();
   }
 
-  /** Drag player item to shop → sell it. */
-  private onDropShopSell(shop: ShopDef, e: DragEvent): void {
-    (e.currentTarget as HTMLElement).classList.remove('drag-over');
-    e.preventDefault();
-    const src = this.dragSrc;
-    const c = this.character;
-    if (!src || !c || src.from === 'shop') { this.dragSrc = null; return; }
-    if (src.from === 'equip' && src.item.cursed && src.item.identified) {
-      this.pushMessage(`The ${displayName(src.item)} is cursed and cannot be removed!`);
-      this.dragSrc = null;
-      return;
-    }
-
-    if (!this.removeDragSrc()) { this.dragSrc = null; return; }
-
-    const result = sellItem(c, src.item, shop);
-    this.pushMessage(result.message);
-    if (result.success) this.autoSave();
-    this.dragSrc = null;
-    this.requestUpdate();
-  }
-
-  /** Drag shop item → buy it (put in pack). */
-  private onDropShopBuy(e: DragEvent): void {
-    (e.currentTarget as HTMLElement).classList.remove('drag-over');
-    e.preventDefault();
-    const src = this.dragSrc;
-    const c = this.character;
-    if (!src || !c || src.from !== 'shop') { this.dragSrc = null; return; }
-
-    const result = buyItem(c, src.inv, src.item.id);
-    this.pushMessage(result.message);
-    if (result.success) this.autoSave();
-    this.dragSrc = null;
-    this.requestUpdate();
-  }
-
   /** Drag item to ground (drop it). */
   private onDropGround(e: DragEvent): void {
     (e.currentTarget as HTMLElement).classList.remove('drag-over');
     e.preventDefault();
     const src = this.dragSrc;
     const c = this.character;
-    if (!src || !c || src.from === 'ground' || src.from === 'shop') { this.dragSrc = null; return; }
+    if (!src || !c || src.from === 'ground') { this.dragSrc = null; return; }
     if (src.from === 'equip' && src.item.cursed && src.item.identified) {
       this.pushMessage(`The ${displayName(src.item)} is cursed!`);
       this.dragSrc = null;

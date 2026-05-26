@@ -328,23 +328,27 @@ export function executeSell(
   const revealedCursed = !item.identified && identifiedItem.cursed;
 
   if (shop.type !== 'junkyard') {
-    if (identifiedItem.cursed) {
-      const updatedReputation: ShopReputation = { ...rep, bannedFromSelling: true };
-      return { accepted: false, reason: 'The shop refuses cursed items.', revealedCursed, updatedReputation };
-    }
     if (shop.buys.length > 0 && !shop.buys.includes(item.kind)) {
       return { accepted: false, reason: `This shop doesn't buy ${item.kind} items.` };
+    }
+    // Refuse cursed items.  The shopkeeper appraises during the transaction so
+    // they can detect curses on unidentified items — but they only ban the player
+    // if the player knowingly tried to pass off a cursed item.
+    if (identifiedItem.cursed) {
+      const updatedReputation = item.identified
+        ? { ...rep, bannedFromSelling: true }   // player knew it was cursed → ban
+        : rep;                                   // player didn't know → no ban
+      const reason = revealedCursed
+        ? 'The shopkeeper examines it carefully. "This is cursed! I won\'t buy this."'
+        : 'The shop refuses cursed items.';
+      return { accepted: false, reason, revealedCursed, updatedReputation };
     }
   }
 
   const price = shop.type === 'junkyard' ? junkYardPrice(item) : sellPrice(identifiedItem);
   if (price <= 0) return { accepted: false, reason: 'This item has no value here.' };
 
-  const updatedReputation = revealedCursed
-    ? { ...rep, bannedFromSelling: true }
-    : rep;
-
-  return { accepted: true, price, updatedReputation, identifiedItem, revealedCursed };
+  return { accepted: true, price, updatedReputation: rep, identifiedItem, revealedCursed };
 }
 
 /** Build a ShopState from a ShopDef. */
