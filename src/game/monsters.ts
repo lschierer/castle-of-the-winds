@@ -1140,16 +1140,25 @@ export function rollMonsterLoot(spec: MonsterSpec, dungeonLevel: number): Item[]
   return results;
 }
 
-/** Health description bands — 6 equal segments of base HP. */
+/**
+ * Health description bands.  Matches the six string entries decoded from
+ * CASTLE1.EXE (seg13 strings): Uninjured / Barely scratched / Slightly injured
+ * / Injured / Heavily injured / Critically injured.
+ *
+ * "Uninjured" is reserved for full HP; any damage at all moves to "barely
+ * scratched", since players otherwise see "for 5 damage" followed by
+ * "uninjured" for small-but-real hits on high-HP monsters.  The remaining
+ * five bands split the wounded range evenly.
+ */
 export function healthDescription(currentHp: number, maxHp: number): string {
+  if (currentHp <= 0)         return 'defeated';
+  if (currentHp >= maxHp)     return 'uninjured';
   const pct = currentHp / maxHp;
-  if (pct <= 0)    return 'defeated';
-  if (pct < 1/6)  return 'critically injured';
-  if (pct < 2/6)  return 'heavily injured';
-  if (pct < 3/6)  return 'injured';
-  if (pct < 4/6)  return 'slightly injured';
-  if (pct < 5/6)  return 'barely scratched';
-  return 'uninjured';
+  if (pct < 1/5)  return 'critically injured';
+  if (pct < 2/5)  return 'heavily injured';
+  if (pct < 3/5)  return 'injured';
+  if (pct < 4/5)  return 'slightly injured';
+  return 'barely scratched';
 }
 
 // ── Binary-data overrides ────────────────────────────────────────────────────
