@@ -1,7 +1,7 @@
 /**
  * Procedural dungeon generator using rot.js.
  *
- * Uses the rot.js Digger algorithm for room-and-corridor generation,
+ * Uses the rot.js Irregular algorithm for room-and-corridor generation,
  * then converts to our TileMap format with monsters and loot.
  *
  * Dungeon structure (Castle of the Winds canon):
@@ -45,7 +45,7 @@ export interface DungeonFloor {
   stairsDown2?: Vec2;
 }
 
-type RotRoom = ReturnType<InstanceType<typeof RotMap.Digger>['getRooms']>[number];
+type RotRoom = ReturnType<InstanceType<typeof RotMap.Irregular>['getRooms']>[number];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -101,16 +101,19 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   const w = opts.width  ?? Math.min(64, 40 + dungeonLevel * 3);
   const h = opts.height ?? Math.min(64, 34 + dungeonLevel * 3);
 
-  // Generate using rot.js Digger
-  const digger = new RotMap.Digger(w, h, {
+  // Generate using rot.js Irregular (CotW-style: irregular rooms + diagonal corridors)
+  const generator = new RotMap.Irregular(w, h, {
+    roomCount: [5, Math.min(12, 6 + Math.floor(dungeonLevel / 2))],
     roomWidth: [4, 9],
     roomHeight: [3, 7],
-    corridorLength: [2, 8],
+    irregularity: 0.4,
+    diagonalChance: 0.3,
+    extraConnections: 2,
     dugPercentage: 0.3 + dungeonLevel * 0.02,
   });
 
   const floorSet = new Set<string>();
-  digger.create((x, y, value) => {
+  generator.create((x, y, value) => {
     if (value === 0) floorSet.add(`${x},${y}`);
   });
 
@@ -158,7 +161,7 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
     }
   }
 
-  const rooms = digger.getRooms();
+  const rooms = generator.getRooms();
 
   // Tag room floor tiles with a numeric roomId (used for fog reveal + sprite selection)
   for (let ri = 0; ri < rooms.length; ri++) {

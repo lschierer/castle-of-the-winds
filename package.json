@@ -20,7 +20,7 @@
     "@tauri-apps/api": "^2.11.0",
     "lit": "^3.3.3",
     "loglevel": "^1.9.2",
-    "rot-js": "^2.2.1",
+    "rot-js": "github:lschierer/rot.js#feature/irregular-dungeon",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
