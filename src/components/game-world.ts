@@ -20,6 +20,7 @@ import { CharacterModel } from '../model/Character.ts';
 import { WorldModel } from '../model/World.ts';
 import './player-inventory.ts';
 import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
+import { gatherContextActions, type ContextAction } from '../game/context-actions.ts';
 import {
   type TileMap,
   type MapId,
@@ -2138,6 +2139,57 @@ export class GameWorld extends LitElement {
     this.requestUpdate();
   }
 
+  private executeContextAction(action: ContextAction): void {
+    if (!this.character) return;
+    if (action.id === 'well-drink') {
+      this.pushMessage('You drink from the well. The water is refreshing.');
+      this.character.heal(5);
+      this.autoSave();
+      this.requestUpdate();
+      return;
+    }
+    if (action.item) {
+      const item = action.item;
+      if (item.name === 'Scrap of Parchment') {
+        this.showNarrative(PARCHMENT_TEXT);
+        this.parchmentRead = true;
+        return;
+      }
+      if (item.kind === 'scroll') {
+        // Use scroll: cast the spell, consume the scroll
+        const spellId = item.charges ? item.name.replace('Scroll of ', '').toLowerCase().replace(/ /g, '_') : undefined;
+        if (spellId) {
+          if (!this.character.removeFromPack(item.id)) this.character.removeFromBelt(item.id);
+          this.pushMessage(`You read the ${displayName(item)}. It crumbles to dust.`);
+          this.tryCastSpell(spellId);
+        }
+        this.autoSave();
+        this.requestUpdate();
+        return;
+      }
+      if (item.kind === 'potion') {
+        // Use potion: apply effect, consume
+        if (!this.character.removeFromPack(item.id)) this.character.removeFromBelt(item.id);
+        const name = item.name.toLowerCase();
+        if (name.includes('healing') || name.includes('heal')) {
+          const healed = Math.min(20, this.character.maxHitPoints - this.character.hitPoints);
+          this.character.heal(healed);
+          this.pushMessage(`You drink the ${displayName(item)}. Restored ${healed} HP.`);
+        } else if (name.includes('neutralize poison')) {
+          this.playerStatus = { ...this.playerStatus, poisoned: false, poisonStrength: 0 };
+          this.pushMessage(`You drink the ${displayName(item)}. The poison fades.`);
+        } else if (name.includes('water')) {
+          this.pushMessage(`You drink the ${displayName(item)}. It's just water.`);
+        } else {
+          this.pushMessage(`You drink the ${displayName(item)}.`);
+        }
+        this.autoSave();
+        this.requestUpdate();
+        return;
+      }
+    }
+  }
+
 
   private renderSpellsOverlay(): TemplateResult {
     const c = this.character;
@@ -2334,6 +2386,9 @@ export class GameWorld extends LitElement {
           <button class="spell-bar-btn" @click=${() => { this.doRest(); }}>Rest</button>
           <button class="spell-bar-btn ${this.overlay === 'inventory' ? 'active' : ''}" @click=${() => { this.toggleOverlay('inventory'); }}>Inventory</button>
           <button class="spell-bar-btn ${this.overlay === 'spells' ? 'active' : ''}" @click=${() => { this.toggleOverlay('spells'); }}>Spells</button>
+          ${this.character ? gatherContextActions(this.character, this.map, this.pos).map((a) =>
+            html`<button class="spell-bar-btn" @click=${() => { this.executeContextAction(a); }}>${a.label}</button>`
+          ) : ''}
         </div>
         <div class="spell-slots">
           ${this.quickSpells.map((spellId, i) => {
