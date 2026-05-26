@@ -23,8 +23,10 @@ diagonal. The original game solved this by having each "tile" actually be a
 composition of smaller sprite pieces.
 
 **Key files to study:**
-- `src/components/game-world.ts` — look at `TILE_PX`, `viewportSize()`, and the
-  CSS grid that renders tiles (line ~267: `grid-template-columns: repeat(...)`)
+- `src/components/game-world.ts` — look at `TILE_PX` (line 69) and
+  `viewportSize()` (line 72) which control tile and viewport sizing
+- `src/components/game-world.styles.ts` — the CSS grid that renders tiles
+  (line 179: `grid-template-columns: repeat(var(--vp-cols, 41), 32px)`)
 - `src/game/sprites.ts` — `getTileStyle()` returns CSS background properties per
   tile. Look at how `DIAGONAL_ROAD` and `BINARY_BYTE_SPRITE` work.
 - `src/game/tile-map.ts` — the `Tile` interface and `Direction` type
