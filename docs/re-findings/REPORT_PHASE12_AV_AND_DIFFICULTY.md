@@ -87,19 +87,38 @@ Productive next steps:
 - Or set up a debugger / runtime emulation and read the table after game start
 - Or search the binary for sequences of 49 small (≤0x2700) 16-bit values that could be near-pointers into seg11
 
-## 3. Difficulty — confirmed static
+## 3. Difficulty — what it actually changes
 
-Earlier I hypothesized that harder difficulties (Apprentice / Adept) would set non-zero values for the scaling constants at autodata `0x00A4..0x00B0`. **This is wrong.** The exact 20-byte sequence `05 00 04 00 00 00 00 00 14 00 00 00 00 00 0a 00 00 00 01 00` appears in the binary **only once**, at autodata seg32:0x00A0 — i.e., the saved init state. There is no static copy elsewhere in the binary to serve as a difficulty profile.
+The four difficulty modes in CotW1 are **Easy / Intermediate / Difficult / Experts Only** (Green Circle / Blue Square / Black Diamond / Yellow Caution sign icons; ski-resort-style). The manual at `_re/c1/help/topics/005_create_character.txt` is explicit about what differs:
 
-Conclusion: **the depth-scaling constants are baked-in compile-time values** identical across all difficulty modes. Practice / Beginner / Apprentice / Adept differ via:
+> At harder settings there are more monsters and traps, less treasure and objects to find, and you need more experience to increase in levels of power.
 
-- The XP curve (how much XP per level — the reimpl already models this as `xpForLevel(level, difficulty)`)
-- Save-game behaviour (Practice allows unlimited saves; harder modes restrict)
-- Possibly starting equipment / gold (not yet verified)
+So difficulty affects three things per the manual:
 
-Castle 1 does NOT make monsters hit harder, gain less XP, or wander faster at higher difficulties. Combat math is identical at every difficulty.
+1. **Monster and trap spawn density** (more at higher difficulty)
+2. **Loot density** (less at higher difficulty)
+3. **XP per level curve** (steeper at higher difficulty — the reimpl already models this as `xpForLevel(level, difficulty)`)
 
-This means: for damage-ratio fidelity, the reimpl should NOT have a per-difficulty combat-formula adjustment. The phase-11 helper constants `GAME_DH_A4`, `GAME_DH_A6` etc. can stay at 0 permanently.
+### The depth-scaling block IS static
+
+Earlier I hypothesized that harder difficulties would set non-zero values for the depth-scaling constants at autodata `0x00A4..0x00B0`. **This particular block is wrong as a difficulty-knob candidate.** The exact 20-byte sequence `05 00 04 00 00 00 00 00 14 00 00 00 00 00 0a 00 00 00 01 00` appears in the binary **only once**, at autodata seg32:0x00A0 — i.e., the saved init state. There is no static copy elsewhere in the binary to serve as a difficulty profile *for this block*.
+
+Conclusion: **the depth-scaling constants at `0x00A0..0x00B2` are baked-in compile-time values** identical across all four difficulty modes. The per-difficulty effects in the manual operate via *other* values that I did NOT trace in this phase — likely a separate small table of difficulty-keyed parameters used by:
+
+- The dungeon-gen / monster-population code (controls spawn density)
+- The loot-table roller (controls drop frequency)
+- The XP-needed-per-level table
+
+Locating those tables is a separate hunt.
+
+**Castle 1 does NOT make monsters hit harder or deal more damage at higher difficulties.** Combat math (to-hit thresholds, damage rolls, AV interaction) is identical at every difficulty. The reimpl's phase-11 helper constants `GAME_DH_A4`, `GAME_DH_A6` etc. can stay at 0 permanently.
+
+### Corrections to the earlier version of this report
+
+The previous revision of this section had two errors:
+
+1. It claimed difficulty affects "save-game behaviour" (Practice allows unlimited saves etc.). That was a fabrication — confusion with NetHack/Rogue conventions. The CotW manual says nothing about save restrictions tied to difficulty.
+2. It used the wrong difficulty names (Practice/Beginner/Apprentice/Adept). Those came from somewhere outside the game. The actual names are Easy/Intermediate/Difficult/Experts Only.
 
 ## 4. Updated reimpl recommendations
 
