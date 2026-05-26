@@ -15,6 +15,7 @@ Snapshot of the binary-derived analysis of the original 1993 `CASTLE1.EXE` / `CA
 - **`REPORT_PHASE9_PLAYER.md`** — player runtime memory layout, stat-recompute, equipment effect handler
 - **`REPORT_PHASE10_COMBAT.md`** — monster-attacks-player melee pipeline (to-hit, NdM damage, resist scaling, swarm counter)
 - **`REPORT_PHASE11_PLAYER_COMBAT.md`** — player-attacks-monster pipeline, corrected stat table, equipment-AC hypothesis, difficulty knobs
+- **`REPORT_PHASE12_AV_AND_DIFFICULTY.md`** — Armor Value semantic confirmed via manual; monster spawn pipeline traced; CotW1 difficulty does NOT modify combat math
 
 The Ghidra decompilations themselves are kept out of this repo (they're derivative of the copyrighted binary). They live in the RE workspace; see "How this snapshot relates to the live workspace" below.
 
