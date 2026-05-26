@@ -15,7 +15,8 @@ import { LitElement, html, type TemplateResult } from 'lit';
 import { gameWorldStyles } from './game-world.styles.ts';
 import { customElement, state } from 'lit/decorators.js';
 import type { Character } from '../game/character.ts';
-import { canLevelUp, levelUp, maxSpellLevelAt, hpPerLevel, spPerLevel, xpForLevel } from '../game/character.ts';
+import { maxSpellLevelAt, xpForLevel } from '../game/character.ts';
+import { CharacterModel } from '../model/Character.ts';
 import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
 import {
   type TileMap,
@@ -107,7 +108,7 @@ type DragSrc =
 export class GameWorld extends LitElement {
   static styles = gameWorldStyles;
 
-  @state() private character: Character | null = null;
+  @state() private character: CharacterModel | null = null;
   @state() private map: TileMap = VILLAGE_MAP;
   @state() private pos: Vec2 = { ...VILLAGE_MAP.entryPosition };
   @state() private messages: Array<{ text: string; fresh: boolean }> = [
@@ -251,7 +252,7 @@ export class GameWorld extends LitElement {
       if (floor) floor.monsters = this.monsters;
     }
     return {
-      character: this.character,
+      character: this.character.toJSON(),
       mapId: this.map.id,
       pos: { ...this.pos },
       currentStage: this.currentStage,
@@ -361,7 +362,7 @@ export class GameWorld extends LitElement {
       // Load only the character, ignore any stale game state
       const character = loadCharacter();
       if (!character) { window.location.href = '/'; return; }
-      this.character = character;
+      this.character = CharacterModel.fromJSON(character);
       this.dungeonFloors.clear();
       return;
     }
@@ -369,7 +370,7 @@ export class GameWorld extends LitElement {
     // Try loading full game state first, fall back to character-only
     const state = loadGameState();
     if (state) {
-      this.character = state.character;
+      this.character = CharacterModel.fromJSON(state.character);
       // Migrate stale pack slot limits from older saves
       if (this.character.pack?.slots) {
         const pack = this.character.pack;
@@ -416,7 +417,7 @@ export class GameWorld extends LitElement {
       window.location.href = '/';
       return;
     }
-    this.character = character;
+    this.character = CharacterModel.fromJSON(character);
   }
 
   override firstUpdated(): void {
@@ -883,9 +884,7 @@ export class GameWorld extends LitElement {
       const newHp = target.hp - result.damage;
       if (newHp <= 0) {
         this.pushMessage(`You defeat the ${spec.name}!`);
-        const xp = spec.xp;
-        const newChar = { ...c, experience: c.experience + xp };
-        this.character = newChar;
+        c.addExperience(spec.xp);
         this.checkLevelUp();
         this.autoSave();
         this.monsters = this.monsters.filter((m) => m.instanceId !== target.instanceId);
@@ -914,7 +913,6 @@ export class GameWorld extends LitElement {
     if (!c || this.map.id === 'village' || this.map.id === 'farm-map') return;
 
     const updatedMonsters = [...this.monsters];
-    let updatedChar = { ...c };
     let updatedStatus = { ...this.playerStatus };
     let charChanged = false;
     // Per-turn swarm counter: increments by 10 each time a monster attempts
@@ -959,8 +957,8 @@ export class GameWorld extends LitElement {
 
       // Adjacent to player → attack
       if (dist === 1 || (Math.abs(dx0) <= 1 && Math.abs(dy0) <= 1 && dist <= 2)) {
-        const result = monsterMeleeAttack(spec, 0, updatedChar, updatedStatus, {
-          difficulty: difficultyToInt(updatedChar.difficulty),
+        const result = monsterMeleeAttack(spec, 0, c, updatedStatus, {
+          difficulty: difficultyToInt(c.difficulty),
           equipmentAC: this.playerAC,
           swarmCounter,
         });
@@ -975,12 +973,11 @@ export class GameWorld extends LitElement {
         this.pushMessage(result.message + dirSuffix);
 
         if (!result.dodged && result.damage > 0) {
-          updatedChar = { ...updatedChar, hitPoints: updatedChar.hitPoints - result.damage };
+          c.takeDamage(result.damage);
           charChanged = true;
 
           // Check for death
-          if (updatedChar.hitPoints <= 0) {
-            this.character = updatedChar;
+          if (c.isDead) {
             this.dead = { killedBy: spec.name };
             return;
           }
@@ -1026,14 +1023,13 @@ export class GameWorld extends LitElement {
     const poisonDmg = poisonTick(updatedStatus);
     if (poisonDmg > 0) {
       this.pushMessage(`Poison burns through you. (−${poisonDmg} HP)`);
-      updatedChar = { ...updatedChar, hitPoints: updatedChar.hitPoints - poisonDmg };
+      c.takeDamage(poisonDmg);
       charChanged = true;
     }
 
     this.monsters = updatedMonsters;
     this.playerStatus = updatedStatus;
     if (charChanged) {
-      this.character = updatedChar;
       this.autoSave();
     }
   }
@@ -1222,7 +1218,7 @@ export class GameWorld extends LitElement {
 
   /** shop-screen fired a successful purchase. */
   private onShopBuy(e: CustomEvent<ShopBuyDetail>): void {
-    this.character = e.detail.updatedCharacter;
+    this.character = CharacterModel.fromJSON(e.detail.updatedCharacter);
     const b = this.activeBuilding;
     if (b) {
       const state = this.shopStates.get(b.name);
@@ -1233,7 +1229,7 @@ export class GameWorld extends LitElement {
 
   /** shop-screen fired a successful sale. */
   private onShopSell(e: CustomEvent<ShopSellDetail>): void {
-    this.character = e.detail.updatedCharacter;
+    this.character = CharacterModel.fromJSON(e.detail.updatedCharacter);
     this.pushMessage(e.detail.message);
     this.autoSave();
   }
@@ -1855,10 +1851,10 @@ export class GameWorld extends LitElement {
 
   private checkLevelUp(): void {
     if (!this.character) return;
-    while (canLevelUp(this.character)) {
-      this.character = levelUp(this.character);
+    while (this.character.canLevelUp) {
+      const { hpGain, mpGain } = this.character.levelUp();
       this.pushMessage(`*** Level up! You are now level ${this.character.level}! ***`);
-      this.pushMessage(`HP: ${this.character.maxHitPoints} (+${hpPerLevel(this.character.stats)})  Mana: ${this.character.maxMana} (+${spPerLevel(this.character.stats)})`);
+      this.pushMessage(`HP: ${this.character.maxHitPoints} (+${hpGain})  Mana: ${this.character.maxMana} (+${mpGain})`);
       // Check if new spell tier unlocked
       const maxSpell = maxSpellLevelAt(this.character.level);
       const char = this.character;
@@ -1930,7 +1926,7 @@ export class GameWorld extends LitElement {
       const spell = spellById(spellId);
       if (!spell) return;
       if (c.mana < spell.baseMana) { this.pushMessage('Not enough mana!'); return; }
-      this.character = { ...c, mana: c.mana - spell.baseMana };
+      c.spendMana(spell.baseMana);
       // Try random directions to find a walkable landing spot
       for (let attempt = 0; attempt < 50; attempt++) {
         const angle = Math.random() * Math.PI * 2;
@@ -1958,7 +1954,7 @@ export class GameWorld extends LitElement {
       const spell = spellById(spellId);
       if (!spell) return;
       if (c.mana < spell.baseMana) { this.pushMessage('Not enough mana!'); return; }
-      this.character = { ...c, mana: c.mana - spell.baseMana };
+      c.spendMana(spell.baseMana);
       for (let attempt = 0; attempt < 100; attempt++) {
         const tx = Math.floor(Math.random() * this.map.width);
         const ty = Math.floor(Math.random() * this.map.height);
@@ -1984,7 +1980,7 @@ export class GameWorld extends LitElement {
       const spell = spellById(spellId);
       if (!spell) return;
       if (c.mana < spell.baseMana) { this.pushMessage('Not enough mana!'); return; }
-      this.character = { ...c, mana: c.mana - spell.baseMana };
+      c.spendMana(spell.baseMana);
       if (this.currentDungeonLevel > 0) {
         // In dungeon: return to surface
         this.pushMessage(`You cast ${spell.name}. You are whisked to the surface!`);
@@ -2006,7 +2002,8 @@ export class GameWorld extends LitElement {
 
     const result = castSpell(c, spellId, target, this.monsters, this.playerStatus);
     for (const msg of result.messages) this.pushMessage(msg);
-    this.character = result.character;
+    // Apply mana change from spell engine
+    c.mana = result.character.mana;
 
     if (result.monsterDamage) {
       const { instanceId, damage } = result.monsterDamage;
@@ -2017,7 +2014,7 @@ export class GameWorld extends LitElement {
           const spec = monsterById(m.specId);
           if (spec) {
             this.pushMessage(`You defeat the ${spec.name}!`);
-            this.character = { ...result.character, experience: result.character.experience + spec.xp };
+            c.addExperience(spec.xp);
             this.checkLevelUp();
             const loot = rollMonsterLoot(spec, 1);
             for (const item of loot) dropItem(this.map, m.x, m.y, item);
@@ -2066,7 +2063,7 @@ export class GameWorld extends LitElement {
         this.pushMessage('Your rest is interrupted!');
         break;
       }
-      this.character = { ...this.character as Character, hitPoints: Math.min((this.character as Character).maxHitPoints, (this.character as Character).hitPoints + 2) };
+      (this.character as CharacterModel).heal(2);
       this.runMonsterTurns();
       if (this.dead) return;
     }
@@ -2099,8 +2096,9 @@ export class GameWorld extends LitElement {
         this.pushMessage('Your sleep is interrupted by a noise!');
         break;
       }
-      const cur = this.character as Character;
-      this.character = { ...cur, hitPoints: Math.min(cur.maxHitPoints, cur.hitPoints + 2), mana: Math.min(cur.maxMana, cur.mana + 1) };
+      const cur = this.character as CharacterModel;
+      cur.heal(2);
+      cur.restoreMana(1);
       // 10% chance per turn that sleep cures poison
       if (this.playerStatus.poisoned && Math.random() < 0.10) {
         this.playerStatus = { ...this.playerStatus, poisoned: false, poisonStrength: 0 };
