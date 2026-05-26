@@ -1875,17 +1875,34 @@ export class GameWorld extends LitElement {
   }
 
   private fireDirectionalSpell(spellId: string, dx: number, dy: number): void {
-    // Find the first monster along the direction (up to 20 tiles)
+    // Trace the ray one step at a time, stopping at walls or the first monster.
     let target: SpellTarget = { dx, dy };
+    const isDiagonal = dx !== 0 && dy !== 0;
+
     for (let dist = 1; dist <= 20; dist++) {
       const tx = this.pos.x + dx * dist;
       const ty = this.pos.y + dy * dist;
+
+      // Diagonal corner check: a diagonal step passes between two adjacent tiles.
+      // If both "corner" tiles are solid walls the path is physically closed —
+      // the projectile cannot squeeze through the gap.
+      //   Corner A: same x as destination, same y as source  (tx, py + dy*(dist-1))
+      //   Corner B: same x as source, same y as destination  (px + dx*(dist-1), ty)
+      if (isDiagonal) {
+        const cornerAWalkable = isWalkable(this.map, tx,                          this.pos.y + dy * (dist - 1));
+        const cornerBWalkable = isWalkable(this.map, this.pos.x + dx * (dist - 1), ty);
+        if (!cornerAWalkable && !cornerBWalkable) break; // both corners blocked
+      }
+
+      // Check for a monster at this tile before the wall test — monsters
+      // always stand on walkable tiles, so this is safe.
       const m = this.monsters.find((mon) => mon.x === tx && mon.y === ty);
       if (m) {
         target = { dx, dy, monster: m, distance: dist };
         break;
       }
-      // Stop at walls
+
+      // Stop at solid walls.
       if (!isWalkable(this.map, tx, ty)) break;
     }
     this.executeCast(spellId, target);
