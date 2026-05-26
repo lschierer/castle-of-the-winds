@@ -21,7 +21,7 @@ import { WorldModel } from '../model/World.ts';
 import './player-inventory.ts';
 import './dungeon-map.ts';
 import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
-import { gatherContextActions, type ContextAction } from '../game/context-actions.ts';
+import { gatherContextActions, type ContextAction } from './context-actions.ts';
 import {
   type TileMap,
   type MapId,
