@@ -17,6 +17,7 @@ import { customElement, state } from 'lit/decorators.js';
 import type { Character } from '../game/character.ts';
 import { maxSpellLevelAt, xpForLevel } from '../game/character.ts';
 import { CharacterModel } from '../model/Character.ts';
+import { WorldModel } from '../model/World.ts';
 import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
 import {
   type TileMap,
@@ -192,11 +193,23 @@ export class GameWorld extends LitElement {
   private shopStates = new Map<string, ShopState>();
 
   /** Generated dungeon floors for the current stage, keyed by level number. */
-  private dungeonFloors = new Map<number, DungeonFloor>();
+  private world = new WorldModel(VILLAGE_MAP, { ...VILLAGE_MAP.entryPosition });
+
   /** Current dungeon level within the current stage (0 = not in dungeon). */
-  private currentDungeonLevel = 0;
+  private get currentDungeonLevel(): number { return this.world.currentDungeonLevel; }
+  private set currentDungeonLevel(v: number) { this.world.currentDungeonLevel = v; }
+
   /** Which of the three dungeon stages the player is currently in. */
-  private currentStage: GameStage = 'mine';
+  private get currentStage(): GameStage { return this.world.currentStage; }
+  private set currentStage(v: GameStage) { this.world.currentStage = v; }
+
+  /** Convenience: sync reactive state from world after a transition. */
+  private syncFromWorld(): void {
+    this.map = this.world.map;
+    this.pos = { ...this.world.pos };
+    this.monsters = this.world.monsters;
+    this.requestUpdate();
+  }
 
 
   /** Set player position and reveal surrounding tiles. */
@@ -248,7 +261,7 @@ export class GameWorld extends LitElement {
     if (!this.character) return null;
     // Save current floor's monsters back
     if (this.currentDungeonLevel > 0) {
-      const floor = this.dungeonFloors.get(this.currentDungeonLevel);
+      const floor = this.world.dungeonFloors.get(this.currentDungeonLevel);
       if (floor) floor.monsters = this.monsters;
     }
     return {
@@ -259,7 +272,7 @@ export class GameWorld extends LitElement {
       currentDungeonLevel: this.currentDungeonLevel,
       playerStatus: { ...this.playerStatus },
       monsters: this.monsters,
-      dungeonFloors: Array.from(this.dungeonFloors.entries()).map(([level, floor]) => ({ level, floor })),
+      dungeonFloors: Array.from(this.world.dungeonFloors.entries()).map(([level, floor]) => ({ level, floor })),
       farmNarrativeShown: this.farmNarrativeShown,
       parchmentRead: this.parchmentRead,
       hamletDestroyed: this.hamletDestroyed,
@@ -363,7 +376,7 @@ export class GameWorld extends LitElement {
       const character = loadCharacter();
       if (!character) { window.location.href = '/'; return; }
       this.character = CharacterModel.fromJSON(character);
-      this.dungeonFloors.clear();
+      this.world.dungeonFloors.clear();
       return;
     }
 
@@ -394,11 +407,11 @@ export class GameWorld extends LitElement {
       this.quickSpells = Array.isArray(state.quickSpells) ? [...state.quickSpells] as (string | null)[] : [null, null, null, null, null, null, null, null, null, null];
       // Restore dungeon floors
       for (const { level, floor } of state.dungeonFloors) {
-        this.dungeonFloors.set(level, floor);
+        this.world.dungeonFloors.set(level, floor);
       }
       // Restore the correct map
       if (state.currentDungeonLevel > 0) {
-        const floor = this.dungeonFloors.get(state.currentDungeonLevel);
+        const floor = this.world.dungeonFloors.get(state.currentDungeonLevel);
         if (floor) this.map = floor.map;
       } else {
         const staticMap = ALL_MAPS[state.mapId as keyof typeof ALL_MAPS];
@@ -700,7 +713,7 @@ export class GameWorld extends LitElement {
       // Map legacy 'dungeon' prefix to mine stage; clear floors when stage changes
       const newStage: GameStage = stageStr === 'dungeon' ? 'mine' : stageStr as GameStage;
       if (newStage !== this.currentStage) {
-        this.dungeonFloors.clear();
+        this.world.dungeonFloors.clear();
         this.currentStage = newStage;
       }
       // Don't use the exit's targetPosition for generated dungeons —
@@ -770,16 +783,16 @@ export class GameWorld extends LitElement {
 
   /** Get a dungeon floor, generating it if this is the first visit. */
   private ensureFloor(level: number): DungeonFloor {
-    let floor = this.dungeonFloors.get(level);
+    let floor = this.world.dungeonFloors.get(level);
     if (!floor) {
-      const parentFloor = level > 1 ? this.dungeonFloors.get(level - 1) : undefined;
+      const parentFloor = level > 1 ? this.world.dungeonFloors.get(level - 1) : undefined;
       floor = generateFloor({
         stage: this.currentStage,
         dungeonLevel: level,
         ...(this.character?.difficulty && { difficulty: this.character.difficulty }),
         parentHasSecondaryDown: !!parentFloor?.stairsDown2,
       });
-      this.dungeonFloors.set(level, floor);
+      this.world.dungeonFloors.set(level, floor);
       logger.info(`Generated ${this.currentStage} floor ${level}: ${floor.map.width}×${floor.map.height}`);
     }
     return floor;
@@ -792,7 +805,7 @@ export class GameWorld extends LitElement {
       return;
     }
     // Save current floor's monster state
-    const currentFloor = this.dungeonFloors.get(this.currentDungeonLevel);
+    const currentFloor = this.world.dungeonFloors.get(this.currentDungeonLevel);
     if (currentFloor) currentFloor.monsters = this.monsters;
 
     // Determine which staircase the player is using: primary (stairsDown) or secondary (stairsDown2).
@@ -810,7 +823,7 @@ export class GameWorld extends LitElement {
 
   private ascendStairs(): void {
     // Save current floor's monster state
-    const currentFloor = this.dungeonFloors.get(this.currentDungeonLevel);
+    const currentFloor = this.world.dungeonFloors.get(this.currentDungeonLevel);
     if (currentFloor) currentFloor.monsters = this.monsters;
 
     if (this.currentDungeonLevel <= 1) {
@@ -833,7 +846,7 @@ export class GameWorld extends LitElement {
       && this.pos.y === currentFloor.stairsUp2.y;
 
     const prevLevel = this.currentDungeonLevel - 1;
-    const prevFloor = this.dungeonFloors.get(prevLevel);
+    const prevFloor = this.world.dungeonFloors.get(prevLevel);
     const spawnPos = useSecondary && prevFloor?.stairsDown2 ? prevFloor.stairsDown2 : prevFloor?.stairsDown;
 
     this.pushMessage('You ascend the stairs…');
@@ -1987,7 +2000,7 @@ export class GameWorld extends LitElement {
         this.enterMap('farm-map', { x: 24, y: 2 });
       } else {
         // On surface: go to deepest visited floor
-        const deepest = Math.max(0, ...this.dungeonFloors.keys());
+        const deepest = Math.max(0, ...this.world.dungeonFloors.keys());
         if (deepest > 0) {
           this.pushMessage(`You cast ${spell.name}. You return to the depths!`);
           this.enterDungeonFloor(deepest);
