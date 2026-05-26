@@ -274,10 +274,14 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   }
 
   const lootLevel = itemQualityLevel(stage, dungeonLevel);
-  const monsterCount = 4 + dungeonLevel * 2;
-  const monsters = spawnMonsters(grid, w, h, stage, dungeonLevel, stairsUp, monsterCount);
+  // Monster count per RE phase 14: clamp(base + 5 - diff, 12 - diff, 22 - 2*diff)
+  // Difficulty: easy=0, normal=1, hard=2
+  const diff = opts.difficulty === 'easy' ? 0 : opts.difficulty === 'hard' ? 2 : 1;
+  const floorBase = Math.min(12, 4 + dungeonLevel);
+  const monsterCount = Math.max(12 - diff, Math.min(22 - 2 * diff, floorBase + 5 - diff));
+  const monsters = spawnMonsters(grid, w, h, stage, dungeonLevel, stairsUp, monsterCount, diff);
 
-  placeLoot(grid, w, h, lootLevel, rooms);
+  placeLoot(grid, w, h, lootLevel, rooms, diff);
 
   if (stage === 'mine' && dungeonLevel === 1) {
     placeGuaranteedMineSpawns(grid, rooms, stairsUp, monsters);
@@ -313,7 +317,7 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
 
 function spawnMonsters(
   grid: Tile[][], w: number, h: number,
-  stage: GameStage, dungeonLevel: number, stairsUp: Vec2, count: number,
+  stage: GameStage, dungeonLevel: number, stairsUp: Vec2, count: number, difficulty: number,
 ): MonsterInstance[] {
   const pool = monstersForDepth(stage, dungeonLevel);
   if (pool.length === 0) return [];
@@ -331,6 +335,8 @@ function spawnMonsters(
 
   const monsters: MonsterInstance[] = [];
   const used = new Set<string>();
+  // Per RE phase 14: monsters get +5 HP per difficulty level
+  const hpBonus = 5 * difficulty;
   for (let i = 0; i < count && walkable.length > 0; i++) {
     const idx = rand(walkable.length);
     const pos = walkable[idx];
@@ -342,7 +348,7 @@ function spawnMonsters(
     monsters.push({
       specId: spec.id,
       instanceId: `m${monsterSeq++}`,
-      hp: spec.hp,
+      hp: spec.hp + hpBonus,
       x: pos.x, y: pos.y,
       alerted: false,
       status: {},
@@ -355,8 +361,11 @@ function spawnMonsters(
 
 function placeLoot(
   grid: Tile[][], w: number, h: number, lootLevel: number,
-  rooms: RotRoom[],
+  rooms: RotRoom[], difficulty: number,
 ): void {
+  // Per RE phase 14: less treasure at higher difficulty
+  // Reduce loot chance by ~20% per difficulty step
+  const lootMult = 1.0 - 0.2 * difficulty;
   const roomSet = new Set<string>();
   for (const room of rooms) {
     for (let y = room.getTop(); y <= room.getBottom(); y++) {
@@ -370,6 +379,7 @@ function placeLoot(
     for (let x = 0; x < w; x++) {
       const t = getTile(grid, x, y);
       if (!t || t.terrain !== 'floor' || !t.walkable || t.feature) continue;
+      if (lootMult < 1.0 && Math.random() > lootMult) continue;
       const items = generateTileLoot({ level: lootLevel, inRoom: roomSet.has(`${x},${y}`) });
       t.items.push(...items);
     }

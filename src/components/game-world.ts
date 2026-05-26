@@ -41,7 +41,7 @@ import { getTileStyle, monsterSpriteSrc, getItemIcon } from '../game/sprites.ts'
 import { spellById } from '../game/spells.ts';
 import { LEARNABLE_SPELLS } from '../game/spells.ts';
 import {
-  SHOPS, type ShopDef,
+  SHOPS,
   resetVisitPrices, makeShopState, type ShopState,
 } from '../game/shop.ts';
 import { type ShopBuyDetail, type ShopSellDetail } from './shop-screen.ts';
@@ -1195,7 +1195,7 @@ export class GameWorld extends LitElement {
       if (!this.shopStates.has(b.name)) {
         this.shopStates.set(b.name, makeShopState(shop));
       }
-      const shopState = this.shopStates.get(b.name)!;
+      const shopState = this.shopStates.get(b.name) ?? makeShopState(shop);
       return html`<shop-screen
         .shopState=${shopState}
         .character=${c}
