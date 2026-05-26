@@ -159,7 +159,7 @@ function buildMap(spec: MapSpec): TileMap {
       case 'building': {
         regions.push({
           id: layer.id,
-          originX: layer.x, originY: layer.y,
+          originX: layer.x*16, originY: layer.y*16,
           cols: layer.cols, rows: layer.rows,
           sprite: layer.sprite,
           ...(layer.borderPx !== undefined && { borderPx: layer.borderPx }),

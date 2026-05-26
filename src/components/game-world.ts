@@ -270,8 +270,8 @@ export class GameWorld extends LitElement {
     }
 
     .tile {
-      width: 32px;
-      height: 32px;
+      width: 2px;
+      height: 2px;
     }
 
     .location-banner {
