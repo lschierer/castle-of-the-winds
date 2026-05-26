@@ -18,6 +18,7 @@ import type { Character } from '../game/character.ts';
 import { maxSpellLevelAt, xpForLevel } from '../game/character.ts';
 import { CharacterModel } from '../model/Character.ts';
 import { WorldModel } from '../model/World.ts';
+import './player-inventory.ts';
 import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
 import {
   type TileMap,
@@ -3097,7 +3098,16 @@ export class GameWorld extends LitElement {
               : this.overlay === 'building'
                 ? this.renderBuildingOverlay()
                 : this.overlay === 'inventory'
-                  ? this.renderInventoryOverlay()
+                  ? html`<div class="overlay" @click=${() => { this.overlay = 'none'; }}>
+                      <player-inventory
+                        .character=${this.character}
+                        .groundItems=${getTileAt(this.map, this.pos.x, this.pos.y).items}
+                        .map=${this.map}
+                        .pos=${this.pos}
+                        @inventory-changed=${() => { this.autoSave(); this.requestUpdate(); }}
+                        @inventory-message=${(e: CustomEvent<string>) => { this.pushMessage(e.detail); }}
+                      ></player-inventory>
+                    </div>`
                   : this.overlay === 'spells'
                     ? this.renderSpellsOverlay()
                     : this.overlay === 'spell-learn'
