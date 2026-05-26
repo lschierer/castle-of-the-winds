@@ -15,20 +15,20 @@
  */
 
 import { Map as RotMap } from 'rot-js';
-import type { Tile, TileMap, Vec2 } from './tile-map.ts';
+import type { Tile, TileMap, Vec2 } from '../data/tile-map.ts';
 import type { MonsterInstance } from './combat.ts';
-import type { Difficulty } from './character.ts';
-import { monstersForDepth } from './monsters.ts';
+import type { Difficulty } from '../data/character.ts';
+import { monstersForDepth } from '../data/monsters.ts';
 import { generateTileLoot } from './loot.ts';
-import type { Item } from './items.ts';
-import { ARMOR_SPECS } from './equipment.ts';
+import type { Item } from '../data/items.ts';
+import { ARMOR_SPECS } from '../data/equipment.ts';
 import {
   itemQualityLevel,
   totalFloorsForStage,
   MINE_PARCHMENT_FLOOR,
   FORTRESS_BOSS_FLOOR,
   type GameStage,
-} from './progression.ts';
+} from '../data/progression.ts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

@@ -6,7 +6,7 @@
  * with messages and state changes for the UI to apply.
  */
 
-import type { Character } from './character.ts';
+import type { Character } from '../data/character.ts';
 import type { MonsterInstance } from './combat.ts';
 import {
   type PlayerStatus,
@@ -14,9 +14,9 @@ import {
   playerSpellAttack,
   rollSpellDamage,
 } from './combat.ts';
-import { spellById, type Spell } from './spells.ts';
-import { monsterById } from './monsters.ts';
-import type { ElementType } from './equipment.ts';
+import { spellById, type Spell } from '../data/spells.ts';
+import { monsterById } from '../data/monsters.ts';
+import type { ElementType } from '../data/equipment.ts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

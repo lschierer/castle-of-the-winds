@@ -20,10 +20,10 @@ import {
   derivedMaxHitPoints,
   derivedMaxMana,
   createCharacter,
-} from '../game/character.ts';
-import { STARTING_SPELLS, SCHOOL_LABELS, type Spell } from '../game/spells.ts';
-import { getLogger } from '../game/logging.ts';
-import { saveCharacter, clearSave } from '../game/save.ts';
+} from '../data/character.ts';
+import { STARTING_SPELLS, SCHOOL_LABELS, type Spell } from '../data/spells.ts';
+import { getLogger } from '../engine/logging.ts';
+import { saveCharacter, clearSave } from '../engine/save.ts';
 
 const logger = getLogger('game:ui');
 

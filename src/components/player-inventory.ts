@@ -18,15 +18,15 @@ import {
   sortPackContents,
   containerWeight,
   containerBulk,
-} from '../game/items.ts';
-import type { Character } from '../game/character.ts';
-import { getItemIcon } from '../game/sprites.ts';
+} from '../data/items.ts';
+import type { Character } from '../data/character.ts';
+import { getItemIcon } from '../engine/sprites.ts';
 import {
   type TileMap,
   type Vec2,
   getTileAt,
   dropItem,
-} from '../game/world-map.ts';
+} from '../data/world-map.ts';
 
 type DragSrc =
   | { from: 'equip'; slotKey: string; item: Item }

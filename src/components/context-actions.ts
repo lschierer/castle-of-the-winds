@@ -9,9 +9,9 @@
  * then render them as buttons or a dropdown.
  */
 
-import type { Item } from '../game/items.ts';
-import type { TileMap, Vec2 } from '../game/tile-map.ts';
-import { getTileAt } from '../game/tile-map.ts';
+import type { Item } from '../data/items.ts';
+import type { TileMap, Vec2 } from '../data/tile-map.ts';
+import { getTileAt } from '../data/tile-map.ts';
 import type { CharacterModel } from '../model/Character.ts';
 
 export interface ContextAction {

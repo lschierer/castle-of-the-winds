@@ -14,13 +14,13 @@
 import { LitElement, html, type TemplateResult } from 'lit';
 import { gameWorldStyles } from './game-world.styles.ts';
 import { customElement, state } from 'lit/decorators.js';
-import type { Character } from '../game/character.ts';
-import { maxSpellLevelAt, xpForLevel } from '../game/character.ts';
+import type { Character } from '../data/character.ts';
+import { maxSpellLevelAt, xpForLevel } from '../data/character.ts';
 import { CharacterModel } from '../model/Character.ts';
 import { WorldModel } from '../model/World.ts';
 import './player-inventory.ts';
 import './dungeon-map.ts';
-import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
+import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../engine/save.ts';
 import { gatherContextActions, type ContextAction } from './context-actions.ts';
 import {
   type TileMap,
@@ -41,18 +41,18 @@ import {
   dropItem,
   revealAround,
   hasLineOfSight,
-} from '../game/world-map.ts';
-import { spellById } from '../game/spells.ts';
-import { LEARNABLE_SPELLS } from '../game/spells.ts';
+} from '../data/world-map.ts';
+import { spellById } from '../data/spells.ts';
+import { LEARNABLE_SPELLS } from '../data/spells.ts';
 import {
   SHOPS,
   resetVisitPrices, makeShopState, type ShopState,
-} from '../game/shop.ts';
+} from '../engine/shop.ts';
 import { type ShopBuyDetail, type ShopSellDetail } from './shop-screen.ts';
 import type { BuildingActionDetail } from './building-overlay.ts';
 import './shop-screen.ts';
 import './building-overlay.ts';
-import { coinsIn, type Item, addToContainer, displayName, addCoins, PACK_SPECS, reportedUnitWeight } from '../game/items.ts';
+import { coinsIn, type Item, addToContainer, displayName, addCoins, PACK_SPECS, reportedUnitWeight } from '../data/items.ts';
 import {
   type MonsterInstance,
   type PlayerStatus,
@@ -60,13 +60,13 @@ import {
   monsterMeleeAttack,
   applyDrainAttack,
   poisonTick,
-} from '../game/combat.ts';
-import { monsterById, healthDescription, rollMonsterLoot } from '../game/monsters.ts';
-import { castSpell, spellTargetKind, type SpellTarget } from '../game/spell-engine.ts';
-import { type DungeonFloor } from '../game/dungeon-gen.ts';
-import { type GameStage } from '../game/progression.ts';
-import { type ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../game/equipment.ts';
-import { getLogger } from '../game/logging.ts';
+} from '../engine/combat.ts';
+import { monsterById, healthDescription, rollMonsterLoot } from '../data/monsters.ts';
+import { castSpell, spellTargetKind, type SpellTarget } from '../engine/spell-engine.ts';
+import { type DungeonFloor } from '../engine/dungeon-gen.ts';
+import { type GameStage } from '../data/progression.ts';
+import { type ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../data/equipment.ts';
+import { getLogger } from '../engine/logging.ts';
 
 const logger = getLogger('game:world');
 

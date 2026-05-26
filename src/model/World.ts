@@ -7,14 +7,14 @@
  * transitions by calling methods here.
  */
 
-import type { TileMap, Vec2 } from '../game/tile-map.ts';
-import { getTileAt, isWalkable } from '../game/tile-map.ts';
-import type { MonsterInstance } from '../game/combat.ts';
-import type { DungeonFloor } from '../game/dungeon-gen.ts';
-import { generateFloor } from '../game/dungeon-gen.ts';
-import { totalFloorsForStage, type GameStage } from '../game/progression.ts';
-import type { Difficulty } from '../game/character.ts';
-import type { Item } from '../game/items.ts';
+import type { TileMap, Vec2 } from '../data/tile-map.ts';
+import { getTileAt, isWalkable } from '../data/tile-map.ts';
+import type { MonsterInstance } from '../engine/combat.ts';
+import type { DungeonFloor } from '../engine/dungeon-gen.ts';
+import { generateFloor } from '../engine/dungeon-gen.ts';
+import { totalFloorsForStage, type GameStage } from '../data/progression.ts';
+import type { Difficulty } from '../data/character.ts';
+import type { Item } from '../data/items.ts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

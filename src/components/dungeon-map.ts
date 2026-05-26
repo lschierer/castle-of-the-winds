@@ -7,13 +7,13 @@
 import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { FOV } from 'rot-js';
-import type { TileMap, Vec2 } from '../game/tile-map.ts';
-import { getTileAt } from '../game/tile-map.ts';
-import type { MonsterInstance } from '../game/combat.ts';
-import type { PlayerStatus } from '../game/combat.ts';
-import { getTileStyle, monsterSpriteSrc } from '../game/sprites.ts';
-import { monsterById, healthDescription } from '../game/monsters.ts';
-import type { Gender } from '../game/character.ts';
+import type { TileMap, Vec2 } from '../data/tile-map.ts';
+import { getTileAt } from '../data/tile-map.ts';
+import type { MonsterInstance } from '../engine/combat.ts';
+import type { PlayerStatus } from '../engine/combat.ts';
+import { getTileStyle, monsterSpriteSrc } from '../engine/sprites.ts';
+import { monsterById, healthDescription } from '../data/monsters.ts';
+import type { Gender } from '../data/character.ts';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

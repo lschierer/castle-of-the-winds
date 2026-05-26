@@ -11,11 +11,11 @@ import {
   type TileMap,
   type Direction,
   getTileAt,
-} from './tile-map.ts';
+} from '../data/tile-map.ts';
 import {
   type BuildingRegion,
   ALL_BUILDING_REGIONS,
-} from './world-map.ts';
+} from '../data/world-map.ts';
 
 const ICONS   = '/assets/sprites/icons';
 const BITMAPS = '/assets/sprites/bitmaps';
@@ -251,7 +251,7 @@ function buildingRegionStyle(region: BuildingRegion, x: number, y: number, base:
 
 // ── Monster sprite ────────────────────────────────────────────────────────────
 
-import { monsterById } from './monsters.ts';
+import { monsterById } from '../data/monsters.ts';
 
 /** Returns the img src for a monster's sprite from its spec's icon field. */
 export function monsterSpriteSrc(monsterId: string): string | undefined {
@@ -260,8 +260,8 @@ export function monsterSpriteSrc(monsterId: string): string | undefined {
 
 // ── Ground item icons ─────────────────────────────────────────────────────────
 
-import { type Item, WEAPON_SPECS } from './items.ts';
-import { ALL_EQUIPMENT_SPECS, pickEquipmentIcon } from './equipment.ts';
+import { type Item, WEAPON_SPECS } from '../data/items.ts';
+import { ALL_EQUIPMENT_SPECS, pickEquipmentIcon } from '../data/equipment.ts';
 
 const PILE_ICON = '/assets/sprites/icons/Items/icon_147.png';
 

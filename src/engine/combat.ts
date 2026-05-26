@@ -29,13 +29,13 @@
  *   or ×4/3 for the spell-class resist mask.
  */
 
-import type { Character } from './character.ts';
-import type { MonsterSpec, SpecialAttack } from './monsters.ts';
-import type { Item } from './items.ts';
-import { WEAPON_SPECS } from './items.ts';
-import type { ElementType } from './equipment.ts';
-import { GAUNTLET_SPECS } from './equipment.ts';
-import { RANGE_FALLOFF, findAttackFormula } from './binary-data/index.ts';
+import type { Character } from '../data/character.ts';
+import type { MonsterSpec, SpecialAttack } from '../data/monsters.ts';
+import type { Item } from '../data/items.ts';
+import { WEAPON_SPECS } from '../data/items.ts';
+import type { ElementType } from '../data/equipment.ts';
+import { GAUNTLET_SPECS } from '../data/equipment.ts';
+import { RANGE_FALLOFF, findAttackFormula } from '../data/binary-data/index.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

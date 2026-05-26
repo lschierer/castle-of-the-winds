@@ -15,7 +15,7 @@ import type {
   DerivedStats,
   Difficulty,
   Gender,
-} from '../game/character.ts';
+} from '../data/character.ts';
 import {
   computeDerived,
   derivedMaxHitPoints,
@@ -24,16 +24,16 @@ import {
   spPerLevel,
   xpForLevel,
   canLevelUp,
-} from '../game/character.ts';
-import type { Item } from '../game/items.ts';
+} from '../data/character.ts';
+import type { Item } from '../data/items.ts';
 import {
   addToContainer,
   removeFromContainer,
   equipItem,
   sortPackContents,
   makeStartingLoadout,
-} from '../game/items.ts';
-import type { ShopReputation } from '../game/shop.ts';
+} from '../data/items.ts';
+import type { ShopReputation } from '../engine/shop.ts';
 
 // ── Equipment slot keys ───────────────────────────────────────────────────────
 

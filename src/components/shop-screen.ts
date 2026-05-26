@@ -11,15 +11,15 @@
 
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { Character } from '../game/character.ts';
-import type { Item } from '../game/items.ts';
+import type { Character } from '../data/character.ts';
+import type { Item } from '../data/items.ts';
 import {
   displayName,
   totalPurseCopper,
   deductPurseCopper,
   addPurseCopper,
   coinsIn,
-} from '../game/items.ts';
+} from '../data/items.ts';
 import {
   shopSellPrice,
   shopWillBuy,
@@ -29,9 +29,9 @@ import {
   type ShopState,
   type ShopInventoryEntry,
   type ShopReputation,
-} from '../game/shop.ts';
-import { saveCharacter } from '../game/save.ts';
-import { getItemIcon } from '../game/sprites.ts';
+} from '../engine/shop.ts';
+import { saveCharacter } from '../engine/save.ts';
+import { getItemIcon } from '../engine/sprites.ts';
 
 // ── Event detail types ────────────────────────────────────────────────────────
 

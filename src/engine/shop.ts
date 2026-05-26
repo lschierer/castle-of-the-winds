@@ -8,14 +8,14 @@
  *   Broken items sell for 25cp at junk yard only.
  */
 
-import type { Item, ItemKind } from './items.ts';
-import { identifyItem, displayName } from './items.ts';
-import type { Character, ShopReputation } from './character.ts';
-import { ALL_EQUIPMENT_SPECS, type EquipmentSpec, specForItem, makeEquipmentItem, pickEquipmentIcon } from './equipment.ts';
-import { makeWeapon, randomWeaponName, addCoins, removeCoins, coinsIn, addToContainer, makePack, makeBelt, COIN_VALUE_CP } from './items.ts';
-import { townStockLevel, type TownTier } from './progression.ts';
+import type { Item, ItemKind } from '../data/items.ts';
+import { identifyItem, displayName } from '../data/items.ts';
+import type { Character, ShopReputation } from '../data/character.ts';
+import { ALL_EQUIPMENT_SPECS, type EquipmentSpec, specForItem, makeEquipmentItem, pickEquipmentIcon } from '../data/equipment.ts';
+import { makeWeapon, randomWeaponName, addCoins, removeCoins, coinsIn, addToContainer, makePack, makeBelt, COIN_VALUE_CP } from '../data/items.ts';
+import { townStockLevel, type TownTier } from '../data/progression.ts';
 
-export type { ShopReputation } from './character.ts';
+export type { ShopReputation } from '../data/character.ts';
 
 // ── Money helpers (purse + bank) ──────────────────────────────────────────────
 

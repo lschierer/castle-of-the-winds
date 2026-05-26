@@ -17,17 +17,17 @@
 
 import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { Building } from '../game/world-map.ts';
-import type { Character } from '../game/character.ts';
-import { displayName, type Item } from '../game/items.ts';
+import type { Building } from '../data/world-map.ts';
+import type { Character } from '../data/character.ts';
+import { displayName, type Item } from '../data/items.ts';
 import {
   type ShopDef,
   sageIdentify, identifyFee,
   templeHeal, templeHealCost, templeUncurse, templeUncurseCost,
   bankDeposit, bankWithdraw, purseTotalCopper, bankTotalCopper,
   sellItem, junkYardPrice,
-} from '../game/shop.ts';
-import { getItemIcon } from '../game/sprites.ts';
+} from '../engine/shop.ts';
+import { getItemIcon } from '../engine/sprites.ts';
 
 export interface BuildingActionDetail {
   message: string;
