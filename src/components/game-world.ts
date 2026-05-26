@@ -62,8 +62,8 @@ import {
 import { monsterById, healthDescription, rollMonsterLoot } from '../game/monsters.ts';
 import { castSpell, spellTargetKind, type SpellTarget } from '../game/spell-engine.ts';
 import { FOV } from 'rot-js';
-import { generateFloor, type DungeonFloor } from '../game/dungeon-gen.ts';
-import { type GameStage, totalFloorsForStage } from '../game/progression.ts';
+import { type DungeonFloor } from '../game/dungeon-gen.ts';
+import { type GameStage } from '../game/progression.ts';
 import { type ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../game/equipment.ts';
 import { getLogger } from '../game/logging.ts';
 
@@ -747,14 +747,8 @@ export class GameWorld extends LitElement {
   }
 
   private enterDungeonFloor(level: number, position?: Vec2): void {
-    const floor = this.ensureFloor(level);
-    this.map = floor.map;
-    this.moveTo(
-      position ? position.x : floor.stairsUp.x,
-      position ? position.y : floor.stairsUp.y,
-    );
-    this.monsters = floor.monsters;
-    this.currentDungeonLevel = level;
+    this.world.enterDungeonFloor(level, position);
+    this.syncFromWorld();
     const stageLabel = this.currentStage === 'mine' ? 'Mine'
       : this.currentStage === 'fortress' ? 'Fortress'
       : 'Castle';
@@ -765,68 +759,43 @@ export class GameWorld extends LitElement {
   }
 
   private useStairs(direction: 'up' | 'down'): void {
-    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
     if (direction === 'down') {
-      if (tile.feature !== 'stairs-down') {
-        this.pushMessage('There are no stairs going down here.');
-        return;
-      }
       this.descendStairs();
     } else {
-      if (tile.feature !== 'stairs-up') {
-        this.pushMessage('There are no stairs going up here.');
-        return;
-      }
       this.ascendStairs();
     }
   }
 
   /** Get a dungeon floor, generating it if this is the first visit. */
   private ensureFloor(level: number): DungeonFloor {
-    let floor = this.world.dungeonFloors.get(level);
-    if (!floor) {
-      const parentFloor = level > 1 ? this.world.dungeonFloors.get(level - 1) : undefined;
-      floor = generateFloor({
-        stage: this.currentStage,
-        dungeonLevel: level,
-        ...(this.character?.difficulty && { difficulty: this.character.difficulty }),
-        parentHasSecondaryDown: !!parentFloor?.stairsDown2,
-      });
-      this.world.dungeonFloors.set(level, floor);
-      logger.info(`Generated ${this.currentStage} floor ${level}: ${floor.map.width}×${floor.map.height}`);
-    }
-    return floor;
+    return this.world.ensureFloor(level);
   }
 
   private descendStairs(): void {
-    const nextLevel = this.currentDungeonLevel + 1;
-    if (nextLevel > totalFloorsForStage(this.currentStage)) {
-      this.pushMessage('There is no way deeper.');
+    this.world.monsters = this.monsters; // sync before transition
+    const result = this.world.descend();
+    if (!result.success) {
+      this.pushMessage(result.message);
       return;
     }
-    // Save current floor's monster state
-    const currentFloor = this.world.dungeonFloors.get(this.currentDungeonLevel);
-    if (currentFloor) currentFloor.monsters = this.monsters;
-
-    // Determine which staircase the player is using: primary (stairsDown) or secondary (stairsDown2).
-    const useSecondary = !!currentFloor?.stairsDown2
-      && this.pos.x === currentFloor.stairsDown2.x
-      && this.pos.y === currentFloor.stairsDown2.y;
-
-    // Ensure the next floor exists, then route to the matching stairs-up.
-    const nextFloor = this.ensureFloor(nextLevel);
-    const spawnPos = useSecondary && nextFloor.stairsUp2 ? nextFloor.stairsUp2 : nextFloor.stairsUp;
-
-    this.pushMessage('You descend deeper into the mine…');
-    this.enterDungeonFloor(nextLevel, spawnPos);
+    this.pushMessage('You descend deeper…');
+    this.syncFromWorld();
+    const stageLabel = this.currentStage === 'mine' ? 'Mine'
+      : this.currentStage === 'fortress' ? 'Fortress'
+      : 'Castle';
+    this.locationName = `${stageLabel} — Floor ${this.currentDungeonLevel}`;
+    this.overlay = 'none';
+    this.activeBuilding = null;
   }
 
   private ascendStairs(): void {
-    // Save current floor's monster state
-    const currentFloor = this.world.dungeonFloors.get(this.currentDungeonLevel);
-    if (currentFloor) currentFloor.monsters = this.monsters;
-
-    if (this.currentDungeonLevel <= 1) {
+    this.world.monsters = this.monsters; // sync before transition
+    const result = this.world.ascend();
+    if (!result.success) {
+      this.pushMessage(result.message);
+      return;
+    }
+    if (result.exitToSurface) {
       // Exit to surface — force-read parchment if carried and unread
       if (!this.parchmentRead) {
         const packItems: Item[] = this.character?.pack?.slots?.flatMap((s) => s.items) ?? [];
@@ -839,18 +808,14 @@ export class GameWorld extends LitElement {
       this.enterMap('farm-map', { x: 24, y: 2 });
       return;
     }
-
-    // Determine which stairs-up the player is on, then route to the matching stairs-down above.
-    const useSecondary = !!currentFloor?.stairsUp2
-      && this.pos.x === currentFloor.stairsUp2.x
-      && this.pos.y === currentFloor.stairsUp2.y;
-
-    const prevLevel = this.currentDungeonLevel - 1;
-    const prevFloor = this.world.dungeonFloors.get(prevLevel);
-    const spawnPos = useSecondary && prevFloor?.stairsDown2 ? prevFloor.stairsDown2 : prevFloor?.stairsDown;
-
     this.pushMessage('You ascend the stairs…');
-    this.enterDungeonFloor(prevLevel, spawnPos);
+    this.syncFromWorld();
+    const stageLabel = this.currentStage === 'mine' ? 'Mine'
+      : this.currentStage === 'fortress' ? 'Fortress'
+      : 'Castle';
+    this.locationName = `${stageLabel} — Floor ${this.currentDungeonLevel}`;
+    this.overlay = 'none';
+    this.activeBuilding = null;
   }
 
   // ── Combat helpers ────────────────────────────────────────────────────────
