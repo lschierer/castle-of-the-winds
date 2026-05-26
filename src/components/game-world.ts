@@ -19,6 +19,7 @@ import { maxSpellLevelAt, xpForLevel } from '../game/character.ts';
 import { CharacterModel } from '../model/Character.ts';
 import { WorldModel } from '../model/World.ts';
 import './player-inventory.ts';
+import './dungeon-map.ts';
 import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../game/save.ts';
 import { gatherContextActions, type ContextAction } from '../game/context-actions.ts';
 import {
@@ -41,7 +42,6 @@ import {
   revealAround,
   hasLineOfSight,
 } from '../game/world-map.ts';
-import { getTileStyle, monsterSpriteSrc } from '../game/sprites.ts';
 import { spellById } from '../game/spells.ts';
 import { LEARNABLE_SPELLS } from '../game/spells.ts';
 import {
@@ -63,7 +63,6 @@ import {
 } from '../game/combat.ts';
 import { monsterById, healthDescription, rollMonsterLoot } from '../game/monsters.ts';
 import { castSpell, spellTargetKind, type SpellTarget } from '../game/spell-engine.ts';
-import { FOV } from 'rot-js';
 import { type DungeonFloor } from '../game/dungeon-gen.ts';
 import { type GameStage } from '../game/progression.ts';
 import { type ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../game/equipment.ts';
@@ -71,8 +70,6 @@ import { getLogger } from '../game/logging.ts';
 
 const logger = getLogger('game:world');
 
-const TILE_PX = 32;
-const SIDEBAR_PX = 190;
 
 /**
  * Map the reimpl's 3-level `Difficulty` string to the EXE's 0..3 difficulty
@@ -87,16 +84,6 @@ function difficultyToInt(d: Character['difficulty']): number {
   return 1; // 'normal' (Intermediate)
 }
 
-function viewportSize(): { cols: number; rows: number } {
-  const w = Math.max(640, window.innerWidth - SIDEBAR_PX - 20);
-  const h = Math.max(480, window.innerHeight - 20);
-  // Ensure odd numbers so player is centered
-  let cols = Math.floor(w / TILE_PX) | 1;
-  let rows = Math.floor(h / TILE_PX) | 1;
-  if (cols % 2 === 0) cols--;
-  if (rows % 2 === 0) rows--;
-  return { cols, rows };
-}
 
 type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells';
 
@@ -203,35 +190,6 @@ export class GameWorld extends LitElement {
 
   /** Set player position and reveal surrounding tiles. */
 
-  private onMapClick(e: MouseEvent, vp: { cols: number; rows: number }, halfX: number, halfY: number): void {
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    const col = Math.floor((e.clientX - rect.left) / TILE_PX);
-    const row = Math.floor((e.clientY - rect.top) / TILE_PX);
-    const mx = this.pos.x - halfX + col;
-    const my = this.pos.y - halfY + row;
-
-    // Spell targeting mode: fire spell toward clicked tile
-    if (this.castingSpell) {
-      const rawDx = mx - this.pos.x;
-      const rawDy = my - this.pos.y;
-      if (rawDx !== 0 || rawDy !== 0) {
-        // If the player clicked directly on a monster, target it regardless of angle
-        const clickedMonster = this.monsters.find((m) => m.hp > 0 && m.x === mx && m.y === my);
-        if (clickedMonster) {
-          const dist = Math.max(Math.abs(rawDx), Math.abs(rawDy));
-          this.executeCast(this.castingSpell, {
-            dx: Math.sign(rawDx), dy: Math.sign(rawDy),
-            monster: clickedMonster, distance: dist,
-          });
-        } else {
-          this.fireDirectionalSpell(this.castingSpell, Math.sign(rawDx), Math.sign(rawDy));
-        }
-        this.castingSpell = null;
-      }
-      return;
-    }
-  }
 
   private moveTo(x: number, y: number): void {
     this.pos = { x, y };
@@ -1009,139 +967,6 @@ export class GameWorld extends LitElement {
 
   // ── Rendering ─────────────────────────────────────────────────────────────
 
-  private renderMap(): TemplateResult {
-    const { map, pos, character: c } = this;
-    if (!c) return html``;
-    const heroGender = c.gender;
-    const tiles: TemplateResult[] = [];
-
-    // Build a quick lookup of visible monster positions
-    const monsterAt = new Map<string, MonsterInstance>();
-    for (const m of this.monsters) {
-      monsterAt.set(`${m.x},${m.y}`, m);
-    }
-
-    const inDungeon = this.currentDungeonLevel > 0;
-    const playerRoomId = inDungeon ? getTileAt(map, pos.x, pos.y).roomId : undefined;
-
-    // Compute visible tiles using rot.js FOV
-    const visibleSet = new Set<string>();
-    if (inDungeon) {
-      const fov = new FOV.PreciseShadowcasting((x, y) => {
-        const t = getTileAt(map, x, y);
-        return t.walkable || t.feature === 'door';
-      });
-      fov.compute(pos.x, pos.y, 10, (x, y, _r, visible) => {
-        if (visible) visibleSet.add(`${x},${y}`);
-      });
-    }
-
-    const vp = viewportSize();
-    const halfX = (vp.cols - 1) / 2;
-    const halfY = (vp.rows - 1) / 2;
-
-    for (let row = 0; row < vp.rows; row++) {
-      for (let col = 0; col < vp.cols; col++) {
-        const mx = pos.x - halfX + col;
-        const my = pos.y - halfY + row;
-        const tile = getTileAt(map, mx, my);
-        const isHero = mx === pos.x && my === pos.y;
-
-        // Fog of war: unexplored dungeon tiles are black
-        if (inDungeon && !tile.explored) {
-          tiles.push(html`<div class="tile" style="background:#000"></div>`);
-          continue;
-        }
-
-        const s = getTileStyle(map, mx, my, isHero, heroGender);
-
-        // Monsters only visible if player has line-of-sight (rot.js FOV) or same room
-        const detectMonsters = this.playerStatus.detectMonsters === true;
-        const sameRoom = playerRoomId !== undefined && tile.roomId === playerRoomId;
-        const inLOS = !inDungeon || detectMonsters || sameRoom || visibleSet.has(`${mx},${my}`);
-        const monster = inLOS ? monsterAt.get(`${mx},${my}`) : undefined;
-        if (monster) {
-          const spec = monsterById(monster.specId);
-          const iconSrc = monsterSpriteSrc(monster.specId)
-            ?? (spec ? `/assets/sprites/icons/${spec.icon}` : '');
-          tiles.push(html`<div class="tile" style="
-            background-color: ${s.backgroundColor ?? 'transparent'};
-            background-image: ${s.backgroundImage};
-            background-size: ${s.backgroundSize};
-            background-position: ${s.backgroundPosition};
-            background-repeat: ${s.backgroundRepeat};
-            position: relative;
-          ">
-            ${iconSrc ? html`<img
-              src="${iconSrc}"
-              alt="${spec?.name ?? ''}"
-              title="${spec?.name ?? ''} — ${healthDescription(monster.hp, spec?.hp ?? 1)}"
-              style="position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;object-fit:contain;"
-            >` : ''}
-          </div>`);
-        } else {
-          tiles.push(html`<div class="tile" style="
-            background-color: ${s.backgroundColor ?? 'transparent'};
-            background-image: ${s.backgroundImage};
-            background-size: ${s.backgroundSize};
-            background-position: ${s.backgroundPosition};
-            background-repeat: ${s.backgroundRepeat};
-          "></div>`);
-        }
-      }
-    }
-    return html`<div class="map-grid" style="--vp-cols:${vp.cols};--vp-rows:${vp.rows}" @click=${(e: MouseEvent) => { this.onMapClick(e, vp, halfX, halfY); }}>${tiles}</div>`;
-  }
-
-  private renderMiniMap(): TemplateResult {
-    const { map, pos } = this;
-    const { width: mw, height: mh } = map;
-
-    const panelW = Math.max(400, window.innerWidth - SIDEBAR_PX - 40);
-    const panelH = Math.max(300, window.innerHeight - 40);
-    const cellSize = Math.max(2, Math.min(Math.floor(panelW / mw), Math.floor(panelH / mh)));
-
-    const cells: TemplateResult[] = [];
-    for (let y = 0; y < mh; y++) {
-      for (let x = 0; x < mw; x++) {
-        const tile = getTileAt(map, x, y);
-        let color: string;
-        if (x === pos.x && y === pos.y) {
-          color = '#ff0';
-        } else if (!tile.explored) {
-          color = '#000';
-        } else if (tile.feature === 'stairs-up') {
-          color = '#0f0';
-        } else if (tile.feature === 'stairs-down') {
-          color = '#f00';
-        } else if (tile.feature === 'door') {
-          color = '#a86';
-        } else if (tile.feature === 'secret-door') {
-          color = '#555';
-        } else if (tile.feature === 'wall') {
-          color = '#555';
-        } else if (tile.terrain === 'floor' && tile.walkable) {
-          color = tile.roomId !== undefined ? '#338' : '#226';
-        } else {
-          color = '#000';
-        }
-        cells.push(html`<div style="background:${color}"></div>`);
-      }
-    }
-
-    return html`
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:#000;position:relative">
-        <div style="
-          display:grid;
-          grid-template-columns:repeat(${mw}, ${cellSize}px);
-          grid-template-rows:repeat(${mh}, ${cellSize}px);
-        ">${cells}</div>
-        <div class="location-banner" style="color:var(--game-text-bright);background:rgba(0,0,0,0.7);padding:4px 12px">
-          Map View — press M to return
-        </div>
-      </div>
-    `;
-  }
 
   private renderBuildingOverlay(): TemplateResult {
     const b = this.activeBuilding;
@@ -2040,7 +1865,23 @@ export class GameWorld extends LitElement {
         ${this.renderSpellBar()}
         <div class="game-row">
           <div class="map-panel">
-            ${this.mapMode ? this.renderMiniMap() : this.renderMap()}
+            <dungeon-map
+              .map=${this.map}
+              .pos=${this.pos}
+              .monsters=${this.monsters}
+              .playerStatus=${this.playerStatus}
+              .heroGender=${this.character.gender}
+              ?inDungeon=${this.currentDungeonLevel > 0}
+              ?minimap=${this.mapMode}
+              @map-click=${(e: CustomEvent<{dx: number; dy: number}>) => {
+                if (this.castingSpell) {
+                  this.fireDirectionalSpell(this.castingSpell, e.detail.dx, e.detail.dy);
+                  this.castingSpell = null;
+                } else {
+                  this.tryMove(e.detail.dx, e.detail.dy);
+                }
+              }}
+            ></dungeon-map>
 
             ${this.castingSpell
               ? html`<div class="location-banner" style="color:var(--game-text-bright);background:rgba(0,0,0,0.7);padding:4px 12px">⚡ Choose direction — arrow keys / numpad · Esc to cancel</div>`
