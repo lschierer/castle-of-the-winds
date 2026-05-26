@@ -70,6 +70,18 @@ const logger = getLogger('game:world');
 const TILE_PX = 32;
 const SIDEBAR_PX = 190;
 
+/**
+ * Map the reimpl's 3-level `Difficulty` string to the EXE's 0..3 difficulty
+ * code (Easy=0, Intermediate=1, Difficult=2, Experts Only=3) used by the
+ * combat formulas in `combat.ts`.  The reimpl's 'normal' maps to Intermediate;
+ * 'hard' maps to Difficult; there's no reimpl equivalent for Experts Only yet.
+ */
+function difficultyToInt(d: Character['difficulty']): number {
+  if (d === 'easy') return 0;
+  if (d === 'hard') return 2;
+  return 1; // 'normal' (Intermediate)
+}
+
 function viewportSize(): { cols: number; rows: number } {
   const w = Math.max(640, window.innerWidth - SIDEBAR_PX - 20);
   const h = Math.max(480, window.innerHeight - 20);
@@ -861,7 +873,7 @@ export class GameWorld extends LitElement {
       (sum, slot) => sum + (slot ? reportedUnitWeight(slot) : 0), 0,
     );
     const result = playerMeleeAttack(c, c.weapon, spec, this.playerStatus, {
-      dungeonLevel: this.currentDungeonLevel,
+      difficulty: difficultyToInt(c.difficulty),
       equipmentAC: this.playerAC,
     }, totalCarryWeightGrams);
     this.pushMessage(result.message);
@@ -947,7 +959,7 @@ export class GameWorld extends LitElement {
       // Adjacent to player → attack
       if (dist === 1 || (Math.abs(dx0) <= 1 && Math.abs(dy0) <= 1 && dist <= 2)) {
         const result = monsterMeleeAttack(spec, 0, updatedChar, updatedStatus, {
-          dungeonLevel: this.currentDungeonLevel,
+          difficulty: difficultyToInt(updatedChar.difficulty),
           equipmentAC: this.playerAC,
           swarmCounter,
         });

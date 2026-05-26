@@ -8,14 +8,14 @@
  *
  *   monster-to-hit (squared, d100):
  *     T = 10 * monster.offensiveAC + swarmCounter - playerSpeed + 265
- *     threshold = max(1, T*T / 1000 + (dungeonLevel - 1) * GAME_DH_A4)
+ *     threshold = max(1, T*T / 1000 + (difficulty - 1) * GAME_DH_A4)
  *     hit if rand(100) < threshold
  *
  *   player-to-hit (linear, d100):
  *     T = (player.level - monster.defensiveAC + 9) * 5
  *         + playerSpeed
  *         + slayAffixToHit
- *         + (1 - dungeonLevel) * GAME_DH_A6
+ *         + (1 - difficulty) * GAME_DH_A6
  *     hit if rand(100) < max(1, T)
  *
  *   damage roll (both sides, NdM):
@@ -102,13 +102,15 @@ export interface CombatResult {
 const STR_BONUS_SCALE = 0.2;
 
 /**
- * Difficulty / depth-scaling constants. EXE values at autodata 0x00A4..0x00B0.
- * All zero in the default save state ("Practice" mode); harder difficulties
- * presumably write non-zero values during character creation.
- * See REPORT_PHASE11_PLAYER_COMBAT.md §6.
+ * Difficulty-scaling constants.  EXE values at autodata 0x00A4..0x00B0.
+ * ALL ZERO in the shipped CotW1 binary — difficulty does NOT change combat
+ * math in the original game (confirmed phase 12).  The formulas keep the
+ * difficulty-multiplied terms purely as documentation of the EXE's shape;
+ * the values are 0 so combat is identical at every difficulty.
+ * See REPORT_PHASE12_AV_AND_DIFFICULTY.md §3.
  */
-const GAME_DH_A4 = 0; // monster to-hit per-level bonus (squared-T addend)
-const GAME_DH_A6 = 0; // player to-hit per-level penalty (linear-T addend)
+const GAME_DH_A4 = 0; // monster to-hit per-difficulty bonus (squared-T addend)
+const GAME_DH_A6 = 0; // player to-hit per-difficulty penalty (linear-T addend)
 
 /**
  * Elemental affinity multiplier on spell damage.
@@ -215,19 +217,28 @@ function rollNdM(n: number, m: number): number {
 
 /**
  * Per-attack context passed by the caller.  Encapsulates the bits of game
- * state the EXE's combat formulas need (depth multiplier, equipment-AC-as-speed,
+ * state the EXE's combat formulas need (difficulty, equipment-AC-as-speed,
  * and the per-turn swarm counter).
+ *
+ * NOTE: phases 11-12 mistakenly called the difficulty term "dungeon level".
+ * The EXE's `DAT_0x4C60` is actually the chosen difficulty (0=Easy through
+ * 3=Experts Only); CheckRadioButton evidence in seg7 confirms this.  Combat
+ * scaling per dungeon depth does not exist in CotW1 — the formulas scale
+ * (multiplicatively zero in the shipped binary) by difficulty instead.
+ * See `docs/re-findings/REPORT_PHASE12_AV_AND_DIFFICULTY.md`.
  */
 export interface CombatContext {
-  /** Current dungeon depth.  Used in difficulty-scaling terms in both to-hit
-   * formulas.  Maps to `DAT_0x4C60` in the EXE.  Surface / village = 0 or 1. */
-  dungeonLevel: number;
   /**
-   * Sum of equipment AC values across worn slots.  Phase 11 hypothesis: in the
-   * EXE this maps to a movement-speed bonus that feeds both to-hit formulas
-   * (boost for player offense, penalty for monster offense).  AC does NOT
-   * reduce damage after a hit — that was an invented model in the old reimpl.
-   * See REPORT_PHASE11_PLAYER_COMBAT.md §5.
+   * Chosen difficulty: 0 = Easy, 1 = Intermediate, 2 = Difficult,
+   * 3 = Experts Only.  Maps to `DAT_0x4C60` in the EXE.  Default 1.
+   */
+  difficulty: number;
+  /**
+   * Sum of equipment AC values across worn slots.  Confirmed in phase 12: the
+   * manual defines "Armor Value" as boosted by DEX + armor + Shield spell,
+   * and feeds the to-hit defense channel.  AC does NOT reduce damage after
+   * a hit — that was an invented model in the old reimpl.
+   * See REPORT_PHASE11_PLAYER_COMBAT.md §5 and REPORT_PHASE12 §1.
    */
   equipmentAC: number;
   /**
@@ -274,7 +285,7 @@ export function playerMeleeAttack(
     - carryingPenalty(char, totalCarryWeightGrams);
 
   // To-hit: LINEAR formula.
-  //   T = (level - mon_def + 9) * 5 + speed + (1 - depth) * DH_A6
+  //   T = (level - mon_def + 9) * 5 + speed + (1 - difficulty) * DH_A6
   // EXE uses `monster.byte+0x1a` (recent-action timer) as a small subtractive
   // term — we don't model that yet (monster timing isn't tracked instance-side).
   const monDef = defensiveAC(monster.dodge);
@@ -283,7 +294,7 @@ export function playerMeleeAttack(
   const T = (char.level - monDef + 9) * 5
           + playerSpeed
           + slayAffixToHit
-          + (1 - ctx.dungeonLevel) * GAME_DH_A6;
+          + (1 - ctx.difficulty) * GAME_DH_A6;
   const threshold = Math.max(1, T);
   if (rand() * 100 >= threshold) {
     return { damage: 0, message: `You miss the ${monster.name}.`, dodged: true };
@@ -360,7 +371,7 @@ export function monsterMeleeAttack(
           + swarm
           - playerSpeed
           + 265;
-  const threshold = Math.max(1, (T * T) / 1000 + (ctx.dungeonLevel - 1) * GAME_DH_A4);
+  const threshold = Math.max(1, (T * T) / 1000 + (ctx.difficulty - 1) * GAME_DH_A4);
   if (rand() * 100 >= threshold) {
     return { damage: 0, message: `The ${monster.name} swings at you and misses.`, dodged: true };
   }
