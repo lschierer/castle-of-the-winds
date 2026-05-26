@@ -1145,15 +1145,26 @@ export function rollMonsterLoot(spec: MonsterSpec, dungeonLevel: number): Item[]
  * CASTLE1.EXE (seg13 strings): Uninjured / Barely scratched / Slightly injured
  * / Injured / Heavily injured / Critically injured.
  *
- * "Uninjured" is reserved for full HP; any damage at all moves to "barely
- * scratched", since players otherwise see "for 5 damage" followed by
- * "uninjured" for small-but-real hits on high-HP monsters.  The remaining
- * five bands split the wounded range evenly.
+ * Health description for a monster.
+ *
+ * "uninjured" and "dead" are point states (exactly full / exactly zero).
+ * The five injury bands divide the open interval (0%, 100%) into equal
+ * 20-percentage-point segments:
+ *
+ *   100%          → uninjured
+ *   (80%, 100%)   → barely scratched
+ *   (60%,  80%)   → slightly injured
+ *   (40%,  60%)   → injured
+ *   (20%,  40%)   → heavily injured
+ *   ( 0%,  20%)   → critically injured
+ *   0%            → defeated
  */
 export function healthDescription(currentHp: number, maxHp: number): string {
-  if (currentHp <= 0)         return 'defeated';
-  if (currentHp >= maxHp)     return 'uninjured';
+  if (currentHp >= maxHp) return 'uninjured';
   const pct = currentHp / maxHp;
+  if (currentHp >= maxHp)     return 'uninjured';
+  if (currentHp <= 0)         return 'defeated';
+  if (pct <= 0)   return 'defeated';
   if (pct < 1/5)  return 'critically injured';
   if (pct < 2/5)  return 'heavily injured';
   if (pct < 3/5)  return 'injured';
