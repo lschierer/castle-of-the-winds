@@ -718,6 +718,8 @@ export class GameWorld extends LitElement {
   }
 
   private descendStairs(): void {
+    this.world.pos = { ...this.pos };
+    this.world.map = this.map;
     this.world.monsters = this.monsters; // sync before transition
     const result = this.world.descend();
     if (!result.success) {
@@ -735,6 +737,8 @@ export class GameWorld extends LitElement {
   }
 
   private ascendStairs(): void {
+    this.world.pos = { ...this.pos };
+    this.world.map = this.map;
     this.world.monsters = this.monsters; // sync before transition
     const result = this.world.ascend();
     if (!result.success) {
@@ -1106,34 +1110,35 @@ export class GameWorld extends LitElement {
   }
 
   private fireDirectionalSpell(spellId: string, dx: number, dy: number): void {
-    // Trace the ray one step at a time, stopping at walls or the first monster.
-    let target: SpellTarget = { dx, dy };
-    const isDiagonal = dx !== 0 && dy !== 0;
+    // Trace a ray from player toward (dx, dy) using Bresenham's line algorithm.
+    // Supports arbitrary angles, not just 8 cardinal directions.
+    let target: SpellTarget = { dx: Math.sign(dx), dy: Math.sign(dy) };
+    const px = this.pos.x;
+    const py = this.pos.y;
 
-    for (let dist = 1; dist <= 20; dist++) {
-      const tx = this.pos.x + dx * dist;
-      const ty = this.pos.y + dy * dist;
+    const adx = Math.abs(dx);
+    const ady = Math.abs(dy);
+    const sx = Math.sign(dx);
+    const sy = Math.sign(dy);
+    const steps = Math.max(adx, ady, 1);
 
-      // Diagonal corner check: a diagonal step passes between two adjacent tiles.
-      // If both "corner" tiles are solid walls the path is physically closed —
-      // the projectile cannot squeeze through the gap.
-      //   Corner A: same x as destination, same y as source  (tx, py + dy*(dist-1))
-      //   Corner B: same x as source, same y as destination  (px + dx*(dist-1), ty)
-      if (isDiagonal) {
-        const cornerAWalkable = isWalkable(this.map, tx,                          this.pos.y + dy * (dist - 1));
-        const cornerBWalkable = isWalkable(this.map, this.pos.x + dx * (dist - 1), ty);
-        if (!cornerAWalkable && !cornerBWalkable) break; // both corners blocked
-      }
+    for (let i = 1; i <= 20; i++) {
+      // Bresenham: project the i-th step along the line from (0,0) to (dx,dy)
+      const tx = px + Math.round((dx * i) / steps);
+      const ty = py + Math.round((dy * i) / steps);
 
-      // Check for a monster at this tile before the wall test — monsters
-      // always stand on walkable tiles, so this is safe.
+      // Don't re-check the player's tile
+      if (tx === px && ty === py) continue;
+
+      // Check for a monster
       const m = this.monsters.find((mon) => mon.x === tx && mon.y === ty);
       if (m) {
-        target = { dx, dy, monster: m, distance: dist };
+        const dist = Math.max(Math.abs(tx - px), Math.abs(ty - py));
+        target = { dx: sx, dy: sy, monster: m, distance: dist };
         break;
       }
 
-      // Stop at solid walls.
+      // Stop at solid walls
       if (!isWalkable(this.map, tx, ty)) break;
     }
     this.executeCast(spellId, target);
@@ -1873,9 +1878,12 @@ export class GameWorld extends LitElement {
               .heroGender=${this.character.gender}
               ?inDungeon=${this.currentDungeonLevel > 0}
               ?minimap=${this.mapMode}
-              @map-click=${(e: CustomEvent<{dx: number; dy: number}>) => {
+              @map-click=${(e: CustomEvent<{dx: number; dy: number; tileX: number; tileY: number}>) => {
                 if (this.castingSpell) {
-                  this.fireDirectionalSpell(this.castingSpell, e.detail.dx, e.detail.dy);
+                  // Fire along the actual angle to the clicked tile (Bresenham ray trace handles walls)
+                  const rawDx = e.detail.tileX - this.pos.x;
+                  const rawDy = e.detail.tileY - this.pos.y;
+                  this.fireDirectionalSpell(this.castingSpell, rawDx, rawDy);
                   this.castingSpell = null;
                 } else {
                   this.tryMove(e.detail.dx, e.detail.dy);

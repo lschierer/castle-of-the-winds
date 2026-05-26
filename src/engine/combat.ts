@@ -47,6 +47,8 @@ export interface MonsterInstance {
   instanceId: string;
   /** Current hit points. */
   hp: number;
+  /** Maximum hit points (includes difficulty bonus). */
+  maxHp: number;
   /** Position on the map. */
   x: number;
   y: number;

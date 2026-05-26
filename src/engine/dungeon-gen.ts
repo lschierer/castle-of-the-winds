@@ -348,10 +348,12 @@ function spawnMonsters(
     if (used.has(key)) continue;
     used.add(key);
     const spec = pick(pool);
+    const monsterHp = spec.hp + hpBonus;
     monsters.push({
       specId: spec.id,
       instanceId: `m${monsterSeq++}`,
-      hp: spec.hp + hpBonus,
+      hp: monsterHp,
+      maxHp: monsterHp,
       x: pos.x, y: pos.y,
       alerted: false,
       status: {},
@@ -422,7 +424,7 @@ function placeGuaranteedMineSpawns(
     if (t0) t0.items.push(armor);
     monsters.push({
       specId: 'kobold', instanceId: `m${monsterSeq++}`,
-      hp: 5, x: r0.x + 1, y: r0.y, alerted: false, status: {},
+      hp: 5, maxHp: 5, x: r0.x + 1, y: r0.y, alerted: false, status: {},
     });
   }
 
@@ -431,7 +433,7 @@ function placeGuaranteedMineSpawns(
     for (let i = 0; i < 2; i++) {
       monsters.push({
         specId: 'giant_rat', instanceId: `m${monsterSeq++}`,
-        hp: 4, x: r1.x + i, y: r1.y, alerted: false, status: {},
+        hp: 4, maxHp: 4, x: r1.x + i, y: r1.y, alerted: false, status: {},
       });
     }
   }
@@ -440,7 +442,7 @@ function placeGuaranteedMineSpawns(
   if (r2) {
     monsters.push({
       specId: 'goblin', instanceId: `m${monsterSeq++}`,
-      hp: 6, x: r2.x, y: r2.y, alerted: false, status: {},
+      hp: 6, maxHp: 6, x: r2.x, y: r2.y, alerted: false, status: {},
     });
   }
 }
@@ -506,6 +508,7 @@ function placeHrungnirBoss(
     specId: 'hrugnir',
     instanceId: `m${monsterSeq++}`,
     hp: 120,
+    maxHp: 120,
     x: center.x, y: center.y,
     alerted: true,
     status: {},
@@ -525,6 +528,7 @@ function placeHrungnirBoss(
         specId: 'ogre',
         instanceId: `m${monsterSeq++}`,
         hp: 45,
+        maxHp: 45,
         x: gx, y: gy,
         alerted: true,
         status: {},

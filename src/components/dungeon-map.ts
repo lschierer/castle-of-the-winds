@@ -115,7 +115,7 @@ export class DungeonMap extends LitElement {
             position: relative;
           ">
             ${iconSrc ? html`<img src="${iconSrc}" alt="${spec?.name ?? ''}"
-              title="${spec?.name ?? ''} — ${healthDescription(monster.hp, spec?.hp ?? 1)}"
+              title="${spec?.name ?? ''} — ${healthDescription(monster.hp, monster.maxHp)}"
               style="position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;object-fit:contain;">` : ''}
           </div>`);
         } else {
@@ -187,7 +187,7 @@ export class DungeonMap extends LitElement {
     const dy = row - halfY;
     if (dx === 0 && dy === 0) return;
     this.dispatchEvent(new CustomEvent('map-click', {
-      detail: { dx: Math.sign(dx), dy: Math.sign(dy) },
+      detail: { dx: Math.sign(dx), dy: Math.sign(dy), tileX: this.pos.x + dx, tileY: this.pos.y + dy },
       bubbles: true, composed: true,
     }));
   }
