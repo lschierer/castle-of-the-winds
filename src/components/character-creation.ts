@@ -523,7 +523,7 @@ export class CharacterCreation extends LitElement {
     const pool = availablePoints(this.stats);
     const hp = derivedMaxHitPoints(this.stats);
     const mana = derivedMaxMana(this.stats);
-    const derived = computeDerived(this.stats, this.difficulty);
+    const derived = computeDerived(this.stats);
     const canBegin = this.name.trim().length > 0;
     const poolClass = pool === 0 ? 'empty' : pool <= 15 ? 'low' : '';
 

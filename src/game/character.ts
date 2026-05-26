@@ -189,51 +189,41 @@ export function adjustStat(
 
 // ── Difficulty modifier ───────────────────────────────────────────────────────
 
-const DIFFICULTY_MOD: Record<Difficulty, number> = {
-  easy: 10,
-  normal: 0,
-  hard: -10,
-  expert: -10,
-};
-
 // ── Derived stat formulas ─────────────────────────────────────────────────────
 
 /**
  * Wisdom: spiritual insight, spell effectiveness, magic resistance.
  * Derives primarily from Intelligence with a Constitution component.
- * These are rough approximations; exact formulas are not documented in
- * available references and will be refined once gameplay is tested.
  */
-export function derivedWisdom(stats: CharacterStats, difficulty: Difficulty): number {
+export function derivedWisdom(stats: CharacterStats): number {
   const base = Math.floor(stats.intelligence * 0.6 + stats.constitution * 0.4);
-  return Math.max(STAT_MIN, Math.min(STAT_MAX, base + DIFFICULTY_MOD[difficulty]));
+  return Math.max(STAT_MIN, Math.min(STAT_MAX, base));
 }
 
 /**
  * Speed: quickness in combat, may grant extra actions.
  * Derives from Dexterity (primary), Constitution, and Strength.
  */
-export function derivedSpeed(stats: CharacterStats, difficulty: Difficulty): number {
+export function derivedSpeed(stats: CharacterStats): number {
   const base = Math.floor(
     stats.dexterity * 0.4 + stats.constitution * 0.35 + stats.strength * 0.25,
   );
-  return Math.max(STAT_MIN, Math.min(STAT_MAX, base + DIFFICULTY_MOD[difficulty]));
+  return Math.max(STAT_MIN, Math.min(STAT_MAX, base));
 }
 
 /**
  * Charisma: NPC reactions, shop prices.
- * Basis unclear from references; starts at a neutral 50 modified by difficulty.
- * Equipment (e.g. cursed items) affects it significantly during play.
+ * Basis unclear from references; starts at a neutral 50.
  */
-export function derivedCharisma(difficulty: Difficulty): number {
-  return Math.max(STAT_MIN, Math.min(STAT_MAX, 50 + DIFFICULTY_MOD[difficulty]));
+export function derivedCharisma(): number {
+  return Math.max(STAT_MIN, Math.min(STAT_MAX, 50));
 }
 
-export function computeDerived(stats: CharacterStats, difficulty: Difficulty): DerivedStats {
+export function computeDerived(stats: CharacterStats): DerivedStats {
   return {
-    wisdom: derivedWisdom(stats, difficulty),
-    speed: derivedSpeed(stats, difficulty),
-    charisma: derivedCharisma(difficulty),
+    wisdom: derivedWisdom(stats),
+    speed: derivedSpeed(stats),
+    charisma: derivedCharisma(),
   };
 }
 
@@ -281,7 +271,7 @@ export function createCharacter(
   stats: CharacterStats,
   startingSpell: string,
 ): Character {
-  const derived = computeDerived(stats, difficulty);
+  const derived = computeDerived(stats);
   const maxHp = derivedMaxHitPoints(stats);
   const maxMana = derivedMaxMana(stats);
   const loadout = makeStartingLoadout();
