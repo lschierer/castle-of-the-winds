@@ -289,7 +289,8 @@ export function playerMeleeAttack(
   // EXE uses `monster.byte+0x1a` (recent-action timer) as a small subtractive
   // term — we don't model that yet (monster timing isn't tracked instance-side).
   const monDef = defensiveAC(monster.dodge);
-  const playerSpeed = (char.derived?.speed ?? 0) + ctx.equipmentAC;
+  const shieldBonus = status.shielded ? 10 : 0;
+  const playerSpeed = char.derived.speed + ctx.equipmentAC + shieldBonus;
   const slayAffixToHit = 0; // TODO: when slay-X affixes are implemented, sum to-hit bonuses
   const T = (char.level - monDef + 9) * 5
           + playerSpeed
@@ -315,7 +316,8 @@ export function playerMeleeAttack(
   }
 
   if (char.gauntlets) {
-    const gspec = GAUNTLET_SPECS.find((s) => s.name === char.gauntlets!.name);
+    const gauntlets = char.gauntlets;
+    const gspec = GAUNTLET_SPECS.find((s) => s.name === gauntlets.name);
     if (gspec?.damageBonus) damage += gspec.damageBonus;
   }
 
@@ -364,10 +366,11 @@ export function monsterMeleeAttack(
 ): CombatResult {
   // To-hit: SQUARED-difference formula vs d100.
   const monOff = offensiveAC(monster.attack);
-  const playerSpeed = (char.derived?.speed ?? 0) + ctx.equipmentAC;
+  // Shield spell adds to AV per the manual: "temporarily increases the character's Armor Value"
+  const shieldBonus = status.shielded ? 10 : 0;
+  const playerSpeed = char.derived.speed + ctx.equipmentAC + shieldBonus;
   const swarm = ctx.swarmCounter ?? 0;
-  const shieldPenalty = status.shielded ? 1 : 0;  // small reduction to monster's effective offensive AC
-  const T = 10 * Math.max(0, monOff - shieldPenalty)
+  const T = 10 * monOff
           + swarm
           - playerSpeed
           + 265;

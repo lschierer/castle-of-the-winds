@@ -201,13 +201,19 @@ export function derivedWisdom(stats: CharacterStats): number {
 }
 
 /**
- * Speed: quickness in combat, may grant extra actions.
- * Derives from Dexterity (primary), Constitution, and Strength.
+ * Armor Value (AV) base from DEX — called "speed" historically but per RE
+ * phase 9/12 this is the defensive to-hit value.
+ *
+ * EXE formula (FUN_1080_15a0, p2==3):
+ *   if DEX > 56: AV += (DEX - 56) * level / 4
+ *   if DEX < 32: AV -= (32 - DEX) * level / 4
+ * We approximate with level=1 at creation; combat.ts adds equipmentAC on top.
  */
-export function derivedSpeed(stats: CharacterStats): number {
-  const base = Math.floor(
-    stats.dexterity * 0.4 + stats.constitution * 0.35 + stats.strength * 0.25,
-  );
+export function derivedSpeed(stats: CharacterStats, level = 1): number {
+  const dex = stats.dexterity;
+  let base = 50; // neutral baseline
+  if (dex > 56) base += Math.floor((dex - 56) * level / 4);
+  else if (dex < 32) base -= Math.floor((32 - dex) * level / 4);
   return Math.max(STAT_MIN, Math.min(STAT_MAX, base));
 }
 
@@ -219,10 +225,10 @@ export function derivedCharisma(): number {
   return Math.max(STAT_MIN, Math.min(STAT_MAX, 50));
 }
 
-export function computeDerived(stats: CharacterStats): DerivedStats {
+export function computeDerived(stats: CharacterStats, level = 1): DerivedStats {
   return {
     wisdom: derivedWisdom(stats),
-    speed: derivedSpeed(stats),
+    speed: derivedSpeed(stats, level),
     charisma: derivedCharisma(),
   };
 }
@@ -350,13 +356,15 @@ export function canLevelUp(character: Character): boolean {
 export function levelUp(character: Character): Character {
   const hpGain = hpPerLevel(character.stats);
   const mpGain = spPerLevel(character.stats);
+  const newLevel = character.level + 1;
   return {
     ...character,
-    level: character.level + 1,
+    level: newLevel,
     maxHitPoints: character.maxHitPoints + hpGain,
     hitPoints: character.hitPoints + hpGain, // heal the gained amount
     maxMana: character.maxMana + mpGain,
     mana: character.mana + mpGain,
+    derived: computeDerived(character.stats, newLevel),
   };
 }
 
