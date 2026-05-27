@@ -368,8 +368,14 @@ function placeLoot(
   grid: Tile[][], w: number, h: number, lootLevel: number,
   rooms: RotRoom[], difficulty: number,
 ): void {
-  // Per RE phase 14: less treasure at higher difficulty
-  // Reduce loot chance by ~20% per difficulty step
+  // The manual claims "less treasure at higher difficulty."  RE phase 14 and
+  // subsequent searches found no dedicated loot-density formula in the EXE;
+  // every difficulty-keyed loot effect we located emerges from the spawn-
+  // count formula (FUN_seg10_0x1b90) — fewer monsters → fewer drops.
+  //
+  // The reimpl keeps an additional per-tile reduction (-20%/step) as a
+  // playability-tuned approximation since the reimpl's tile-scatter floor
+  // loot has no direct EXE analog to start with.  Drop if too generous.
   const lootMult = 1.0 - 0.2 * difficulty;
   const roomSet = new Set<string>();
   for (const room of rooms) {
