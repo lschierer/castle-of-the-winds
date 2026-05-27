@@ -289,17 +289,17 @@ export const BRACER_SPECS: readonly EquipmentSpec[] = [
 // ── Boots ─────────────────────────────────────────────────────────────────────
 
 export const BOOT_SPECS: readonly EquipmentSpec[] = [
-  { name: 'Boots',               kind: 'boots', ac: 0, weight: 1500, bulk: 4000, icon: 'boots.png', tier: 1 },
-  { name: 'Boots of Speed',      kind: 'boots', ac: 0, weight: 1500, bulk: 4000, icon: 'BOOtsspd.png', statBonus: { dexterity: 8 }, tier: 4 },
-  { name: 'Boots of Levitation', kind: 'boots', ac: 0, weight: 1500, bulk: 4000, icon: 'BOOtslev.png', tier: 5 },
+  { name: 'Boots',               kind: 'boots', ac: 0, weight: 1500, bulk: 4000, icon: '/assets/sprites/icons/Boots/boots.png', iconCursed: '/assets/sprites/icons/Boots/boots_b.png', iconEnchanted: '/assets/sprites/icons/Boots/BOOts_c.png', tier: 1 },
+  { name: 'Boots of Speed',      kind: 'boots', ac: 0, weight: 1500, bulk: 4000, icon: '/assets/sprites/icons/Boots/BOOtsspd.png', statBonus: { dexterity: 8 }, tier: 4 },
+  { name: 'Boots of Levitation', kind: 'boots', ac: 0, weight: 1500, bulk: 4000, icon: '/assets/sprites/icons/Boots/BOOtslev.png', tier: 5 },
 ];
 
 // ── Cloaks ────────────────────────────────────────────────────────────────────
 
 export const CLOAK_SPECS: readonly EquipmentSpec[] = [
-  { name: 'Cloak',               kind: 'cloak', ac: 0, weight: 500, bulk: 6000, icon: 'cloak.png', tier: 1 },
-  { name: 'Cloak of Protection', kind: 'cloak', ac: 6, weight: 500, bulk: 6000, icon: 'Cloak_e.png', tier: 3 },
-  { name: 'Cloak of Resistance', kind: 'cloak', ac: 3, weight: 500, bulk: 6000, icon: 'Cloak_e.png', tier: 5,
+  { name: 'Cloak',               kind: 'cloak', ac: 0, weight: 500, bulk: 6000, icon: '/assets/sprites/icons/Cloaks/cloak.png', iconCursed: '/assets/sprites/icons/Cloaks/Cloak_c.png', iconEnchanted: '/assets/sprites/icons/Cloaks/Cloak_e.png', tier: 1 },
+  { name: 'Cloak of Protection', kind: 'cloak', ac: 6, weight: 500, bulk: 6000, icon: '/assets/sprites/icons/Cloaks/Cloak_e.png', tier: 3 },
+  { name: 'Cloak of Resistance', kind: 'cloak', ac: 3, weight: 500, bulk: 6000, icon: '/assets/sprites/icons/Cloaks/cloak_r.png', tier: 5,
     affinities: [
       { element: 'fire',      mod: 'resist' },
       { element: 'cold',      mod: 'resist' },
@@ -390,8 +390,8 @@ const DEFAULT_KIND_ICON: Partial<Record<ItemKind, string>> = {
   armor:     '/assets/sprites/icons/Armor/icon_115.png',
   helm:      '/assets/sprites/icons/Helmets/icon_123.png',
   shield:    '/assets/sprites/icons/Shields/icon_119.png',
-  boots:     '/assets/sprites/icons/boots.png',
-  cloak:     '/assets/sprites/icons/cloak.png',
+  boots:     '/assets/sprites/icons/Boots/boots.png',
+  cloak:     '/assets/sprites/icons/Cloaks/cloak.png',
   bracers:   '/assets/sprites/icons/Bracers/icon_127.png',
   gauntlets: '/assets/sprites/icons/Gauntlets/icon_129.png',
 };

@@ -54,8 +54,8 @@ export class PlayerInventory extends LitElement {
     .equip-slot:hover { border-color: var(--game-border-strong); background: var(--game-bg-dim); }
     .equip-slot.filled { border-color: var(--game-border-strong); background: var(--game-bg-dim); }
     .equip-slot.char-portrait { border: none; background: var(--game-bg-deep); cursor: default; grid-column: 2 / 5; grid-row: 2 / 5; }
-    .equip-slot-icon { width: 32px; height: 32px; image-rendering: pixelated; opacity: 0.35; }
-    .equip-slot.filled .equip-slot-icon { opacity: 1; }
+    .equip-slot-icon { width: 32px; height: 32px; image-rendering: pixelated; opacity: 0.35; filter: grayscale(1); }
+    .equip-slot.filled .equip-slot-icon { opacity: 1; filter: none; }
     .equip-slot-label { font-size: 0.48rem; color: var(--game-text-disabled); letter-spacing: 0.06em; text-transform: uppercase; text-align: center; line-height: 1.1; }
     .equip-slot.filled .equip-slot-label { color: var(--game-border-accent); }
     .equip-slot-name { font-size: 0.52rem; color: var(--game-text-body); text-align: center; line-height: 1.2; max-width: 68px; overflow: hidden; word-break: break-word; }
@@ -677,7 +677,7 @@ export class PlayerInventory extends LitElement {
             @dragend=${this.onItemDragEnd.bind(this)}>
           <span class="equip-slot-name">${displayName(item)}</span>
         ` : html`
-          <img class="equip-slot-icon" src="${iconSrc}" alt="${label}">
+          ${iconSrc ? html`<img class="equip-slot-icon" src="${iconSrc}" alt="${label}">` : ''}
           <span class="equip-slot-label">${label}</span>
         `}
       </div>
@@ -710,21 +710,21 @@ export class PlayerInventory extends LitElement {
             'belt    char    char    char    freeh'
             'pack    purse   boots   ring-r  x';
         ">
-          ${this.renderEquipSlot(c.bracers, 'Bracers', `${IC}/bracers.png`, 'bracers')}
-          ${this.renderEquipSlot(c.weapon, 'Weapon', `${IC}/sword.png`, 'weapon')}
-          ${this.renderEquipSlot(c.ringLeft, 'Ring', `${IC}/ring.png`, 'ring-l')}
-          ${this.renderEquipSlot(c.belt, 'Belt', `${IC}/belt.png`, 'belt')}
-          ${this.renderEquipSlot(c.pack, 'Pack', `${IC}/pack.png`, 'pack')}
-          ${this.renderEquipSlot(c.armor, 'Armor', `${IC}/armor.png`, 'armor')}
-          ${this.renderEquipSlot(c.amulet, 'Amulet', `${IC}/amulet.png`, 'amulet')}
-          ${this.renderEquipSlot(c.cloak, 'Cloak', `${IC}/cloak.png`, 'cloak')}
-          ${this.renderEquipSlot(c.helm, 'Helmet', `${IC}/helmet.png`, 'helmet')}
+          ${this.renderEquipSlot(c.bracers, 'Bracers', `${IC}/Bracers/icon_127.png`, 'bracers')}
+          ${this.renderEquipSlot(c.weapon, 'Weapon', `${IC}/Weapons/icon_111.png`, 'weapon')}
+          ${this.renderEquipSlot(c.ringLeft, 'Ring', `${IC}/Rings/ring.png`, 'ring-l')}
+          ${this.renderEquipSlot(c.belt, 'Belt', `${IC}/Containers/icon_137.png`, 'belt')}
+          ${this.renderEquipSlot(c.pack, 'Pack', `${IC}/Containers/icon_143.png`, 'pack')}
+          ${this.renderEquipSlot(c.armor, 'Armor', `${IC}/Armor/icon_115.png`, 'armor')}
+          ${this.renderEquipSlot(c.amulet, 'Amulet', `${IC}/Amulets/icon_107.png`, 'amulet')}
+          ${this.renderEquipSlot(c.cloak, 'Cloak', `${IC}/Cloaks/cloak.png`, 'cloak')}
+          ${this.renderEquipSlot(c.helm, 'Helmet', `${IC}/Helmets/icon_123.png`, 'helmet')}
           <div class="equip-slot char-portrait" style="grid-area:char">
             <img class="char-portrait-img" src="${portraitSrc}" alt="${c.name}">
           </div>
-          ${this.renderEquipSlot(c.shield, 'Shield', `${IC}/shield.png`, 'shield')}
-          ${this.renderEquipSlot(c.gauntlets, 'Gauntlets', `${IC}/gauntlet.png`, 'gauntlets')}
-          ${this.renderEquipSlot(c.freeHand, 'Free Hand', `${IC}/wand.png`, 'freeh')}
+          ${this.renderEquipSlot(c.shield, 'Shield', `${IC}/Shields/icon_119.png`, 'shield')}
+          ${this.renderEquipSlot(c.gauntlets, 'Gauntlets', `${IC}/Gauntlets/icon_129.png`, 'gauntlets')}
+          ${this.renderEquipSlot(c.freeHand, 'Free Hand', '', 'freeh')}
           <div
             class="equip-slot ${purse ? 'filled' : ''}"
             style="grid-area:purse;${purse ? 'cursor:pointer' : ''}"
@@ -735,7 +735,7 @@ export class PlayerInventory extends LitElement {
             @drop=${(e: DragEvent) => { this.onDropEquipSlot('purse', e); }}
           >
             ${purse ? html`
-              <img class="equip-slot-icon" src="${IC}/purse.png" alt="Purse"
+              <img class="equip-slot-icon" src="${IC}/Containers/icon_157.png" alt="Purse"
                 draggable="true"
                 @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'equip', slotKey: 'purse', item: purse }, e); }}
                 @dragend=${this.onItemDragEnd.bind(this)}>
@@ -743,12 +743,12 @@ export class PlayerInventory extends LitElement {
                 ${cp > 0 ? `${cp.toLocaleString()}cp ` : ''}${sp > 0 ? `${sp.toLocaleString()}sp ` : ''}${gp > 0 ? `${gp.toLocaleString()}gp ` : ''}${pp > 0 ? `${pp.toLocaleString()}pp` : ''}
               </span>
             ` : html`
-              <img class="equip-slot-icon" src="${IC}/purse.png" alt="Purse">
+              <img class="equip-slot-icon" src="${IC}/Containers/icon_157.png" alt="Purse">
               <span class="equip-slot-label">Purse</span>
             `}
           </div>
-          ${this.renderEquipSlot(c.boots, 'Boots', `${IC}/boots.png`, 'boots')}
-          ${this.renderEquipSlot(c.ringRight, 'Ring', `${IC}/ring.png`, 'ring-r')}
+          ${this.renderEquipSlot(c.boots, 'Boots', `${IC}/Boots/boots.png`, 'boots')}
+          ${this.renderEquipSlot(c.ringRight, 'Ring', `${IC}/Rings/ring.png`, 'ring-r')}
           <div style="grid-area:x; background:var(--game-bg-deep)"></div>
         </div>
 
