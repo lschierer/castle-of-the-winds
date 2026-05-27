@@ -23,6 +23,7 @@ import './player-inventory.ts';
 import './dungeon-map.ts';
 import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../engine/save.ts';
 import { gatherContextActions, type ContextAction } from './context-actions.ts';
+import { initLogging } from '../engine/logging.ts';
 import {
   type TileMap,
   type MapId,
@@ -314,6 +315,7 @@ export class GameWorld extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    void initLogging();
 
     // Check if this is a fresh new game (from character creation)
     const url = new URL(window.location.href);

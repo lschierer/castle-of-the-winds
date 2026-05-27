@@ -1,11 +1,13 @@
 # Logging configuration for Dungeons Crawl
 # Valid levels: trace, debug, info, warn, error, silent
+#
+# In Tauri mode, this file is read by the Rust backend.
+# In browser mode, the default is 'debug' for playtesting.
 default: warn
 
-# Per-package level overrides. Keys match the name passed to log.getLogger(name).
-# Packages not listed here use the default level above.
+# Per-package level overrides. Keys match the name passed to getLogger(name).
 packages:
-  game:combat: warn
+  game:combat: debug
   game:map: warn
   game:ui: warn
   game:items: warn

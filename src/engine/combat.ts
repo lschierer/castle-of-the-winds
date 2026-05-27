@@ -36,6 +36,9 @@ import { WEAPON_SPECS } from '../data/items.ts';
 import type { ElementType } from '../data/equipment.ts';
 import { GAUNTLET_SPECS } from '../data/equipment.ts';
 import { RANGE_FALLOFF, findAttackFormula, findMonsterAttacks } from '../data/binary-data/index.ts';
+import { getLogger } from './logging.ts';
+
+const log = getLogger('game:combat');
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -326,6 +329,7 @@ export function playerMeleeAttack(
           + slayAffixToHit
           + (1 - ctx.difficulty) * GAME_DH_A6;
   const threshold = Math.max(1, T);
+  log.debug(`[player→${monster.name}] to-hit: T=${T} threshold=${threshold}% (lvl=${char.level} monDef=${monDef} speed=${playerSpeed})`);
   if (rand() * 100 >= threshold) {
     const missMsgs = [
       `You miss the ${monster.name}.`,
@@ -360,6 +364,7 @@ export function playerMeleeAttack(
 
   // Varied hit messages based on damage ratio and monster type
   const name = monster.name;
+  log.debug(`[player→${name}] damage: ${netDamage} (hp: ${monster.hp}/${monster.hp} maxHp used for ratio)`);
   const isHumanoid = /goblin|kobold|hobgoblin|orc|bandit|warrior|thief|berserker|wizard|necromancer|man$|ogre|troll|giant/i.test(name);
   const isScaly = /dragon|snake|viper|lizard/i.test(name);
   let hitMsg: string;
@@ -436,6 +441,7 @@ export function monsterMeleeAttack(
           - playerSpeed
           + 265;
   const threshold = Math.max(1, (T * T) / 1000 + (ctx.difficulty - 1) * GAME_DH_A4);
+  log.debug(`[${monster.name}→player] to-hit: T=${T} threshold=${Math.round(threshold)}% (monOff=${monOff} playerSpeed=${playerSpeed} swarm=${swarm})`);
   if (rand() * 100 >= threshold) {
     const missMsgs = [
       `The ${monster.name} missed you!`,
