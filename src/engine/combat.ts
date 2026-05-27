@@ -204,6 +204,29 @@ function weaponDice(weaponClass: number): { n: number; m: number; base: number }
 }
 
 /**
+ * Map an EXE damage-type code (from a monster's 4-byte attack entry, byte[1] >> 1)
+ * to the number of right-shifts to apply per the player's matching resist stack.
+ *
+ * Derived from FUN_1090_1d44's 37-case switch:
+ *   case  1, 23 → fire-resist bit
+ *   case  2, 24 → cold-resist bit
+ *   case  3, 25 → lightning-resist bit
+ *   case  4, 26 → acid-resist bit       (no reimpl analog)
+ *   case  5, 6, 7, 13, 27 → drain/poison group  (no resist-stack analog)
+ *   case  0, 20–22, 28–32, 34 → magic-resist bit (no reimpl analog)
+ *   case  8–19 (except 13), 33, 35, 36 → no resist (always full damage)
+ *
+ * Only the three reimpl-tracked elements (fire / cold / lightning) currently
+ * affect damage here; other channels would need new fields on PlayerStatus.
+ */
+function damageTypeResistStacks(damageType: number, status: PlayerStatus): number {
+  if (damageType === 1 || damageType === 23) return status.resistFire ?? 0;
+  if (damageType === 2 || damageType === 24) return status.resistCold ?? 0;
+  if (damageType === 3 || damageType === 25) return status.resistLightning ?? 0;
+  return 0;
+}
+
+/**
  * Roll NdM: damage = N + sum-of-N rand(0..M-1).
  * Matches the EXE's apply-damage loop in FUN_1090_224c and FUN_1040_140c.
  * Range [N, N*M], mean N*(M+1)/2.
@@ -389,20 +412,21 @@ export function monsterMeleeAttack(
   // through all entries at +0x22, each respecting its byte+3 low-nibble
   // (multi-hit count).
   //
-  // Multi-attack examples:
-  //   Wolf-Man        : 2d3 ×2, 2d6        → 3 rolls
-  //   Young Red Dragon: 1d4 ×2, 1d8, 1d10, 3d6 → 5 rolls
-  //   Carrion Creeper : 1d2 ×6             → 6 rolls
-  //
-  // Fallback: monsters not in the binary-data table use the attackToNdM
-  // heuristic for a single roll.
+  // Per-attack element resist: the EXE's FUN_1090_1d44 switches on the
+  // damage_type code and looks up the player's resist stack via the table
+  // at autodata 0x4918.  Each stack right-shifts damage by one
+  // (1 stack = halve, 2 = quarter, etc.).  We mirror that here for the
+  // resist channels the reimpl tracks (fire / cold / lightning).
   let rawDamage = 0;
   const data = findMonsterAttacks(monster.id);
   if (data && data.attacks.length > 0) {
     for (const atk of data.attacks) {
+      const stacks = damageTypeResistStacks(atk.damageType, status);
       const hits = Math.max(1, atk.multiHit);
       for (let i = 0; i < hits; i++) {
-        rawDamage += rollNdM(atk.n, atk.m);
+        let dmg = rollNdM(atk.n, atk.m);
+        if (stacks > 0) dmg = dmg >>> stacks;
+        rawDamage += dmg;
       }
     }
   } else {
