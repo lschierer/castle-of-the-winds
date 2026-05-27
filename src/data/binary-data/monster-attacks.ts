@@ -515,6 +515,39 @@ export const MONSTER_ATTACKS: readonly MonsterAttackData[] = [
     { n: 4, m: 4, multiHit: 1, damageType: 21 },
     ],
   },
+  // Humans/Bandits family completing entry (was missing from earlier pass).
+  // Template [3], bestiary index 3.
+  {
+    id: 'berserker',
+    name: 'Berserker',
+    hpBase: 45,
+    hpDice: 2,
+    attacks: [
+    { n: 2, m: 6, multiHit: 2, damageType: 0 },
+    ],
+  },
+  // Humanoids family mid-tier (between Hobgoblin and Goblin Fighter).
+  // Template [9], bestiary index 7.
+  {
+    id: 'orc',
+    name: 'Orc',
+    hpBase: 8,
+    hpDice: 1,
+    attacks: [
+    { n: 1, m: 6, multiHit: 1, damageType: 0 },
+    ],
+  },
+  // Insects family first entry (was missing from earlier pass).
+  // Template [62], bestiary index 44.
+  {
+    id: 'giant_red_ant',
+    name: 'Giant Red Ant',
+    hpBase: 10,
+    hpDice: 1,
+    attacks: [
+    { n: 1, m: 8, multiHit: 1, damageType: 0 },
+    ],
+  },
 ];
 
 export function findMonsterAttacks(id: string): MonsterAttackData | undefined {

@@ -241,6 +241,16 @@ export const MONSTERS: readonly MonsterSpec[] = [
     // no loot
   },
   {
+    id: 'giant_red_ant',
+    name: 'Giant Red Ant',
+    minLevel: 2, maxLevel: 8,
+    hp: 14, attack: 8, ac: 3, dodge: 10, xp: 7,
+    affinities: [...vulnerable('cold')],
+    icon: '/assets/sprites/icons/Monsters/icon_391.png',
+    description: 'A man-sized red ant. Bites with mandibles strong enough to crack chitin.',
+    // no loot
+  },
+  {
     id: 'giant_scorpion',
     name: 'Giant Scorpion',
     minLevel: 3, maxLevel: 10,
@@ -343,6 +353,19 @@ export const MONSTERS: readonly MonsterSpec[] = [
     ],
   },
   {
+    id: 'orc',
+    name: 'Orc',
+    minLevel: 1, maxLevel: 7,
+    hp: 14, attack: 6, ac: 4, dodge: 10, xp: 3,
+    icon: '/assets/sprites/icons/Monsters/icon_427.png',
+    description: 'A pig-faced humanoid raider. Tougher than a hobgoblin, weaker than a goblin fighter.',
+    loot: [
+      { chance: 0.75, coins: { kind: 'copper', min:  5, max: 25 } },
+      { chance: 0.20, randomKind: 'weapon' },
+      { chance: 0.12, randomKind: 'armor' },
+    ],
+  },
+  {
     id: 'bandit',
     name: 'Bandit',
     minLevel: 1, maxLevel: 8,
@@ -369,6 +392,20 @@ export const MONSTERS: readonly MonsterSpec[] = [
       { chance: 0.25, randomKind: 'weapon' },
       { chance: 0.20, randomKind: 'armor' },
       { chance: 0.15, randomKind: 'shield' },
+    ],
+  },
+  {
+    id: 'berserker',
+    name: 'Berserker',
+    minLevel: 4, maxLevel: 14,
+    hp: 50, attack: 24, ac: 20, dodge: 10, xp: 50,
+    icon: '/assets/sprites/icons/Monsters/icon_441.png',
+    description: 'A rage-driven warrior who lays into foes with a flurry of attacks.',
+    loot: [
+      { chance: 0.70, coins: { kind: 'silver', min: 10, max: 40 } },
+      { chance: 0.40, coins: { kind: 'gold',   min:  2, max: 15 } },
+      { chance: 0.30, randomKind: 'weapon' },
+      { chance: 0.20, randomKind: 'armor' },
     ],
   },
   {
