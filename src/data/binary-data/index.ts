@@ -22,6 +22,8 @@ export type {
 export { ATTACK_FORMULAS, RANGE_FALLOFF } from './attack-formulas.ts';
 export { MONSTERS_FROM_BINARY } from './monsters.ts';
 export { SPELLS_FROM_BINARY } from './spells.ts';
+export { MONSTER_ATTACKS, findMonsterAttacks } from './monster-attacks.ts';
+export type { MonsterAttackData, MonsterAttackEntry } from './monster-attacks.ts';
 
 import { MONSTERS_FROM_BINARY } from './monsters.ts';
 import { ATTACK_FORMULAS } from './attack-formulas.ts';

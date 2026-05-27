@@ -35,7 +35,7 @@ import type { Item } from '../data/items.ts';
 import { WEAPON_SPECS } from '../data/items.ts';
 import type { ElementType } from '../data/equipment.ts';
 import { GAUNTLET_SPECS } from '../data/equipment.ts';
-import { RANGE_FALLOFF, findAttackFormula } from '../data/binary-data/index.ts';
+import { RANGE_FALLOFF, findAttackFormula, findMonsterAttacks } from '../data/binary-data/index.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -381,13 +381,27 @@ export function monsterMeleeAttack(
     return { damage: 0, message: `The ${monster.name} swings at you and misses.`, dodged: true };
   }
 
-  // Damage: NdM + monster weapon enchantment.  Original EXE applies player
-  // resist stacks here too as right-shifts (1 stack = halve, etc.); for plain
-  // physical melee the only resist channels that would apply are the global
-  // resistance buffs, and monster.attack carries no damage-type tag.  When
-  // attack-entry data is extracted from the EXE we can apply the per-element
-  // resist shifts here.  See FUN_1090_224c in REPORT_PHASE10_COMBAT.md §4.
-  const { n, m } = attackToNdM(monster.attack);
+  // Damage: NdM + monster weapon enchantment.
+  //
+  // Prefer the EXE-extracted per-monster (N, M) data when available.  Falls
+  // back to the attack-value heuristic for monsters not in the binary-data
+  // table (Berserker, Orc, "Young Adult"-tier dragons, bears, Giant Red Ant,
+  // and the bosses — these need adding to monster-attacks.ts).
+  //
+  // FUN_1090_1e62 in the EXE picks the FIRST attack entry whose active-flag
+  // (byte+1 bit 0) is set; we approximate that by always using attacks[0].
+  // For multi-attack monsters (dragons, bears, etc.) this means we currently
+  // execute only the primary attack — TODO: model the multi-hit count.
+  let n: number;
+  let m: number;
+  const data = findMonsterAttacks(monster.id);
+  if (data && data.attacks.length > 0) {
+    const primary = data.attacks[0]!;
+    n = primary.n;
+    m = primary.m;
+  } else {
+    ({ n, m } = attackToNdM(monster.attack));
+  }
   const rawDamage = rollNdM(n, m) + monsterEnch;
 
   const netDamage = Math.max(1, rawDamage);
