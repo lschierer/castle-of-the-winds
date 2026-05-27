@@ -383,26 +383,33 @@ export function monsterMeleeAttack(
 
   // Damage: NdM + monster weapon enchantment.
   //
-  // Prefer the EXE-extracted per-monster (N, M) data when available.  Falls
-  // back to the attack-value heuristic for monsters not in the binary-data
-  // table (Berserker, Orc, "Young Adult"-tier dragons, bears, Giant Red Ant,
-  // and the bosses — these need adding to monster-attacks.ts).
+  // For monsters with extracted attack data, execute the FULL attack list
+  // each turn, with each attack's multiHit count looping the dice roll.
+  // This matches FUN_1090_2044 in the EXE which iterates the attack rotor
+  // through all entries at +0x22, each respecting its byte+3 low-nibble
+  // (multi-hit count).
   //
-  // FUN_1090_1e62 in the EXE picks the FIRST attack entry whose active-flag
-  // (byte+1 bit 0) is set; we approximate that by always using attacks[0].
-  // For multi-attack monsters (dragons, bears, etc.) this means we currently
-  // execute only the primary attack — TODO: model the multi-hit count.
-  let n: number;
-  let m: number;
+  // Multi-attack examples:
+  //   Wolf-Man        : 2d3 ×2, 2d6        → 3 rolls
+  //   Young Red Dragon: 1d4 ×2, 1d8, 1d10, 3d6 → 5 rolls
+  //   Carrion Creeper : 1d2 ×6             → 6 rolls
+  //
+  // Fallback: monsters not in the binary-data table use the attackToNdM
+  // heuristic for a single roll.
+  let rawDamage = 0;
   const data = findMonsterAttacks(monster.id);
   if (data && data.attacks.length > 0) {
-    const primary = data.attacks[0]!;
-    n = primary.n;
-    m = primary.m;
+    for (const atk of data.attacks) {
+      const hits = Math.max(1, atk.multiHit);
+      for (let i = 0; i < hits; i++) {
+        rawDamage += rollNdM(atk.n, atk.m);
+      }
+    }
   } else {
-    ({ n, m } = attackToNdM(monster.attack));
+    const { n, m } = attackToNdM(monster.attack);
+    rawDamage = rollNdM(n, m);
   }
-  const rawDamage = rollNdM(n, m) + monsterEnch;
+  rawDamage += monsterEnch;
 
   const netDamage = Math.max(1, rawDamage);
 
@@ -413,9 +420,19 @@ export function monsterMeleeAttack(
   }
 
   const poisonNote = specialTriggered === 'poison' ? ' You feel poisoned!' : '';
+
+  // Total number of rolls — display only if > 1 to flag multi-attack monsters.
+  let totalHits = 0;
+  if (data && data.attacks.length > 0) {
+    for (const atk of data.attacks) totalHits += Math.max(1, atk.multiHit);
+  } else {
+    totalHits = 1;
+  }
+  const hitsNote = totalHits > 1 ? ` (${totalHits} hits)` : '';
+
   return {
     damage: netDamage,
-    message: `The ${monster.name} hits you for ${netDamage} damage.${poisonNote}`,
+    message: `The ${monster.name} hits you${hitsNote} for ${netDamage} damage.${poisonNote}`,
     dodged: false,
     ...(specialTriggered !== undefined ? { specialTriggered } : {}),
   };
