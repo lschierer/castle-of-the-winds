@@ -131,6 +131,10 @@ function rand(): number {
   return Math.random();
 }
 
+function pickMsg(msgs: string[]): string {
+  return msgs[Math.floor(rand() * msgs.length)] as string;
+}
+
 /**
  * Strength damage modifier.
  * Above 50: +0.2 per point (max +10 at STR=100).
@@ -323,7 +327,13 @@ export function playerMeleeAttack(
           + (1 - ctx.difficulty) * GAME_DH_A6;
   const threshold = Math.max(1, T);
   if (rand() * 100 >= threshold) {
-    return { damage: 0, message: `You miss the ${monster.name}.`, dodged: true };
+    const missMsgs = [
+      `You miss the ${monster.name}.`,
+      `Your swing goes wide!`,
+      `You slash at air as the ${monster.name} dances back.`,
+      `You lunge at the ${monster.name}, but fumble the thrust.`,
+    ];
+    return { damage: 0, message: pickMsg(missMsgs), dodged: true };
   }
 
   // Damage: NdM from weapon class + base + STR + gauntlet + enchantment + slay affixes
@@ -332,12 +342,8 @@ export function playerMeleeAttack(
   const { n, m, base } = weaponDice(wc);
   let damage = rollNdM(n, m) + base;
 
-  let weaponName: string;
   if (weapon) {
-    weaponName = weapon.name;
     damage += weapon.enchantment;
-  } else {
-    weaponName = 'fists';
   }
 
   if (char.gauntlets) {
@@ -352,9 +358,39 @@ export function playerMeleeAttack(
 
   const netDamage = Math.max(1, damage);
 
+  // Varied hit messages based on damage ratio and monster type
+  const name = monster.name;
+  const isHumanoid = /goblin|kobold|hobgoblin|orc|bandit|warrior|thief|berserker|wizard|necromancer|man$|ogre|troll|giant/i.test(name);
+  const isScaly = /dragon|snake|viper|lizard/i.test(name);
+  let hitMsg: string;
+  const ratio = netDamage / monster.hp;
+  if (ratio >= 0.5) {
+    const msgs = isScaly
+      ? [`Your mighty blow smashes through the ${name}'s scales!`, `You cleave the ${name} wide open!`, `You thrust deep into the ${name}!`]
+      : [`You deal the ${name} a crushing blow!`, `You cleave the ${name} wide open!`, `You thrust deep into the ${name}!`];
+    hitMsg = pickMsg(msgs);
+  } else if (ratio >= 0.25) {
+    const msgs = isHumanoid
+      ? [`You deal the ${name} a solid blow!`, `You hit the ${name} in the chest!`, `You smite the ${name}, driving it back a step.`]
+      : [`You deal the ${name} a solid blow!`, `You strike the ${name} hard!`, `The ${name} staggers from your assault.`];
+    hitMsg = pickMsg(msgs);
+  } else if (ratio >= 0.1) {
+    const msgs = isHumanoid
+      ? [`You hit the ${name}!`, `You slip past the ${name}'s guard and hit!`, `The ${name} gasps as your weapon strikes home.`]
+      : isScaly
+        ? [`You hit the ${name}!`, `Your cut barely scratches the ${name}'s scales.`, `The ${name} flinches as you score a hit.`]
+        : [`You hit the ${name}!`, `You strike the ${name}!`, `The ${name} flinches as you score a hit.`];
+    hitMsg = pickMsg(msgs);
+  } else {
+    const msgs = isScaly
+      ? [`Your thrust glances from the ${name}'s scales.`, `You barely hit the ${name}.`, `Your strike barely mars the ${name}'s scales.`]
+      : [`You barely hit the ${name}.`, `You scratch the ${name}.`, `You strike the ${name} a glancing blow.`];
+    hitMsg = pickMsg(msgs);
+  }
+
   return {
     damage: netDamage,
-    message: `You hit the ${monster.name} with your ${weaponName} for ${netDamage} damage.`,
+    message: hitMsg,
     dodged: false,
   };
 }
@@ -401,7 +437,12 @@ export function monsterMeleeAttack(
           + 265;
   const threshold = Math.max(1, (T * T) / 1000 + (ctx.difficulty - 1) * GAME_DH_A4);
   if (rand() * 100 >= threshold) {
-    return { damage: 0, message: `The ${monster.name} swings at you and misses.`, dodged: true };
+    const missMsgs = [
+      `The ${monster.name} missed you!`,
+      `The ${monster.name} swings at you and misses.`,
+      `The ${monster.name} narrowly misses you.`,
+    ];
+    return { damage: 0, message: pickMsg(missMsgs), dodged: true };
   }
 
   // Damage: NdM + monster weapon enchantment.
@@ -452,11 +493,20 @@ export function monsterMeleeAttack(
   } else {
     totalHits = 1;
   }
-  const hitsNote = totalHits > 1 ? ` (${totalHits} hits)` : '';
+
+  // Varied monster hit messages
+  const name = monster.name;
+  let hitMsg: string;
+  if (totalHits > 1) {
+    hitMsg = `The ${name} attacks you ${totalHits} times!`;
+  } else {
+    const msgs = [`The ${name} hits you!`, `The ${name} strikes you!`, `The ${name} lands a blow!`];
+    hitMsg = pickMsg(msgs);
+  }
 
   return {
     damage: netDamage,
-    message: `The ${monster.name} hits you${hitsNote} for ${netDamage} damage.${poisonNote}`,
+    message: `${hitMsg}${poisonNote}`,
     dodged: false,
     ...(specialTriggered !== undefined ? { specialTriggered } : {}),
   };

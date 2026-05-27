@@ -832,7 +832,7 @@ export class GameWorld extends LitElement {
           this.pushMessage(`The ${spec.name} drops ${loot.length === 1 && firstLoot ? displayName(firstLoot) : `${loot.length} items`}.`);
         }
       } else {
-        const desc = healthDescription(newHp, spec.hp);
+        const desc = healthDescription(newHp, target.maxHp);
         this.pushMessage(`The ${spec.name} is ${desc}.`);
         this.monsters = this.monsters.map((m) =>
           m.instanceId === target.instanceId ? { ...m, hp: newHp } : m,
@@ -1263,7 +1263,7 @@ export class GameWorld extends LitElement {
           this.monsters = this.monsters.filter((mon) => mon.instanceId !== instanceId);
         } else {
           const spec = monsterById(m.specId);
-          if (spec) this.pushMessage(`The ${spec.name} is ${healthDescription(newHp, spec.hp)}.`);
+          if (spec) this.pushMessage(`The ${spec.name} is ${healthDescription(newHp, m.maxHp)}.`);
           this.monsters = this.monsters.map((mon) =>
             mon.instanceId === instanceId ? { ...mon, hp: newHp } : mon,
           );
