@@ -19,6 +19,7 @@ Snapshot of the binary-derived analysis of the original 1993 `CASTLE1.EXE` / `CA
 - **`REPORT_PHASE13_DIFFICULTY_NOT_DEPTH.md`** — correction: `DAT_0x4C60` is difficulty (0-3), not dungeon depth as phases 11/12 claimed; combat formulas updated accordingly
 - **`REPORT_PHASE14_DIFFICULTY_MECHANICS.md`** — partial: level-up handler decoded (HP/mana gain formulas); per-level grant table located at `0x063C`; trap-density confirmed (more traps at harder difficulty); monster-spawn-count and loot-density still unclear
 - **`REPORT_PHASE15_XP_AND_TEMPLATES.md`** — XP threshold formula decoded; monster template pointer table SOLVED (was in code segment seg20:0xa96 with CS-override prefix, not autodata); 315 monster templates extracted with per-attack (N, M) data; wandering-respawn mechanism explained
+- **`REPORT_PHASE16_GRANTS_AND_RESIST.md`** — damage-type → element mapping (37 EXE codes via FUN_1d44 switch); loot density confirmed as NOT a separate formula (emerges from spawn count); per-level spell-grant table at `0x063C` fully decoded (32 grants, character levels 2/4/6/8/10)
 
 The Ghidra decompilations themselves are kept out of this repo (they're derivative of the copyrighted binary). They live in the RE workspace; see "How this snapshot relates to the live workspace" below.
 
