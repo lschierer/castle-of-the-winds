@@ -425,6 +425,20 @@ export const MONSTER_ATTACKS: readonly MonsterAttackData[] = [
     { n: 2, m: 6, multiHit: 1, damageType: 0 },
     ],
   },
+  // Manually added: the reimpl's gameplay catalog has a single 'bear' that
+  // covers what CASTLE1.EXE splits into Brown Bear and Cave Bear.  Using
+  // Brown Bear template (the earlier-tier variant) as canonical.
+  // Source: seg20:0xa96 template [58], bestiary index 42.
+  {
+    id: 'bear',
+    name: 'Bear (Brown / Cave)',
+    hpBase: 35,
+    hpDice: 2,
+    attacks: [
+    { n: 1, m: 6, multiHit: 2, damageType: 0 },
+    { n: 2, m: 6, multiHit: 1, damageType: 0 },
+    ],
+  },
 ];
 
 export function findMonsterAttacks(id: string): MonsterAttackData | undefined {
