@@ -439,6 +439,20 @@ export const MONSTER_ATTACKS: readonly MonsterAttackData[] = [
     { n: 2, m: 6, multiHit: 1, damageType: 0 },
     ],
   },
+  // C1 final boss: Hrungnir the Jotun.  Confirmed via narr_09.txt
+  // ("Hrungnir grimaces ... my club crushes wizards and warriors alike!").
+  // Template [74] in seg20:0xa96, bestiary index 50.  Fixed 90 HP (no dice)
+  // — unique encounter, doesn't roll.
+  {
+    id: 'hrugnir',
+    name: 'Hrungnir',
+    hpBase: 90,
+    hpDice: 0,
+    attacks: [
+    { n: 4, m: 8, multiHit: 1, damageType: 0 },
+    { n: 3, m: 8, multiHit: 1, damageType: 0 },
+    ],
+  },
 ];
 
 export function findMonsterAttacks(id: string): MonsterAttackData | undefined {
