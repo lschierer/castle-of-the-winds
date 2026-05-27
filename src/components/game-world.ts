@@ -43,6 +43,7 @@ import {
   revealAround,
   hasLineOfSight,
 } from '../data/world-map.ts';
+import { type Tile, rollTrapDamage } from '../data/tile-map.ts';
 import { spellById } from '../data/spells.ts';
 import { LEARNABLE_SPELLS } from '../data/spells.ts';
 import {
@@ -566,8 +567,12 @@ export class GameWorld extends LitElement {
 
     this.moveTo(nx, ny);
 
-    // Special tile messages
+    // Check for traps
     const tile = getTileAt(this.map, nx, ny);
+    if (tile.trap && !tile.trap.triggered) {
+      this.triggerTrap(tile);
+      if (this.character?.isDead) return;
+    }
 
     // Notify about ground items
     if (tile.items.length > 0) {
@@ -1351,16 +1356,71 @@ export class GameWorld extends LitElement {
     let found = false;
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue;
         const tile = getTileAt(this.map, this.pos.x + dx, this.pos.y + dy);
+        if (dx === 0 && dy === 0) {
+          // Check current tile for traps
+          if (tile.trap && !tile.trap.detected) {
+            tile.trap.detected = true;
+            found = true;
+          }
+          continue;
+        }
         if (tile.feature === 'secret-door') {
           tile.feature = 'door';
           tile.walkable = true;
           found = true;
         }
+        if (tile.trap && !tile.trap.detected) {
+          tile.trap.detected = true;
+          found = true;
+        }
       }
     }
-    this.pushMessage(found ? 'You find a hidden door!' : 'You search but find nothing.');
+    this.pushMessage(found ? 'You find something hidden!' : 'You search but find nothing.');
+    this.requestUpdate();
+  }
+
+  private triggerTrap(tile: Tile): void {
+    const trap = tile.trap;
+    if (!trap || !this.character) return;
+    // DEX-based avoidance: higher DEX = better chance to avoid
+    const dex = this.character.stats.dexterity;
+    const avoidChance = Math.min(80, Math.max(5, (dex - 30) * 2));
+    if (Math.random() * 100 < avoidChance && trap.detected) {
+      this.pushMessage('You carefully step over a trap.');
+      return;
+    }
+    trap.triggered = true;
+    trap.detected = true; // triggering reveals it
+    const damage = rollTrapDamage(trap.kind);
+    const trapName = trap.kind.replace(/([a-z])([A-Z])/g, '$1 $2');
+    if (trap.kind === 'teleport') {
+      this.pushMessage(`You trigger a teleport trap!`);
+      // Random teleport on current floor
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const tx = Math.floor(Math.random() * this.map.width);
+        const ty = Math.floor(Math.random() * this.map.height);
+        if (isWalkable(this.map, tx, ty) && !this.monsters.some((m) => m.x === tx && m.y === ty)) {
+          this.moveTo(tx, ty);
+          break;
+        }
+      }
+    } else if (trap.kind === 'dart') {
+      this.pushMessage(`A poison dart hits you! (${damage} damage)`);
+      this.character.takeDamage(damage);
+      this.playerStatus = { ...this.playerStatus, poisoned: true, poisonStrength: 1 };
+    } else if (trap.kind === 'gas') {
+      this.pushMessage(`Poison gas fills the air! (${damage} damage)`);
+      this.character.takeDamage(damage);
+      this.playerStatus = { ...this.playerStatus, poisoned: true, poisonStrength: 2 };
+    } else {
+      this.pushMessage(`You trigger a ${trapName} trap! (${damage} damage)`);
+      this.character.takeDamage(damage);
+    }
+    if (this.character.isDead) {
+      this.dead = { killedBy: `${trapName} trap` };
+    }
+    this.autoSave();
     this.requestUpdate();
   }
 

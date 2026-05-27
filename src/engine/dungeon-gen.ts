@@ -16,6 +16,7 @@
 
 import { Map as RotMap } from 'rot-js';
 import type { Tile, TileMap, Vec2 } from '../data/tile-map.ts';
+import { ALL_TRAP_KINDS, type TrapKind } from '../data/tile-map.ts';
 import type { MonsterInstance } from './combat.ts';
 import type { Difficulty } from '../data/character.ts';
 import { monstersForDepth } from '../data/monsters.ts';
@@ -285,6 +286,7 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   const monsters = spawnMonsters(grid, w, h, stage, dungeonLevel, stairsUp, monsterCount, diff);
 
   placeLoot(grid, w, h, lootLevel, rooms, diff);
+  placeTraps(grid, w, h, stairsUp, diff);
 
   if (stage === 'mine' && dungeonLevel === 1) {
     placeGuaranteedMineSpawns(grid, rooms, stairsUp, monsters);
@@ -394,6 +396,44 @@ function placeLoot(
       const items = generateTileLoot({ level: lootLevel, inRoom: roomSet.has(`${x},${y}`) });
       t.items.push(...items);
     }
+  }
+}
+
+// ── Trap placement ────────────────────────────────────────────────────────────
+
+/**
+ * Place traps on walkable floor tiles.
+ * Per RE Phase 14: count = rand(floorSeed) + 4 * difficulty
+ * Traps are hidden until detected via Detect Traps spell or searching.
+ */
+function placeTraps(
+  grid: Tile[][], w: number, h: number, stairsUp: Vec2, difficulty: number,
+): void {
+  // Base count scales with map size; difficulty adds +4 per step
+  const floorSeed = Math.floor(w * h / 200);
+  const count = Math.floor(Math.random() * floorSeed) + 4 * difficulty;
+
+  const walkable: Vec2[] = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const t = getTile(grid, x, y);
+      if (t && t.terrain === 'floor' && t.walkable && !t.feature && !t.trap) {
+        // Don't place traps on or adjacent to stairs
+        const dist = Math.abs(x - stairsUp.x) + Math.abs(y - stairsUp.y);
+        if (dist >= 3) walkable.push({ x, y });
+      }
+    }
+  }
+
+  for (let i = 0; i < count && walkable.length > 0; i++) {
+    const idx = rand(walkable.length);
+    const pos = walkable[idx];
+    if (!pos) continue;
+    walkable.splice(idx, 1);
+    const tile = getTile(grid, pos.x, pos.y);
+    if (!tile) continue;
+    const kind = ALL_TRAP_KINDS[rand(ALL_TRAP_KINDS.length)] as TrapKind;
+    tile.trap = { kind, detected: false, triggered: false };
   }
 }
 
