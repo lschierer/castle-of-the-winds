@@ -15,7 +15,8 @@ import { LitElement, html, type TemplateResult } from 'lit';
 import { gameWorldStyles } from './game-world.styles.ts';
 import { customElement, state } from 'lit/decorators.js';
 import type { Character } from '../data/character.ts';
-import { maxSpellLevelAt, xpForLevel } from '../data/character.ts';
+import { xpForLevel } from '../data/character.ts';
+import { spellIdsAvailableAtLevel } from '../data/binary-data/spell-grants.ts';
 import { CharacterModel } from '../model/Character.ts';
 import { WorldModel } from '../model/World.ts';
 import './player-inventory.ts';
@@ -1081,11 +1082,15 @@ export class GameWorld extends LitElement {
       const { hpGain, mpGain } = this.character.levelUp();
       this.pushMessage(`*** Level up! You are now level ${this.character.level}! ***`);
       this.pushMessage(`HP: ${this.character.maxHitPoints} (+${hpGain})  Mana: ${this.character.maxMana} (+${mpGain})`);
-      // Check if new spell tier unlocked
-      const maxSpell = maxSpellLevelAt(this.character.level);
+      // Check if new spells are available.  We use the EXE-derived
+      // per-character-level grant table from binary-data/spell-grants.ts
+      // (see REPORT_PHASE16 §3) rather than maxSpellLevelAt — the EXE's
+      // availability isn't strictly by spell-level tier but by a fixed
+      // per-spell threshold at char level 2/4/6/8/10.
       const char = this.character;
+      const exeAvailable = spellIdsAvailableAtLevel(this.character.level);
       const available = LEARNABLE_SPELLS.filter(
-        (s) => s.level <= maxSpell && !char.spells.includes(s.id),
+        (s) => exeAvailable.has(s.id) && !char.spells.includes(s.id),
       );
       if (available.length > 0) {
         this.pendingSpellLearn = true;
@@ -1476,9 +1481,9 @@ export class GameWorld extends LitElement {
   private renderSpellLearnOverlay(): TemplateResult {
     const c = this.character;
     if (!c) return html``;
-    const maxSpell = maxSpellLevelAt(c.level);
+    const exeAvailable = spellIdsAvailableAtLevel(c.level);
     const available = LEARNABLE_SPELLS.filter(
-      (s) => s.level <= maxSpell && !c.spells.includes(s.id),
+      (s) => exeAvailable.has(s.id) && !c.spells.includes(s.id),
     );
     if (available.length === 0) {
       this.pendingSpellLearn = false;

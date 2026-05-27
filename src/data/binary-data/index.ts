@@ -24,6 +24,8 @@ export { MONSTERS_FROM_BINARY } from './monsters.ts';
 export { SPELLS_FROM_BINARY } from './spells.ts';
 export { MONSTER_ATTACKS, findMonsterAttacks } from './monster-attacks.ts';
 export type { MonsterAttackData, MonsterAttackEntry } from './monster-attacks.ts';
+export { SPELL_GRANTS, spellIdsAvailableAtLevel, defaultStartingSpellIds } from './spell-grants.ts';
+export type { SpellGrant } from './spell-grants.ts';
 
 import { MONSTERS_FROM_BINARY } from './monsters.ts';
 import { ATTACK_FORMULAS } from './attack-formulas.ts';
