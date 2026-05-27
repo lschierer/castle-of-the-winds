@@ -55,7 +55,7 @@ export type Gender = 'male' | 'female';
  * Affects derived stats (harder = harsher derived values) and enemy scaling.
  * Default in CharCreation.elm is 'hard'.
  */
-export type Difficulty = 'easy' | 'normal' | 'hard';
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'expert';
 
 /** Primary stats — set by the player at character creation. */
 export interface CharacterStats {
@@ -189,50 +189,47 @@ export function adjustStat(
 
 // ── Difficulty modifier ───────────────────────────────────────────────────────
 
-const DIFFICULTY_MOD: Record<Difficulty, number> = {
-  easy: 10,
-  normal: 0,
-  hard: -10,
-};
-
 // ── Derived stat formulas ─────────────────────────────────────────────────────
 
 /**
  * Wisdom: spiritual insight, spell effectiveness, magic resistance.
  * Derives primarily from Intelligence with a Constitution component.
- * These are rough approximations; exact formulas are not documented in
- * available references and will be refined once gameplay is tested.
  */
-export function derivedWisdom(stats: CharacterStats, difficulty: Difficulty): number {
+export function derivedWisdom(stats: CharacterStats): number {
   const base = Math.floor(stats.intelligence * 0.6 + stats.constitution * 0.4);
-  return Math.max(STAT_MIN, Math.min(STAT_MAX, base + DIFFICULTY_MOD[difficulty]));
+  return Math.max(STAT_MIN, Math.min(STAT_MAX, base));
 }
 
 /**
- * Speed: quickness in combat, may grant extra actions.
- * Derives from Dexterity (primary), Constitution, and Strength.
+ * Armor Value (AV) base from DEX — called "speed" historically but per RE
+ * phase 9/12 this is the defensive to-hit value.
+ *
+ * EXE formula (FUN_1080_15a0, p2==3):
+ *   if DEX > 56: AV += (DEX - 56) * level / 4
+ *   if DEX < 32: AV -= (32 - DEX) * level / 4
+ * We approximate with level=1 at creation; combat.ts adds equipmentAC on top.
  */
-export function derivedSpeed(stats: CharacterStats, difficulty: Difficulty): number {
-  const base = Math.floor(
-    stats.dexterity * 0.4 + stats.constitution * 0.35 + stats.strength * 0.25,
-  );
-  return Math.max(STAT_MIN, Math.min(STAT_MAX, base + DIFFICULTY_MOD[difficulty]));
+export function derivedSpeed(stats: CharacterStats, level = 1): number {
+  const dex = stats.dexterity;
+  let base = 50; // neutral baseline
+  if (dex > 56) base += Math.floor((dex - 56) * level / 4);
+  else if (dex < 32) base -= Math.floor((32 - dex) * level / 4);
+  return Math.max(STAT_MIN, Math.min(STAT_MAX, base));
 }
 
 /**
  * Charisma: NPC reactions, shop prices.
- * Basis unclear from references; starts at a neutral 50 modified by difficulty.
- * Equipment (e.g. cursed items) affects it significantly during play.
+ * Basis unclear from references; starts at a neutral 50.
  */
-export function derivedCharisma(difficulty: Difficulty): number {
-  return Math.max(STAT_MIN, Math.min(STAT_MAX, 50 + DIFFICULTY_MOD[difficulty]));
+export function derivedCharisma(): number {
+  return Math.max(STAT_MIN, Math.min(STAT_MAX, 50));
 }
 
-export function computeDerived(stats: CharacterStats, difficulty: Difficulty): DerivedStats {
+export function computeDerived(stats: CharacterStats, level = 1): DerivedStats {
   return {
-    wisdom: derivedWisdom(stats, difficulty),
-    speed: derivedSpeed(stats, difficulty),
-    charisma: derivedCharisma(difficulty),
+    wisdom: derivedWisdom(stats),
+    speed: derivedSpeed(stats, level),
+    charisma: derivedCharisma(),
   };
 }
 
@@ -280,7 +277,7 @@ export function createCharacter(
   stats: CharacterStats,
   startingSpell: string,
 ): Character {
-  const derived = computeDerived(stats, difficulty);
+  const derived = computeDerived(stats);
   const maxHp = derivedMaxHitPoints(stats);
   const maxMana = derivedMaxMana(stats);
   const loadout = makeStartingLoadout();
@@ -326,25 +323,44 @@ export function createCharacter(
  * The level 30 cap requires ~10-27 billion XP depending on difficulty,
  * indicating roughly doubling per level.
  *
- * Difficulty multipliers (approximate from the level 30 values):
- *   Easy: ~1.8x   Normal: ~1.9x   Hard: ~2.0x   Expert: ~2.05x
+ * EXE-derived XP threshold formula (FUN_seg12_0x12A4, see
+ * docs/re-findings/REPORT_PHASE15_XP_THRESHOLD.md):
+ *
+ *   p = (difficulty - 1) * DAT_0x00AE      ; DAT_00AE = 10 in shipped binary
+ *   base = 30 + p
+ *   threshold(currentLevel) = base * 2^currentLevel - (base + 10)
+ *
+ *   where currentLevel = targetLevel - 1, since the EXE reads the player's
+ *   CURRENT level when checking whether to grant the next.
+ *
+ * Per-difficulty numeric examples (XP to reach the target level):
+ *
+ *   target  Easy   Inter   Diff   Experts
+ *   ─────────────────────────────────────
+ *     2       10      20      30       40
+ *     3       50      80     110      140
+ *     5      290     440     590      740
+ *    10    20450   30680   40910    51140
+ *
+ * The reimpl exposes 'easy' | 'normal' | 'hard' which we map to EXE
+ * difficulty indices 0/1/2 (Easy/Intermediate/Difficult).  There's no
+ * 'experts only' reimpl tier yet.
  */
-const DIFFICULTY_XP_MULT: Record<string, number> = {
-  easy: 1.8,
-  normal: 1.9,
-  hard: 2.0,
+const DIFFICULTY_TO_EXE_INDEX: Record<string, number> = {
+  easy: 0,
+  normal: 1,
+  hard: 2,
 };
 
-/** XP needed to reach the given level at the given difficulty. */
+/** XP needed to reach the given level at the given difficulty.
+ * Matches FUN_seg12_0x12A4 in CASTLE1.EXE. */
 export function xpForLevel(level: number, difficulty: Difficulty = 'normal'): number {
   if (level <= 1) return 0;
-  if (level === 2) return 20;
-  const mult = DIFFICULTY_XP_MULT[difficulty] ?? 2.0;
-  let xp = 20;
-  for (let i = 3; i <= level; i++) {
-    xp = Math.floor(xp * mult);
-  }
-  return xp;
+  const exeDiff = DIFFICULTY_TO_EXE_INDEX[difficulty] ?? 1;
+  const p = (exeDiff - 1) * 10; // -10 / 0 / 10 for easy / normal / hard
+  const base = 30 + p;
+  const currentLevel = level - 1;
+  return base * Math.pow(2, currentLevel) - (base + 10);
 }
 
 /** Check if the character has enough XP to level up. */
@@ -359,13 +375,15 @@ export function canLevelUp(character: Character): boolean {
 export function levelUp(character: Character): Character {
   const hpGain = hpPerLevel(character.stats);
   const mpGain = spPerLevel(character.stats);
+  const newLevel = character.level + 1;
   return {
     ...character,
-    level: character.level + 1,
+    level: newLevel,
     maxHitPoints: character.maxHitPoints + hpGain,
     hitPoints: character.hitPoints + hpGain, // heal the gained amount
     maxMana: character.maxMana + mpGain,
     mana: character.mana + mpGain,
+    derived: computeDerived(character.stats, newLevel),
   };
 }
 
@@ -443,12 +461,14 @@ export const STAT_DESCRIPTIONS: Record<StatName, string> = {
 
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   easy: 'Easy',
-  normal: 'Normal',
-  hard: 'Hard',
+  normal: 'Intermediate',
+  hard: 'Difficult',
+  expert: 'Experts Only',
 };
 
 export const DIFFICULTY_DESCRIPTIONS: Record<Difficulty, string> = {
-  easy: 'More forgiving — derived stats are boosted',
-  normal: 'Balanced — the intended experience',
-  hard: 'Punishing — derived stats are reduced (default in the original game)',
+  easy: 'Fewer traps, more treasure, weaker monsters',
+  normal: 'The default experience',
+  hard: 'More traps, less treasure, tougher monsters',
+  expert: 'Maximum traps, minimal treasure, strongest monsters',
 };

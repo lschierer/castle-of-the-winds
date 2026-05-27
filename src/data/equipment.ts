@@ -77,12 +77,13 @@ export function specForItem(item: Item, catalog: readonly EquipmentSpec[]): Equi
 // ── Armor ─────────────────────────────────────────────────────────────────────
 
 export const ARMOR_SPECS: readonly EquipmentSpec[] = [
-  { name: 'Rusty Armour',           kind: 'armor', ac:  0, weight: 10000, bulk: 30000, icon: '/assets/sprites/icons/Armor/icon_115.png', baseSellPrice: 25, tier: 1 },
+  { name: 'Rusty Armour',           kind: 'armor', ac:  0, weight: 10000, bulk: 30000, icon: '/assets/sprites/icons/Armor/icon_173.png', baseSellPrice: 25, tier: 1 },
   {
     name: 'Leather Armour',         kind: 'armor', ac:  6, weight:  5000, bulk: 24000,
     icon:           '/assets/sprites/icons/Armor/icon_117.png',
     iconEnchanted:  '/assets/sprites/icons/Armor/icon_215.png',
     iconCursed:     '/assets/sprites/icons/Armor/icon_217.png',
+    iconBroken:     '/assets/sprites/icons/Armor/icon_173.png',
     baseBuyPrice: 1080, baseSellPrice: 600, tier: 1,
   },
   {
@@ -90,6 +91,7 @@ export const ARMOR_SPECS: readonly EquipmentSpec[] = [
     icon:           '/assets/sprites/icons/Armor/icon_117.png',
     iconEnchanted:  '/assets/sprites/icons/Armor/icon_215.png',
     iconCursed:     '/assets/sprites/icons/Armor/icon_217.png',
+    iconBroken:     '/assets/sprites/icons/Armor/icon_173.png',
     baseBuyPrice: 3150, baseSellPrice: 1800, tier: 1,
   },
   {
@@ -97,15 +99,65 @@ export const ARMOR_SPECS: readonly EquipmentSpec[] = [
     icon:           '/assets/sprites/icons/Armor/icon_117.png',
     iconEnchanted:  '/assets/sprites/icons/Armor/icon_215.png',
     iconCursed:     '/assets/sprites/icons/Armor/icon_217.png',
+    iconBroken:     '/assets/sprites/icons/Armor/icon_173.png',
     baseBuyPrice: 6300, baseSellPrice: 3600, tier: 2,
   },
-  { name: 'Scale Mail',             kind: 'armor', ac: 24, weight:  9000, bulk: 30000, icon: '/assets/sprites/icons/Armor/icon_171.png', baseBuyPrice: 10800, baseSellPrice: 6000, tier: 2 },
-  { name: 'Chain Mail',             kind: 'armor', ac: 30, weight: 10000, bulk: 30000, icon: '/assets/sprites/icons/Armor/icon_173.png', baseBuyPrice: 16200, baseSellPrice: 9000, tier: 3 },
-  { name: 'Splint Mail',            kind: 'armor', ac: 36, weight: 12000, bulk: 40000, icon: '/assets/sprites/icons/Armor/icon_173.png', baseBuyPrice: 27000, baseSellPrice: 15000, tier: 3 },
-  { name: 'Plate Mail',             kind: 'armor', ac: 42, weight: 15000, bulk: 40000, icon: '/assets/sprites/icons/Armor/icon_173.png', baseBuyPrice: 42000, baseSellPrice: 24000, tier: 4 },
-  { name: 'Plate Armour',           kind: 'armor', ac: 48, weight: 15000, bulk: 60000, icon: '/assets/sprites/icons/Armor/icon_173.png', baseBuyPrice: 42000, baseSellPrice: 24000, tier: 4 },
-  { name: 'Elven Chain Mail',       kind: 'armor', ac: 52, weight:  5000, bulk: 24000, icon: '/assets/sprites/icons/Armor/icon_173.png', baseBuyPrice: 162000, baseSellPrice: 90000, tier: 5 },
-  { name: 'Meteoric Steel Plate',   kind: 'armor', ac: 54, weight:  5000, bulk: 30000, icon: '/assets/sprites/icons/Armor/icon_173.png', baseBuyPrice: 105000, baseSellPrice: 60000, tier: 5 },
+  {
+    name: 'Scale Mail',             kind: 'armor', ac: 24, weight:  9000, bulk: 30000,
+    icon:           '/assets/sprites/icons/Armor/icon_115.png',
+    iconEnchanted:  '/assets/sprites/icons/Armor/icon_169.png',
+    iconCursed:     '/assets/sprites/icons/Armor/icon_171.png',
+    iconBroken:     '/assets/sprites/icons/Armor/icon_173.png',
+    baseBuyPrice: 10800, baseSellPrice: 6000, tier: 2,
+  },
+  {
+    name: 'Chain Mail',             kind: 'armor', ac: 30, weight: 10000, bulk: 30000,
+    icon:           '/assets/sprites/icons/Armor/icon_115.png',
+    iconEnchanted:  '/assets/sprites/icons/Armor/icon_169.png',
+    iconCursed:     '/assets/sprites/icons/Armor/icon_171.png',
+    iconBroken:     '/assets/sprites/icons/Armor/icon_173.png',
+    baseBuyPrice: 16200, baseSellPrice: 9000, tier: 3,
+  },
+  {
+    name: 'Splint Mail',            kind: 'armor', ac: 36, weight: 12000, bulk: 40000,
+    icon:           '/assets/sprites/icons/Armor/icon_115.png',
+    iconEnchanted:  '/assets/sprites/icons/Armor/icon_169.png',
+    iconCursed:     '/assets/sprites/icons/Armor/icon_171.png',
+    iconBroken:     '/assets/sprites/icons/Armor/icon_173.png',
+    baseBuyPrice: 27000, baseSellPrice: 15000, tier: 3,
+  },
+  {
+    name: 'Plate Mail',             kind: 'armor', ac: 42, weight: 15000, bulk: 40000,
+    icon:           '/assets/sprites/icons/Armor/icon_115.png',
+    iconEnchanted:  '/assets/sprites/icons/Armor/icon_169.png',
+    iconCursed:     '/assets/sprites/icons/Armor/icon_171.png',
+    iconBroken:     '/assets/sprites/icons/Armor/icon_173.png',
+    baseBuyPrice: 42000, baseSellPrice: 24000, tier: 4,
+  },
+  {
+    name: 'Plate Armour',           kind: 'armor', ac: 48, weight: 15000, bulk: 60000,
+    icon:           '/assets/sprites/icons/Armor/icon_115.png',
+    iconEnchanted:  '/assets/sprites/icons/Armor/icon_169.png',
+    iconCursed:     '/assets/sprites/icons/Armor/icon_171.png',
+    iconBroken:     '/assets/sprites/icons/Armor/icon_173.png',
+    baseBuyPrice: 42000, baseSellPrice: 24000, tier: 4,
+  },
+  {
+    name: 'Elven Chain Mail',       kind: 'armor', ac: 52, weight:  5000, bulk: 24000,
+    icon:           '/assets/sprites/icons/Armor/icon_115.png',
+    iconEnchanted:  '/assets/sprites/icons/Armor/icon_169.png',
+    iconCursed:     '/assets/sprites/icons/Armor/icon_171.png',
+    iconBroken:     '/assets/sprites/icons/Armor/icon_173.png',
+    baseBuyPrice: 162000, baseSellPrice: 90000, tier: 5,
+  },
+  {
+    name: 'Meteoric Steel Plate',   kind: 'armor', ac: 54, weight:  5000, bulk: 30000,
+    icon:           '/assets/sprites/icons/Armor/icon_115.png',
+    iconEnchanted:  '/assets/sprites/icons/Armor/icon_169.png',
+    iconCursed:     '/assets/sprites/icons/Armor/icon_171.png',
+    iconBroken:     '/assets/sprites/icons/Armor/icon_173.png',
+    baseBuyPrice: 105000, baseSellPrice: 60000, tier: 5,
+  },
 ];
 
 // ── Shields ───────────────────────────────────────────────────────────────────
@@ -335,7 +387,7 @@ function randomSpecByTier(catalog: readonly EquipmentSpec[], maxTier: number): E
  * Items found as loot start unidentified.
  */
 const DEFAULT_KIND_ICON: Partial<Record<ItemKind, string>> = {
-  armor:     '/assets/sprites/icons/Armor/icon_117.png',
+  armor:     '/assets/sprites/icons/Armor/icon_115.png',
   helm:      '/assets/sprites/icons/Helmets/icon_123.png',
   shield:    '/assets/sprites/icons/Shields/icon_119.png',
   boots:     '/assets/sprites/icons/boots.png',

@@ -7,6 +7,54 @@ using Lit components, rendered as a tile grid in the browser.
 Work on a feature branch (`git checkout -b project-N-description`). Commit often.
 Ask questions when stuck, but try to figure things out for 15–20 minutes first.
 
+## Codebase Architecture
+
+```
+src/
+├── data/              Static definitions, interfaces, catalogs (no logic)
+│   ├── character.ts   Character interface, stat formulas, creation
+│   ├── equipment.ts   EquipmentSpec arrays (armor, shields, etc.)
+│   ├── items.ts       Item types, factories, container operations
+│   ├── monsters.ts    MonsterSpec catalog + lookup helpers
+│   ├── progression.ts Spawn families, XP tables, stage config
+│   ├── spells.ts      Spell definitions
+│   ├── tile-map.ts    TileMap type + helpers (getTileAt, isWalkable)
+│   ├── world-map.ts   Static village/farm map definitions
+│   └── binary-data/   RE-extracted binary data tables
+│
+├── engine/            Stateless transforms (pure functions, no state)
+│   ├── combat.ts      Attack resolution formulas (to-hit, damage)
+│   ├── dungeon-gen.ts Floor generation (rooms, corridors, stairs, loot)
+│   ├── loot.ts        Loot table rolls (scrolls, potions, equipment)
+│   ├── save.ts        Persistence (localStorage + file export)
+│   ├── shop.ts        Pricing, inventory generation, buy/sell
+│   ├── spell-engine.ts Spell effect dispatch
+│   ├── sprites.ts     Icon/tile style resolution
+│   └── logging.ts     Log config
+│
+├── model/             Stateful domain objects (OO, mutable)
+│   ├── Character.ts   CharacterModel class (stats, inventory, equip)
+│   └── World.ts       WorldModel class (map, position, floors)
+│
+├── components/        Lit web components (UI layer)
+│   ├── game-world.ts  Orchestrator — input, turns, overlays (~2000 lines)
+│   ├── dungeon-map.ts Tile grid viewport + minimap rendering
+│   ├── player-inventory.ts  Paperdoll, pack, belt, action menus, drag-drop
+│   ├── context-actions.ts   Dynamic "Verbs" menu (use potion, read scroll)
+│   ├── building-overlay.ts  Building/shop entry routing
+│   ├── shop-screen.ts       Shop buy/sell UI
+│   ├── character-creation.ts Character creation wizard
+│   └── landing-page.ts      Title screen
+│
+└── pages/             HTML entry points
+```
+
+**Key design principles:**
+- `data/` files are pure catalogs — import them for type definitions and static arrays
+- `engine/` files are stateless — they take inputs and return outputs, never store state
+- `model/` classes own mutable game state — components call their methods to change things
+- `components/` render state and emit events — they don't contain game logic
+
 ---
 
 ## Project 1: Sub-Tile Rendering
@@ -23,11 +71,12 @@ diagonal. The original game solved this by having each "tile" actually be a
 composition of smaller sprite pieces.
 
 **Key files to study:**
-- `src/components/game-world.ts` — look at `TILE_PX`, `viewportSize()`, and the
-  CSS grid that renders tiles (line ~267: `grid-template-columns: repeat(...)`)
-- `src/game/sprites.ts` — `getTileStyle()` returns CSS background properties per
+- `src/components/dungeon-map.ts` — the `<dungeon-map>` component that renders
+  the tile viewport. Look at `TILE_PX`, `viewportSize()`, and `renderTileGrid()`
+- `src/components/game-world.styles.ts` — shared CSS styles
+- `src/engine/sprites.ts` — `getTileStyle()` returns CSS background properties per
   tile. Look at how `DIAGONAL_ROAD` and `BINARY_BYTE_SPRITE` work.
-- `src/game/tile-map.ts` — the `Tile` interface and `Direction` type
+- `src/data/tile-map.ts` — the `Tile` interface and `Direction` type
 
 **Research starting points:**
 
@@ -150,11 +199,11 @@ generator (using rot.js Digger) produces rooms and corridors but doesn't place
 doors or vary the connection style.
 
 **Key files to study:**
-- `src/game/dungeon-gen.ts` — the `generateFloor()` function and how it uses
+- `src/engine/dungeon-gen.ts` — the `generateFloor()` function and how it uses
   rot.js's `Map.Digger`
-- `src/game/tile-map.ts` — the `Feature` type (includes `'door'` and
+- `src/data/tile-map.ts` — the `Feature` type (includes `'door'` and
   `'secret-door'` already)
-- `src/game/sprites.ts` — how features get rendered (search for `door`)
+- `src/engine/sprites.ts` — how features get rendered (search for `door`)
 - `rot-js` documentation: https://ondras.github.io/rot.js/manual/
 
 **Approach:**
@@ -164,7 +213,7 @@ doors or vary the connection style.
    on that tile. The door should be closed by default (you'll need to add a
    `doorOpen?: boolean` field to the `Tile` interface).
 3. Add door interaction: Walking into a closed door opens it (modify the
-   movement logic in `game-world.ts`).
+   movement logic in `src/components/game-world.ts` — look at `tryMove()`).
 4. Add variety: Not every room-corridor junction gets a door. Use randomness —
    maybe 60% get doors, 20% get nothing, 20% get secret doors.
 5. Add doorless hallways: Some corridors should be wider (2 tiles) or connect
@@ -203,9 +252,9 @@ for these maps already extracted (segments 25–31) but only some are wired in.
 **Key files to study:**
 - `data/binary-maps/README.md` — explains the extracted data format
 - `data/binary-maps/seg*.json` — the raw map data
-- `src/game/binary-maps.ts` — typed access to the binary data
-- `src/game/binary-map-adapter.ts` — converts binary bytes → `TileMap`
-- `src/game/world-map.ts` — where maps are registered and connected via exits
+- `src/data/binary-maps.ts` — typed access to the binary data
+- `src/data/binary-map-adapter.ts` — converts binary bytes → `TileMap`
+- `src/data/world-map.ts` — where maps are registered and connected via exits
 - `docs/Castle 1 Strings.md` — story text triggered by map transitions
 
 **Approach:**
@@ -254,9 +303,9 @@ Winds dungeon. This is where the second half of the game takes place.
 
 **Key files to study:**
 - `docs/Castle 2 Strings.md` — all the narrative text for Part 2
-- `src/game/shop.ts` — the shop system (already supports multiple shop types)
-- `src/game/world-map.ts` — how the village map is defined with building layers
-- `src/game/progression.ts` — `GameStage` and `TownTier` types
+- `src/engine/shop.ts` — the shop system (already supports multiple shop types)
+- `src/data/world-map.ts` — how the village map is defined with building layers
+- `src/data/progression.ts` — `GameStage` and `TownTier` types
 - `docs/Game Play.md` and `docs/Game Reference.md` — game mechanics
 
 **Approach:**
@@ -303,21 +352,20 @@ Winds dungeon. This is where the second half of the game takes place.
 **Setting up your environment:**
 ```bash
 cd /path/to/castle-of-the-winds
-mise install          # installs node, pnpm
+mise install          # installs node, pnpm, rust
 pnpm install          # installs dependencies
-mise run dev          # starts the dev server + Tauri app
+mise run web          # starts the web dev server (no Tauri needed)
 ```
 
-**Running just the web version (no Tauri needed for most work):**
+**Running the native app (optional — requires Rust + system libs):**
 ```bash
-pnpm greenwood develop
-# Open http://localhost:8080 in your browser
+mise run dev          # starts Tauri dev: web server + native window
 ```
 
 **Useful commands:**
 ```bash
-pnpm tsc --noEmit     # type-check without building
-pnpm eslint src/      # lint check
+pnpm run typecheck    # type-check (no output = all good)
+pnpm run lint         # eslint check
 ```
 
 **Git workflow:**
@@ -339,6 +387,8 @@ git commit -m "feat: add 2x2 sub-tile grid for diagonal roads"
 **Code style:**
 - Match the existing patterns in the codebase
 - TypeScript strict mode is on — no `any` types
-- Use the existing logging system: `const logger = getLogger('your:module');`
+- Use the existing logging system: `import { getLogger } from '../engine/logging.ts';`
 - Keep functions small and focused
 - Write comments explaining *why*, not *what*
+- Data goes in `src/data/`, stateless logic in `src/engine/`, stateful objects in `src/model/`
+- UI components emit events upward, read state downward (no game logic in components)

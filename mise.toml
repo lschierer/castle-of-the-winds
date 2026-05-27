@@ -1,7 +1,7 @@
 [tools]
 jq = "latest"
 node = "24"
-pnpm = "11"
+pnpm = "latest"
 rust = "1.91"
 watchexec = "latest"
 yq = "latest"

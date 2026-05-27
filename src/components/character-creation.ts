@@ -20,10 +20,10 @@ import {
   derivedMaxHitPoints,
   derivedMaxMana,
   createCharacter,
-} from '../game/character.ts';
-import { STARTING_SPELLS, SCHOOL_LABELS, type Spell } from '../game/spells.ts';
-import { getLogger } from '../game/logging.ts';
-import { saveCharacter, clearSave } from '../game/save.ts';
+} from '../data/character.ts';
+import { STARTING_SPELLS, SCHOOL_LABELS, type Spell } from '../data/spells.ts';
+import { getLogger } from '../engine/logging.ts';
+import { saveCharacter, clearSave } from '../engine/save.ts';
 
 const logger = getLogger('game:ui');
 
@@ -523,7 +523,7 @@ export class CharacterCreation extends LitElement {
     const pool = availablePoints(this.stats);
     const hp = derivedMaxHitPoints(this.stats);
     const mana = derivedMaxMana(this.stats);
-    const derived = computeDerived(this.stats, this.difficulty);
+    const derived = computeDerived(this.stats);
     const canBegin = this.name.trim().length > 0;
     const poolClass = pool === 0 ? 'empty' : pool <= 15 ? 'low' : '';
 

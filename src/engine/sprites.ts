@@ -11,11 +11,11 @@ import {
   type TileMap,
   type Direction,
   getTileAt,
-} from './tile-map.ts';
+} from '../data/tile-map.ts';
 import {
   type BuildingRegion,
   ALL_BUILDING_REGIONS,
-} from './world-map.ts';
+} from '../data/world-map.ts';
 
 const ICONS   = '/assets/sprites/icons';
 const BITMAPS = '/assets/sprites/bitmaps';
@@ -251,7 +251,7 @@ function buildingRegionStyle(region: BuildingRegion, x: number, y: number, base:
 
 // ── Monster sprite ────────────────────────────────────────────────────────────
 
-import { monsterById } from './monsters.ts';
+import { monsterById } from '../data/monsters.ts';
 
 /** Returns the img src for a monster's sprite from its spec's icon field. */
 export function monsterSpriteSrc(monsterId: string): string | undefined {
@@ -260,8 +260,8 @@ export function monsterSpriteSrc(monsterId: string): string | undefined {
 
 // ── Ground item icons ─────────────────────────────────────────────────────────
 
-import { type Item, WEAPON_SPECS } from './items.ts';
-import { ALL_EQUIPMENT_SPECS, pickEquipmentIcon } from './equipment.ts';
+import { type Item, WEAPON_SPECS } from '../data/items.ts';
+import { ALL_EQUIPMENT_SPECS, pickEquipmentIcon } from '../data/equipment.ts';
 
 const PILE_ICON = '/assets/sprites/icons/Items/icon_147.png';
 
@@ -347,9 +347,56 @@ export function getItemIcon(item: Item): string {
     return COIN_ICONS[item.coinKind] ?? '/assets/sprites/icons/Items/icon_149.png';
   }
   // Scrolls
-  if (item.kind === 'scroll') return '/assets/sprites/icons/Items/icon_141.png';
-  // Potions
-  if (item.kind === 'potion') return '/assets/sprites/icons/Items/icon_145.png';
+  if (item.kind === 'scroll') return '/assets/sprites/icons/Items/icon_99.png';
+  // Spellbooks
+  if (item.kind === 'spellbook') return '/assets/sprites/icons/Items/icon_101.png';
+  // Wands — depleted first, then spell-specific, then generic
+  if (item.kind === 'wand') {
+    const II = '/assets/sprites/icons/Items';
+    if (item.charges !== undefined && item.charges <= 0) return `${II}/icon_257.png`; // dead wand
+    const n = item.name.toLowerCase();
+    if (n.includes('fireball'))                          return `${II}/icon_249.png`;
+    if (n.includes('ball lightning'))                    return `${II}/icon_251.png`;
+    if (n.includes('cold ball') || n.includes('coldball')) return `${II}/icon_259.png`;
+    if (n.includes('cold bolt'))                         return `${II}/icon_261.png`;
+    if (n.includes('fire bolt'))                         return `${II}/icon_263.png`;
+    if (n.includes('lightning bolt'))                    return `${II}/icon_265.png`;
+    if (n.includes('detect'))                            return `${II}/icon_255.png`; // detect objects/monsters/traps
+    if (n.includes('light'))                             return `${II}/icon_253.png`;
+    return `${II}/icon_103.png`; // generic charged wand
+  }
+  // Staves — depleted first, then cursed, then spell-specific, then generic
+  if (item.kind === 'staff') {
+    const II = '/assets/sprites/icons/Items';
+    if (item.charges !== undefined && item.charges <= 0) return `${II}/icon_277.png`; // dead staff
+    if (item.identified && item.cursed)                  return `${II}/icon_275.png`; // cursed staff (all cursed staves share one icon)
+    const n = item.name.toLowerCase();
+    if (n.includes('healing') && !n.includes('heal m'))  return '/assets/sprites/icons/icon_167.png'; // Staff of Healing (full heal) — top-level icon_167
+    if (n.includes('heal major') || n.includes('heal medium')) return `${II}/icon_166.png`;
+    if (n.includes('heal minor'))                        return `${II}/icon_273.png`;
+    if (n.includes('identify'))                          return `${II}/icon_168.png`;
+    if (n.includes('light'))                             return `${II}/icon_169.png`;
+    return `${II}/icon_105.png`; // generic charged staff
+  }
+  // Potions — unidentified gets a generic vial icon; identified look up by name
+  if (item.kind === 'potion') {
+    const IC = '/assets/sprites/icons/Items';
+    if (!item.identified) return `${IC}/icon_97.png`;
+    const n = item.name.toLowerCase();
+    // Healing potions (icon_229=minor, icon_227=medium+major, icon_231=full)
+    if (n.includes('minor healing'))                     return `${IC}/icon_229.png`;
+    if (n.includes('medium healing') || n.includes('major healing')) return `${IC}/icon_227.png`;
+    if (n.includes('full healing'))                      return `${IC}/icon_231.png`;
+    // Detection potions
+    if (n.includes('detect'))                            return `${IC}/icon_267.png`;
+    // Permanent stat gain / loss
+    if (n.includes('increase') || n.includes('gain'))   return `${IC}/icon_142.png`;
+    if (n.includes('decrease') || n.includes('lose'))   return `${IC}/icon_143.png`;
+    // Distillation of water (clear/water-based potions)
+    if (n.includes('distil') || n.includes('water'))    return `${IC}/icon_233.png`;
+    // Fallback for identified potions not yet mapped (shield, resist, poison, phase door, etc.)
+    return `${IC}/icon_97.png`;
+  }
   // Containers (packs, bags, chests, purses)
   if (item.kind === 'container') {
     const n = item.name.toLowerCase();
@@ -374,6 +421,18 @@ export function getItemIcon(item: Item): string {
     if (spec?.weaponType === 'blunt')   return '/assets/sprites/icons/Weapons/icon_113.png';
     if (spec?.weaponType === 'polearm') return '/assets/sprites/icons/Weapons/icon_309.png';
     return '/assets/sprites/icons/Weapons/icon_111.png';
+  }
+  // Amulets — name-based lookup for special types; generic amulet as fallback
+  if (item.kind === 'amulet') {
+    const II = '/assets/sprites/icons/Items';
+    const n = item.name.toLowerCase();
+    if (n.includes('burden'))                            return `${II}/icon_159.png`; // Amulet of Burden (cursed)
+    if (n.includes('resist fire'))                       return `${II}/icon_161.png`;
+    if (n.includes('resist lightning') || n.includes('resist lightn')) return `${II}/icon_163.png`;
+    if (n.includes('resist cold'))                       return `${II}/icon_165.png`;
+    if (n.includes('resist drain') || n.includes('drain life'))        return `${II}/icon_167.png`;
+    if (n.includes('of kings'))                          return `${II}/icon_323.png`;
+    return `${II}/icon_107.png`; // generic amulet
   }
   // Equipment: look up spec and use pickEquipmentIcon
   const eqSpec = ALL_EQUIPMENT_SPECS.find((s) => s.name === item.name);

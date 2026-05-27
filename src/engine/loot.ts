@@ -22,10 +22,10 @@
  *   Bosses             — guaranteed significant loot (coins + weapons + armor)
  */
 
-import type { Item, ItemKind } from './items.ts';
-import { makeCoinStack, makeLootWeapon, makePack, makeScroll, makePotion, makePotionForSpell, STAT_POTIONS } from './items.ts';
-import { makeEquipmentItem } from './equipment.ts';
-import { SPELLS } from './spells.ts';
+import type { Item, ItemKind } from '../data/items.ts';
+import { makeCoinStack, makeLootWeapon, makePack, makeScroll, makePotion, makePotionForSpell, STAT_POTIONS } from '../data/items.ts';
+import { makeEquipmentItem } from '../data/equipment.ts';
+import { SPELLS } from '../data/spells.ts';
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 

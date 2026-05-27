@@ -1,8 +1,8 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { parse as parseYaml } from 'yaml';
-import { getLogger } from '../game/logging.ts';
-import { saveGameState, type GameState } from '../game/save.ts';
+import { getLogger } from '../engine/logging.ts';
+import { saveGameState, type GameState } from '../engine/save.ts';
 
 const logger = getLogger('game:ui');
 

@@ -1,7 +1,7 @@
 /**
  * Procedural dungeon generator using rot.js.
  *
- * Uses the rot.js Digger algorithm for room-and-corridor generation,
+ * Uses the rot.js Irregular algorithm for room-and-corridor generation,
  * then converts to our TileMap format with monsters and loot.
  *
  * Dungeon structure (Castle of the Winds canon):
@@ -15,20 +15,20 @@
  */
 
 import { Map as RotMap } from 'rot-js';
-import type { Tile, TileMap, Vec2 } from './tile-map.ts';
+import type { Tile, TileMap, Vec2 } from '../data/tile-map.ts';
 import type { MonsterInstance } from './combat.ts';
-import type { Difficulty } from './character.ts';
-import { monstersForDepth } from './monsters.ts';
+import type { Difficulty } from '../data/character.ts';
+import { monstersForDepth } from '../data/monsters.ts';
 import { generateTileLoot } from './loot.ts';
-import type { Item } from './items.ts';
-import { ARMOR_SPECS } from './equipment.ts';
+import type { Item } from '../data/items.ts';
+import { ARMOR_SPECS } from '../data/equipment.ts';
 import {
   itemQualityLevel,
   totalFloorsForStage,
   MINE_PARCHMENT_FLOOR,
   FORTRESS_BOSS_FLOOR,
   type GameStage,
-} from './progression.ts';
+} from '../data/progression.ts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ export interface DungeonFloor {
   stairsDown2?: Vec2;
 }
 
-type RotRoom = ReturnType<InstanceType<typeof RotMap.Digger>['getRooms']>[number];
+type RotRoom = ReturnType<InstanceType<typeof RotMap.Irregular>['getRooms']>[number];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -101,16 +101,19 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   const w = opts.width  ?? Math.min(64, 40 + dungeonLevel * 3);
   const h = opts.height ?? Math.min(64, 34 + dungeonLevel * 3);
 
-  // Generate using rot.js Digger
-  const digger = new RotMap.Digger(w, h, {
+  // Generate using rot.js Irregular (CotW-style: irregular rooms + diagonal corridors)
+  const generator = new RotMap.Irregular(w, h, {
+    roomCount: [5, Math.min(12, 6 + Math.floor(dungeonLevel / 2))],
     roomWidth: [4, 9],
     roomHeight: [3, 7],
-    corridorLength: [2, 8],
+    irregularity: 0.4,
+    diagonalChance: 0.3,
+    extraConnections: 2,
     dugPercentage: 0.3 + dungeonLevel * 0.02,
   });
 
   const floorSet = new Set<string>();
-  digger.create((x, y, value) => {
+  generator.create((x, y, value) => {
     if (value === 0) floorSet.add(`${x},${y}`);
   });
 
@@ -158,7 +161,7 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
     }
   }
 
-  const rooms = digger.getRooms();
+  const rooms = generator.getRooms();
 
   // Tag room floor tiles with a numeric roomId (used for fog reveal + sprite selection)
   for (let ri = 0; ri < rooms.length; ri++) {
@@ -274,10 +277,14 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   }
 
   const lootLevel = itemQualityLevel(stage, dungeonLevel);
-  const monsterCount = 4 + dungeonLevel * 2;
-  const monsters = spawnMonsters(grid, w, h, stage, dungeonLevel, stairsUp, monsterCount);
+  // Monster count per RE phase 14: clamp(base + 5 - diff, 12 - diff, 22 - 2*diff)
+  // Difficulty: easy=0, normal=1, hard=2, expert=3
+  const diff = opts.difficulty === 'easy' ? 0 : opts.difficulty === 'hard' ? 2 : opts.difficulty === 'expert' ? 3 : 1;
+  const floorBase = Math.min(12, 4 + dungeonLevel);
+  const monsterCount = Math.max(12 - diff, Math.min(22 - 2 * diff, floorBase + 5 - diff));
+  const monsters = spawnMonsters(grid, w, h, stage, dungeonLevel, stairsUp, monsterCount, diff);
 
-  placeLoot(grid, w, h, lootLevel, rooms);
+  placeLoot(grid, w, h, lootLevel, rooms, diff);
 
   if (stage === 'mine' && dungeonLevel === 1) {
     placeGuaranteedMineSpawns(grid, rooms, stairsUp, monsters);
@@ -313,7 +320,7 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
 
 function spawnMonsters(
   grid: Tile[][], w: number, h: number,
-  stage: GameStage, dungeonLevel: number, stairsUp: Vec2, count: number,
+  stage: GameStage, dungeonLevel: number, stairsUp: Vec2, count: number, difficulty: number,
 ): MonsterInstance[] {
   const pool = monstersForDepth(stage, dungeonLevel);
   if (pool.length === 0) return [];
@@ -331,6 +338,8 @@ function spawnMonsters(
 
   const monsters: MonsterInstance[] = [];
   const used = new Set<string>();
+  // Per RE phase 14: monsters get +5 HP per difficulty level
+  const hpBonus = 5 * difficulty;
   for (let i = 0; i < count && walkable.length > 0; i++) {
     const idx = rand(walkable.length);
     const pos = walkable[idx];
@@ -339,10 +348,12 @@ function spawnMonsters(
     if (used.has(key)) continue;
     used.add(key);
     const spec = pick(pool);
+    const monsterHp = spec.hp + hpBonus;
     monsters.push({
       specId: spec.id,
       instanceId: `m${monsterSeq++}`,
-      hp: spec.hp,
+      hp: monsterHp,
+      maxHp: monsterHp,
       x: pos.x, y: pos.y,
       alerted: false,
       status: {},
@@ -355,8 +366,11 @@ function spawnMonsters(
 
 function placeLoot(
   grid: Tile[][], w: number, h: number, lootLevel: number,
-  rooms: RotRoom[],
+  rooms: RotRoom[], difficulty: number,
 ): void {
+  // Per RE phase 14: less treasure at higher difficulty
+  // Reduce loot chance by ~20% per difficulty step
+  const lootMult = 1.0 - 0.2 * difficulty;
   const roomSet = new Set<string>();
   for (const room of rooms) {
     for (let y = room.getTop(); y <= room.getBottom(); y++) {
@@ -370,6 +384,7 @@ function placeLoot(
     for (let x = 0; x < w; x++) {
       const t = getTile(grid, x, y);
       if (!t || t.terrain !== 'floor' || !t.walkable || t.feature) continue;
+      if (lootMult < 1.0 && Math.random() > lootMult) continue;
       const items = generateTileLoot({ level: lootLevel, inRoom: roomSet.has(`${x},${y}`) });
       t.items.push(...items);
     }
@@ -409,7 +424,7 @@ function placeGuaranteedMineSpawns(
     if (t0) t0.items.push(armor);
     monsters.push({
       specId: 'kobold', instanceId: `m${monsterSeq++}`,
-      hp: 5, x: r0.x + 1, y: r0.y, alerted: false, status: {},
+      hp: 5, maxHp: 5, x: r0.x + 1, y: r0.y, alerted: false, status: {},
     });
   }
 
@@ -418,7 +433,7 @@ function placeGuaranteedMineSpawns(
     for (let i = 0; i < 2; i++) {
       monsters.push({
         specId: 'giant_rat', instanceId: `m${monsterSeq++}`,
-        hp: 4, x: r1.x + i, y: r1.y, alerted: false, status: {},
+        hp: 4, maxHp: 4, x: r1.x + i, y: r1.y, alerted: false, status: {},
       });
     }
   }
@@ -427,7 +442,7 @@ function placeGuaranteedMineSpawns(
   if (r2) {
     monsters.push({
       specId: 'goblin', instanceId: `m${monsterSeq++}`,
-      hp: 6, x: r2.x, y: r2.y, alerted: false, status: {},
+      hp: 6, maxHp: 6, x: r2.x, y: r2.y, alerted: false, status: {},
     });
   }
 }
@@ -493,6 +508,7 @@ function placeHrungnirBoss(
     specId: 'hrugnir',
     instanceId: `m${monsterSeq++}`,
     hp: 120,
+    maxHp: 120,
     x: center.x, y: center.y,
     alerted: true,
     status: {},
@@ -512,6 +528,7 @@ function placeHrungnirBoss(
         specId: 'ogre',
         instanceId: `m${monsterSeq++}`,
         hp: 45,
+        maxHp: 45,
         x: gx, y: gy,
         alerted: true,
         status: {},

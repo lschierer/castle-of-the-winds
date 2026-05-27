@@ -6,11 +6,11 @@
  * 2. YAML file export — human-readable, used for manual save/load and debugging
  */
 
-import type { Character } from './character.ts';
-import type { Vec2 } from './tile-map.ts';
+import type { Character } from '../data/character.ts';
+import type { Vec2 } from '../data/tile-map.ts';
 import type { MonsterInstance, PlayerStatus } from './combat.ts';
 import type { DungeonFloor } from './dungeon-gen.ts';
-import type { GameStage } from './progression.ts';
+import type { GameStage } from '../data/progression.ts';
 
 // ── Game state type ───────────────────────────────────────────────────────────
 
