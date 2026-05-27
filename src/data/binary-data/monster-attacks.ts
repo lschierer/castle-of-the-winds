@@ -425,13 +425,24 @@ export const MONSTER_ATTACKS: readonly MonsterAttackData[] = [
     { n: 2, m: 6, multiHit: 1, damageType: 0 },
     ],
   },
-  // Manually added: the reimpl's gameplay catalog has a single 'bear' that
-  // covers what CASTLE1.EXE splits into Brown Bear and Cave Bear.  Using
-  // Brown Bear template (the earlier-tier variant) as canonical.
-  // Source: seg20:0xa96 template [58], bestiary index 42.
+  // The reimpl's 'bear' is named "Cave Bear" in the catalog — using Cave
+  // Bear template (template [59], bestiary index 43).
   {
     id: 'bear',
-    name: 'Bear (Brown / Cave)',
+    name: 'Cave Bear',
+    hpBase: 45,
+    hpDice: 2,
+    attacks: [
+    { n: 2, m: 4, multiHit: 2, damageType: 0 },
+    { n: 2, m: 7, multiHit: 1, damageType: 0 },
+    ],
+  },
+  // Brown Bear: the earlier-tier bear in CASTLE1.EXE.  Added to the gameplay
+  // catalog as a tier-0 bear; the existing 'bear' becomes Cave Bear (tier 1).
+  // Source: template [58], bestiary index 42.
+  {
+    id: 'brown_bear',
+    name: 'Brown Bear',
     hpBase: 35,
     hpDice: 2,
     attacks: [
@@ -451,6 +462,57 @@ export const MONSTER_ATTACKS: readonly MonsterAttackData[] = [
     attacks: [
     { n: 4, m: 8, multiHit: 1, damageType: 0 },
     { n: 3, m: 8, multiHit: 1, damageType: 0 },
+    ],
+  },
+  // Young Adult Dragons — explicit tier-1 dragon templates from
+  // CASTLE1.EXE.  Each color color has both Young (already mapped above)
+  // and Young Adult templates in the EXE.
+  {
+    id: 'young_adult_red_dragon',
+    name: 'Young Adult Red Dragon',
+    hpBase: 40,
+    hpDice: 3,
+    attacks: [
+    { n: 1, m: 5, multiHit: 2, damageType: 20 },
+    { n: 1, m: 9, multiHit: 1, damageType: 28 },
+    { n: 1, m: 12, multiHit: 1, damageType: 22 },
+    { n: 4, m: 6, multiHit: 1, damageType: 21 },
+    ],
+  },
+  {
+    id: 'young_adult_blue_dragon',
+    name: 'Young Adult Blue Dragon',
+    hpBase: 30,
+    hpDice: 3,
+    attacks: [
+    { n: 1, m: 4, multiHit: 2, damageType: 20 },
+    { n: 1, m: 8, multiHit: 1, damageType: 28 },
+    { n: 1, m: 11, multiHit: 1, damageType: 22 },
+    { n: 4, m: 5, multiHit: 1, damageType: 21 },
+    ],
+  },
+  {
+    id: 'young_adult_white_dragon',
+    name: 'Young Adult White Dragon',
+    hpBase: 30,
+    hpDice: 3,
+    attacks: [
+    { n: 1, m: 4, multiHit: 2, damageType: 20 },
+    { n: 1, m: 8, multiHit: 1, damageType: 28 },
+    { n: 1, m: 10, multiHit: 1, damageType: 22 },
+    { n: 4, m: 4, multiHit: 1, damageType: 21 },
+    ],
+  },
+  {
+    id: 'young_adult_green_dragon',
+    name: 'Young Adult Green Dragon',
+    hpBase: 30,
+    hpDice: 3,
+    attacks: [
+    { n: 1, m: 4, multiHit: 2, damageType: 20 },
+    { n: 1, m: 8, multiHit: 1, damageType: 28 },
+    { n: 1, m: 10, multiHit: 1, damageType: 22 },
+    { n: 4, m: 4, multiHit: 1, damageType: 21 },
     ],
   },
 ];

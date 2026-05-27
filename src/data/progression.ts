@@ -56,7 +56,7 @@ const SPAWN_FAMILIES: readonly { members: string[] }[] = [
   // Undead (7)
   { members: ['skeleton', 'walking_corpse', 'ghost', 'tunnel_wight', 'barrow_wight', 'pale_wraith', 'shadow'] },
   // Animals (9)
-  { members: ['giant_rat', 'wild_dog', 'giant_bat', 'carrion_creeper', 'gray_wolf', 'white_wolf', 'bear', 'manticore'] },
+  { members: ['giant_rat', 'wild_dog', 'giant_bat', 'carrion_creeper', 'gray_wolf', 'white_wolf', 'brown_bear', 'bear', 'manticore'] },
   // Insects (3)
   { members: ['giant_scorpion', 'giant_trapdoor_spider'] },
   // Constructs (2)

@@ -271,10 +271,19 @@ export const MONSTERS: readonly MonsterSpec[] = [
     // no loot
   },
   {
+    id: 'brown_bear',
+    name: 'Brown Bear',
+    minLevel: 3, maxLevel: 10,
+    hp: 28, attack: 14, ac: 4, dodge: 10, xp: 17,
+    icon: '/assets/sprites/icons/Monsters/icon_435.png',
+    description: 'A large brown bear. Two claws and a bite per turn.',
+    // no loot
+  },
+  {
     id: 'bear',
     name: 'Cave Bear',
-    minLevel: 4, maxLevel: 12,
-    hp: 38, attack: 18, ac: 6, dodge: 10, xp: 17,
+    minLevel: 5, maxLevel: 14,
+    hp: 38, attack: 20, ac: 6, dodge: 10, xp: 27,
     icon: '/assets/sprites/icons/Monsters/icon_435.png',
     description: 'A huge cave bear. Tough and hits hard.',
     // no loot
@@ -826,6 +835,22 @@ export const MONSTERS: readonly MonsterSpec[] = [
     ],
   },
   {
+    id: 'young_adult_green_dragon',
+    name: 'Young Adult Green Dragon',
+    minLevel: 8, maxLevel: 16,
+    hp: 60, attack: 30, ac: 30, dodge: 12, xp: 160,
+    extraAttacks: 2,
+    specials: ['breath_poison'],
+    affinities: [...vulnerable('lightning')],
+    icon: '/assets/sprites/icons/gdragon.png',
+    description: 'A mature green dragon, deadlier than the young variant.',
+    loot: [
+      { chance: 1.00, coins: { kind: 'gold',   min: 15, max: 40 } },
+      { chance: 0.38, randomKind: 'weapon' },
+      { chance: 0.28, randomKind: 'armor' },
+    ],
+  },
+  {
     id: 'old_green_dragon',
     name: 'Old Green Dragon',
     minLevel: 10, maxLevel: 18,
@@ -860,6 +885,22 @@ export const MONSTERS: readonly MonsterSpec[] = [
       { chance: 0.25, randomKind: 'armor' },
     ],
   },
+  {
+    id: 'young_adult_white_dragon',
+    name: 'Young Adult White Dragon',
+    minLevel: 9, maxLevel: 17,
+    hp: 70, attack: 32, ac: 35, dodge: 13, xp: 190,
+    extraAttacks: 2,
+    specials: ['breath_cold'],
+    affinities: [...immune('cold'), ...vulnerable('fire')],
+    icon: '/assets/sprites/icons/Monsters/icon_334.png',
+    description: 'A mature white dragon. More frequent cold breath.',
+    loot: [
+      { chance: 1.00, coins: { kind: 'gold',   min: 20, max: 50 } },
+      { chance: 0.38, randomKind: 'weapon' },
+      { chance: 0.28, randomKind: 'armor' },
+    ],
+  },
 
   // Blue (lightning breath)
   {
@@ -875,6 +916,21 @@ export const MONSTERS: readonly MonsterSpec[] = [
       { chance: 1.00, coins: { kind: 'gold',   min: 20, max: 50 } },
       { chance: 0.40, randomKind: 'weapon' },
       { chance: 0.30, randomKind: 'armor' },
+    ],
+  },
+  {
+    id: 'young_adult_blue_dragon',
+    name: 'Young Adult Blue Dragon',
+    minLevel: 10, maxLevel: 18,
+    hp: 80, attack: 34, ac: 38, dodge: 14, xp: 220,
+    extraAttacks: 2,
+    specials: ['breath_lightning'],
+    icon: '/assets/sprites/icons/Monsters/icon_322.png',
+    description: 'A mature blue dragon with devastating lightning breath.',
+    loot: [
+      { chance: 1.00, coins: { kind: 'gold',   min: 25, max: 60 } },
+      { chance: 0.42, randomKind: 'weapon' },
+      { chance: 0.32, randomKind: 'armor' },
     ],
   },
 
@@ -894,6 +950,23 @@ export const MONSTERS: readonly MonsterSpec[] = [
       { chance: 0.40, randomKind: 'weapon' },
       { chance: 0.30, randomKind: 'armor' },
       { chance: 0.20, randomKind: 'shield' },
+    ],
+  },
+  {
+    id: 'young_adult_red_dragon',
+    name: 'Young Adult Red Dragon',
+    minLevel: 11, maxLevel: 19,
+    hp: 90, attack: 38, ac: 42, dodge: 14, xp: 260,
+    extraAttacks: 2,
+    specials: ['breath_fire'],
+    affinities: [...immune('fire'), ...vulnerable('cold')],
+    icon: '/assets/sprites/icons/Monsters/icon_321.png',
+    description: 'A mature red dragon. Hotter breath, sharper claws.',
+    loot: [
+      { chance: 1.00, coins: { kind: 'gold',     min: 35, max: 80 } },
+      { chance: 0.45, randomKind: 'weapon' },
+      { chance: 0.35, randomKind: 'armor' },
+      { chance: 0.22, randomKind: 'shield' },
     ],
   },
   {
