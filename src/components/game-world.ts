@@ -73,7 +73,7 @@ import {
   makeSpellEffect,
 } from '../engine/combat-effects.ts';
 import { monsterById, healthDescription, rollMonsterLoot } from '../data/monsters.ts';
-import { castSpell, spellTargetKind, type SpellTarget } from '../engine/spell-engine.ts';
+import { castSpell, isBallSpell, spellTargetKind, type SpellTarget } from '../engine/spell-engine.ts';
 import { type DungeonFloor } from '../engine/dungeon-gen.ts';
 import { type GameStage } from '../data/progression.ts';
 import { type ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../data/equipment.ts';
@@ -1254,6 +1254,11 @@ export class GameWorld extends LitElement {
   private fireDirectionalSpell(spellId: string, dx: number, dy: number): void {
     // Trace a ray from player toward (dx, dy) using Bresenham's line algorithm.
     // Supports arbitrary angles, not just 8 cardinal directions.
+    //
+    // Bolt spells stop at the first solid wall (line of fire).
+    // Ball spells arc over obstacles — walls never stop them; only a monster in
+    // the path (the detonation target) or the range limit ends the trace.
+    const isBall = isBallSpell(spellId);
     let target: SpellTarget = { dx: Math.sign(dx), dy: Math.sign(dy) };
     const px = this.pos.x;
     const py = this.pos.y;
@@ -1264,12 +1269,18 @@ export class GameWorld extends LitElement {
     const sy = Math.sign(dy);
     const steps = Math.max(adx, ady, 1);
 
+    // For a click-targeted ball spell (steps > 1) cap the loop at the exact
+    // clicked tile so the blast lands where the player aimed, not beyond it.
+    // For key-press targeting (steps === 1) the loop still runs 20 iterations
+    // so the spell travels its full range in the given direction.
+    const maxI = isBall && steps > 1 ? steps : 20;
+
     // Track the last reachable tile for the visual effect even when no monster
-    // is hit (bolt hits a wall or travels to maximum range).
+    // is hit (bolt hits a wall, ball reaches max range or aimed tile).
     let effectTargetX = px + sx;
     let effectTargetY = py + sy;
 
-    for (let i = 1; i <= 20; i++) {
+    for (let i = 1; i <= maxI; i++) {
       // Bresenham: project the i-th step along the line from (0,0) to (dx,dy)
       const tx = px + Math.round((dx * i) / steps);
       const ty = py + Math.round((dy * i) / steps);
@@ -1277,21 +1288,30 @@ export class GameWorld extends LitElement {
       // Don't re-check the player's tile
       if (tx === px && ty === py) continue;
 
-      // Check for a monster
-      const m = this.monsters.find((mon) => mon.x === tx && mon.y === ty);
-      if (m) {
-        const dist = Math.max(Math.abs(tx - px), Math.abs(ty - py));
-        target = { dx: sx, dy: sy, monster: m, distance: dist };
-        effectTargetX = tx;
-        effectTargetY = ty;
-        break;
+      // Bolt spells stop at the first monster hit; ball spells arc past monsters
+      // and detonate at the aimed tile — creatures are caught by the area blast.
+      if (!isBall) {
+        const m = this.monsters.find((mon) => mon.x === tx && mon.y === ty);
+        if (m) {
+          const dist = Math.max(Math.abs(tx - px), Math.abs(ty - py));
+          target = { dx: sx, dy: sy, monster: m, distance: dist };
+          effectTargetX = tx;
+          effectTargetY = ty;
+          break;
+        }
       }
 
-      // Stop at solid walls
+      // Both spell types stop at solid walls and closed doors
       if (!isWalkable(this.map, tx, ty)) break;
 
       effectTargetX = tx;
       effectTargetY = ty;
+    }
+
+    // Ball spells always carry an explicit explosion tile so castAttack can
+    // compute the full 3×3 AOE even when nothing occupies the centre tile.
+    if (isBall) {
+      target = { ...target, explodeTile: { x: effectTargetX, y: effectTargetY } };
     }
 
     // Queue the visual before the spell resolves (effect travels from player to target)
@@ -1416,6 +1436,38 @@ export class GameWorld extends LitElement {
           );
         }
       }
+    }
+
+    // AOE ball spell: apply damage to every monster in the blast radius.
+    // Monsters that die are removed in sequence; the damage messages were
+    // already pushed from the spell engine result above.
+    if (result.monsterDamages && result.monsterDamages.length > 0) {
+      let survivors = this.monsters;
+      for (const { instanceId, damage } of result.monsterDamages) {
+        const m = survivors.find((mon) => mon.instanceId === instanceId);
+        if (!m) continue;
+        const newHp = m.hp - damage;
+        if (newHp <= 0) {
+          const spec = monsterById(m.specId);
+          if (spec) {
+            this.pushMessage(`You defeat the ${spec.name}!`);
+            c.addExperience(spec.xp);
+            this.checkLevelUp();
+            const loot = rollMonsterLoot(spec, 1);
+            for (const item of loot) dropItem(this.map, m.x, m.y, item);
+            if (loot.length > 0) {
+              const firstDrop = loot[0];
+              this.pushMessage(`The ${spec.name} drops ${loot.length === 1 && firstDrop ? displayName(firstDrop) : `${loot.length} items`}.`);
+            }
+          }
+          survivors = survivors.filter((mon) => mon.instanceId !== instanceId);
+        } else {
+          survivors = survivors.map((mon) =>
+            mon.instanceId === instanceId ? { ...mon, hp: newHp } : mon,
+          );
+        }
+      }
+      this.monsters = survivors;
     }
 
     if (result.statusChanges) {

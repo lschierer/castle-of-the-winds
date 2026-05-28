@@ -52,10 +52,15 @@ export interface CombatEffect {
   iconSrc: string;
   /** Tiles to draw the transit icon on (Bresenham path from source to target). */
   tiles: Array<{ x: number; y: number }>;
-  /** For AOE ball spells: impact icon drawn on `aoeTiles`. */
+  /**
+   * For AOE ball spells: impact bitmap centred on this tile, rendered as a
+   * single oversized image spanning the 3×3 affected area (3×TILE_PX each
+   * side), matching the original EXE behaviour of one large icon rather than
+   * nine per-tile copies.
+   */
   impactSrc?: string;
-  /** The 9 tiles (centre + 8 neighbours) to draw `impactSrc` on. */
-  aoeTiles?: Array<{ x: number; y: number }>;
+  /** Centre tile of the 3×3 AOE impact area. */
+  aoeCentre?: { x: number; y: number };
   /**
    * For dragon/giant breath: single bitmap that spans from the source to
    * the target, stretched to cover all intervening tiles.
@@ -71,14 +76,14 @@ export interface CombatEffect {
 type DirSet = readonly [string, string, string, string];
 
 // Bolt spells (extracted icon pairs: base, base+2, base+4, base+6 → D, L, R, U)
-const FIRE_BOLT_ICONS: DirSet   = [`${SPELLS}/icon_335.png`, `${SPELLS}/icon_337.png`, `${SPELLS}/icon_339.png`, `${SPELLS}/icon_341.png`];
-const COLD_BOLT_ICONS: DirSet   = [`${SPELLS}/icon_343.png`, `${SPELLS}/icon_345.png`, `${SPELLS}/icon_347.png`, `${SPELLS}/icon_349.png`];
+const FIRE_BOLT_ICONS: DirSet   = [`${SPELLS}/icon_341.png`, `${SPELLS}/icon_335.png`, `${SPELLS}/icon_337.png`, `${SPELLS}/icon_339.png`];
+const COLD_BOLT_ICONS: DirSet   = [`${SPELLS}/icon_349.png`, `${SPELLS}/icon_343.png`, `${SPELLS}/icon_345.png`, `${SPELLS}/icon_347.png`];
 const LIGHTNING_ICONS: DirSet   = [`${SPELLS}/icon_351.png`, `${SPELLS}/icon_353.png`, `${SPELLS}/icon_355.png`, `${SPELLS}/icon_357.png`];
-const MAGIC_ARROW_ICONS: DirSet = [`${SPELLS}/icon_359.png`, `${SPELLS}/icon_361.png`, `${SPELLS}/icon_363.png`, `${SPELLS}/icon_365.png`];
+const MAGIC_ARROW_ICONS: DirSet = [`${SPELLS}/icon_365.png`, `${SPELLS}/icon_359.png`, `${SPELLS}/icon_361.png`, `${SPELLS}/icon_363.png`];
 
 // Monster ranged projectiles
 const MANTICORE_SPIKES: DirSet = [`${WEAPONS}/icon_327.png`, `${WEAPONS}/icon_329.png`, `${WEAPONS}/icon_331.png`, `${WEAPONS}/icon_333.png`];
-const BANDIT_ARROWS: DirSet    = [`${WEAPONS}/icon_366.png`, `${WEAPONS}/icon_368.png`, `${WEAPONS}/icon_370.png`, `${WEAPONS}/icon_372.png`];
+const BANDIT_ARROWS: DirSet    = [`${WEAPONS}/icon_372.png`, `${WEAPONS}/icon_368.png`, `${WEAPONS}/icon_370.png`, `${WEAPONS}/icon_366.png`];
 
 // Single-icon projectiles
 const ICON_BOULDER = `${WEAPONS}/icon_325.png`;
@@ -145,16 +150,6 @@ function tracePath(
   return path;
 }
 
-/** All 9 tiles centred on (cx, cy). */
-function aoeTiles(cx: number, cy: number): Array<{ x: number; y: number }> {
-  const out: Array<{ x: number; y: number }> = [];
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      out.push({ x: cx + dx, y: cy + dy });
-    }
-  }
-  return out;
-}
 
 // ── Public factories ──────────────────────────────────────────────────────────
 
@@ -253,7 +248,7 @@ export function makeSpellEffect(
         iconSrc: dirIcon(FIRE_BOLT_ICONS, dx, dy),
         tiles: path,
         impactSrc: `${TILES}/tile_9.png`,
-        aoeTiles: aoeTiles(toX, toY),
+        aoeCentre: { x: toX, y: toY },
       };
 
     case 'ball_lightning':
@@ -261,7 +256,7 @@ export function makeSpellEffect(
         iconSrc: dirIcon(LIGHTNING_ICONS, dx, dy),
         tiles: path,
         impactSrc: `${TILES}/tile_16.png`,
-        aoeTiles: aoeTiles(toX, toY),
+        aoeCentre: { x: toX, y: toY },
       };
 
     case 'cold_ball':
@@ -269,7 +264,7 @@ export function makeSpellEffect(
         iconSrc: dirIcon(COLD_BOLT_ICONS, dx, dy),
         tiles: path,
         impactSrc: `${TILES}/tile_17.png`,
-        aoeTiles: aoeTiles(toX, toY),
+        aoeCentre: { x: toX, y: toY },
       };
 
     default:

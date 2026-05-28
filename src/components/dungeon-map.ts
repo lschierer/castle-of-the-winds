@@ -186,10 +186,20 @@ export class DungeonMap extends LitElement {
       }
     }
 
-    // ── AOE impact tiles (ball spells) ────────────────────────────────────────
-    if (effect.impactSrc && effect.aoeTiles) {
-      for (const t of effect.aoeTiles) {
-        addImg(effect.impactSrc, t.x, t.y);
+    // ── AOE impact (ball spells): single oversized bitmap spanning 3×3 tiles ──
+    if (effect.impactSrc && effect.aoeCentre) {
+      const cx = effect.aoeCentre.x;
+      const cy = effect.aoeCentre.y;
+      // Top-left of the 3×3 area is (cx-1, cy-1)
+      const col = cx - 1 - pos.x + halfX;
+      const row = cy - 1 - pos.y + halfY;
+      // Clamp to viewport — only render if any part is visible
+      if (col + 2 >= 0 && col < vp.cols && row + 2 >= 0 && row < vp.rows) {
+        imgs.push(html`<img src="${effect.impactSrc}" style="
+          position:absolute;
+          left:${col * TILE_PX}px; top:${row * TILE_PX}px;
+          width:${3 * TILE_PX}px; height:${3 * TILE_PX}px;
+          image-rendering:pixelated; pointer-events:none; object-fit:fill;">`);
       }
     }
 
