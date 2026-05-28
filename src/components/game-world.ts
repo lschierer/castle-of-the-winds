@@ -88,7 +88,7 @@ function difficultyToInt(d: Character['difficulty']): number {
 }
 
 
-type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells';
+type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells' | 'game-menu';
 
 @customElement('game-world')
 export class GameWorld extends LitElement {
@@ -99,7 +99,7 @@ export class GameWorld extends LitElement {
   @state() private pos: Vec2 = { ...VILLAGE_MAP.entryPosition };
   @state() private messages: Array<{ text: string; fresh: boolean }> = [
     { text: 'You stand in the village. Arrow keys, hjklyubn, or numpad to move.', fresh: true },
-    { text: 'I = inventory · P = spells · G = get · S = search · R/r = rest · M = map', fresh: false },
+    { text: 'F1 = menu · I = inv · P = spells · G = get · S = search · R = rest · Z = sleep · M = map', fresh: false },
   ];
   @state() private locationName = '';
   @state() private overlay: Overlay = 'none';
@@ -422,6 +422,41 @@ export class GameWorld extends LitElement {
       return;
     }
 
+    // F1 toggles the game menu
+    if (e.key === 'F1') {
+      e.preventDefault();
+      this.toggleOverlay('game-menu');
+      return;
+    }
+
+    // Game menu open — letter shortcuts execute directly, no mouse needed
+    if (this.overlay === 'game-menu') {
+      e.preventDefault();
+      const menuActions: Record<string, () => void> = {
+        g: () => this.pickupGround(),   G: () => this.pickupGround(),
+        s: () => this.doSearch(),       S: () => this.doSearch(),
+        r: () => this.doRest(),         R: () => this.doRest(),
+        z: () => this.doSleep(),        Z: () => this.doSleep(),
+        m: () => { this.mapMode = !this.mapMode; },
+        M: () => { this.mapMode = !this.mapMode; },
+        i: () => this.toggleOverlay('inventory'),
+        I: () => this.toggleOverlay('inventory'),
+        p: () => this.toggleOverlay('spells'),
+        P: () => this.toggleOverlay('spells'),
+        '<': () => this.useStairs('up'),   ',': () => this.useStairs('up'),
+        '>': () => this.useStairs('down'), '.': () => this.useStairs('down'),
+        '?': () => this.toggleOverlay('story'),
+      };
+      const fn = menuActions[e.key];
+      if (fn) {
+        this.overlay = 'none';
+        fn();
+      } else if (e.key === 'Escape' || e.key === 'Enter') {
+        this.overlay = 'none';
+      }
+      return;
+    }
+
     // Other overlays
     if (this.overlay !== 'none') {
       if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
@@ -500,7 +535,7 @@ export class GameWorld extends LitElement {
       this.doRest();
       return;
     }
-    if (e.key === 'R' && e.shiftKey) {
+    if ((e.key === 'R' && e.shiftKey) || e.key === 'z' || e.key === 'Z') {
       e.preventDefault();
       this.doSleep();
       return;
@@ -1380,6 +1415,12 @@ export class GameWorld extends LitElement {
       }
     }
     this.pushMessage(found ? 'You find something hidden!' : 'You search but find nothing.');
+    if (found) {
+      // Tile mutation doesn't change the map reference, so dungeon-map's
+      // @property dirty-check would skip a re-render. A shallow copy gives it
+      // a new reference while keeping all the mutated tile data intact.
+      this.map = { ...this.map };
+    }
     this.requestUpdate();
   }
 
@@ -1691,12 +1732,62 @@ export class GameWorld extends LitElement {
     `;
   }
 
+  private renderGameMenu(): TemplateResult {
+    const close = () => { this.overlay = 'none'; };
+    const act = (fn: () => void) => () => { close(); fn(); };
+    const item = (label: string, key: string, fn: () => void) => html`
+      <div class="menu-item" @click=${act(fn)}>
+        <span>${label}</span>
+        ${key ? html`<span class="menu-item-key">${key}</span>` : ''}
+      </div>`;
+    return html`
+      <div class="overlay" @click=${close}>
+        <div class="overlay-box game-menu-box" @click=${(e: Event) => { e.stopPropagation(); }}>
+          <p class="overlay-title">Menu</p>
+          <div class="divider"></div>
+
+          <div class="menu-section">
+            <div class="menu-section-title">Game</div>
+            ${item('Save Game',     '',  () => { this.manualSave(); })}
+            ${item('Load Game…',   '',  () => { this.manualLoad(); })}
+            ${item('Review Story', '?', () => { this.toggleOverlay('story'); })}
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="menu-section">
+            <div class="menu-section-title">Character</div>
+            ${item('Inventory',          'I', () => { this.toggleOverlay('inventory'); })}
+            ${item('Spells &amp; Quickbar', 'P', () => { this.toggleOverlay('spells'); })}
+            ${item('Map View',           'M', () => { this.mapMode = !this.mapMode; })}
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="menu-section">
+            <div class="menu-section-title">Actions</div>
+            ${item('Get Items',               'G', () => { this.pickupGround(); })}
+            ${item('Search',                  'S', () => { this.doSearch(); })}
+            ${item('Rest Until Healed',       'R', () => { this.doRest(); })}
+            ${item('Sleep Until Restored',    'Z', () => { this.doSleep(); })}
+            ${item('Climb Up Stairs',         '<', () => { this.useStairs('up'); })}
+            ${item('Climb Down Stairs',       '>', () => { this.useStairs('down'); })}
+          </div>
+
+          <span class="overlay-close" @click=${close}>[ Esc to close ]</span>
+        </div>
+      </div>
+    `;
+  }
+
   private renderSpellBar(): TemplateResult {
     const c = this.character;
     if (!c) return html``;
     return html`
       <div class="spell-bar">
         <div class="spell-bar-actions">
+          <button class="spell-bar-btn ${this.overlay === 'game-menu' ? 'active' : ''}"
+            @click=${() => { this.toggleOverlay('game-menu'); }} title="Game menu">☰ Menu</button>
           <button class="spell-bar-btn" @click=${() => { this.pickupGround(); }}>Get</button>
           <button class="spell-bar-btn" @click=${() => { this.doRest(); }}>Rest</button>
           <button class="spell-bar-btn ${this.overlay === 'inventory' ? 'active' : ''}" @click=${() => { this.toggleOverlay('inventory'); }}>Inventory</button>
@@ -1858,60 +1949,32 @@ export class GameWorld extends LitElement {
 
         <div class="stat-block">
           <span class="stat-label">Attributes</span>
-          <span class="stat-value">STR ${c.stats.strength}</span>
-          <span class="stat-value">INT ${c.stats.intelligence}</span>
-          <span class="stat-value">CON ${c.stats.constitution}</span>
-          <span class="stat-value">DEX ${c.stats.dexterity}</span>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="stat-block">
-          <span class="stat-label">Purse</span>
-          ${c.purse ? html`
-            ${coinsIn(c.purse, 'copper')   > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'copper').toLocaleString()} cp</span>` : ''}
-            ${coinsIn(c.purse, 'silver')   > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'silver').toLocaleString()} sp</span>` : ''}
-            ${coinsIn(c.purse, 'gold')     > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'gold').toLocaleString()} gp</span>` : ''}
-            ${coinsIn(c.purse, 'platinum') > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'platinum').toLocaleString()} pp</span>` : ''}
-          ` : html`<span class="stat-value" style="color:var(--game-text-disabled)">No purse</span>`}
+          <div class="attrs-grid">
+            <span class="stat-value">STR ${c.stats.strength}</span>
+            <span class="stat-value">INT ${c.stats.intelligence}</span>
+            <span class="stat-value">CON ${c.stats.constitution}</span>
+            <span class="stat-value">DEX ${c.stats.dexterity}</span>
+          </div>
         </div>
 
         <div class="divider"></div>
 
         <div class="stat-block">
           <span class="stat-label">Spells (${known.length})</span>
-          ${known.map((id) => {
-            const sp = spellById(id);
-            return sp ? html`
-              <div class="spell-entry">
-                <span class="spell-entry-name">${sp.name}</span>
-                <span class="spell-cost">${sp.baseMana}mp</span>
-              </div>
-            ` : html``;
-          })}
+          <div class="spell-list">
+            ${known.map((id) => {
+              const sp = spellById(id);
+              return sp ? html`
+                <div class="spell-entry">
+                  <span class="spell-entry-name">${sp.name}</span>
+                  <span class="spell-cost">${sp.baseMana}mp</span>
+                </div>
+              ` : html``;
+            })}
+          </div>
         </div>
 
         <div class="divider"></div>
-
-        <div class="key-hint-row">
-          <button
-            class="key-hint-btn ${this.overlay === 'inventory' ? 'active' : ''}"
-            @click=${() => { this.toggleOverlay('inventory'); }}
-          >[I] Inv</button>
-          <button
-            class="key-hint-btn ${this.overlay === 'spells' ? 'active' : ''}"
-            @click=${() => { this.toggleOverlay('spells'); }}
-          >[P] Spells</button>
-        </div>
-        <div class="key-hint-row">
-          <button class="key-hint-btn" @click=${() => { this.pickupGround(); }}>[G] Get</button>
-          <button class="key-hint-btn ${this.mapMode ? 'active' : ''}" @click=${() => { this.mapMode = !this.mapMode; }}>[M] Map</button>
-        </div>
-        <div class="key-hint-row">
-          <button class="key-hint-btn" @click=${() => { this.doRest(); }}>[R] Rest</button>
-          <button class="key-hint-btn" @click=${() => { this.useStairs('up'); }}>[<] Up</button>
-          <button class="key-hint-btn" @click=${() => { this.useStairs('down'); }}>[>] Down</button>
-        </div>
 
         <div class="stat-block">
           <span class="stat-label">Experience</span>
@@ -1982,15 +2045,17 @@ export class GameWorld extends LitElement {
                         @inventory-message=${(e: CustomEvent<string>) => { this.pushMessage(e.detail); }}
                       ></player-inventory>
                     </div>`
-                  : this.overlay === 'spells'
-                    ? this.renderSpellsOverlay()
-                    : this.overlay === 'spell-learn'
-                      ? this.renderSpellLearnOverlay()
-                      : this.overlay === 'story'
-                        ? this.renderStoryOverlay()
-                        : this.overlay === 'customize-spells'
-                          ? this.renderCustomizeSpellsOverlay()
-                          : ''}
+                  : this.overlay === 'game-menu'
+                    ? this.renderGameMenu()
+                    : this.overlay === 'spells'
+                      ? this.renderSpellsOverlay()
+                      : this.overlay === 'spell-learn'
+                        ? this.renderSpellLearnOverlay()
+                        : this.overlay === 'story'
+                          ? this.renderStoryOverlay()
+                          : this.overlay === 'customize-spells'
+                            ? this.renderCustomizeSpellsOverlay()
+                            : ''}
           </div>
           ${this.renderSidebar()}
         </div>

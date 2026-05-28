@@ -155,10 +155,8 @@ export class DungeonMap extends LitElement {
           color = '#0f0';
         } else if (tile.feature === 'stairs-down') {
           color = '#f00';
-        } else if (tile.feature === 'door') {
-          color = '#a86';
         } else if (tile.feature === 'secret-door') {
-          color = '#555';
+          color = '#000'; // secret doors look like unexplored wall until found
         } else if (tile.terrain === 'floor' && tile.walkable) {
           color = tile.roomId !== undefined ? '#338' : '#226';
         } else {
