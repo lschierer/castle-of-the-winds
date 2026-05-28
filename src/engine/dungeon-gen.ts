@@ -103,14 +103,18 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   const h = opts.height ?? Math.min(64, 34 + dungeonLevel * 3);
 
   // Generate using rot.js Irregular (CotW-style: irregular rooms + diagonal corridors)
+  // Room count: 3 at depth 1, +2 per floor down (→ 3, 5, 7 … 17 across 8 mine floors).
+  // A range of ±4 gives variance without wild swings.
+  const baseRooms = 1 + 2 * dungeonLevel;
   const generator = new RotMap.Irregular(w, h, {
-    roomCount: [5, Math.min(12, 6 + Math.floor(dungeonLevel / 2))],
+    roomCount: [baseRooms, baseRooms + 4],
     roomWidth: [4, 9],
     roomHeight: [3, 7],
     irregularity: 0.4,
     diagonalChance: 0.3,
     extraConnections: 2,
-    dugPercentage: 0.3 + dungeonLevel * 0.02,
+    // Target floor coverage grows with depth; _fillToDugPercentage enforces it.
+    dugPercentage: 0.28 + dungeonLevel * 0.02,
   });
 
   const floorSet = new Set<string>();
