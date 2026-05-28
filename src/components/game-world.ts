@@ -1557,6 +1557,7 @@ export class GameWorld extends LitElement {
 
   private doSearch(): void {
     let found = false;
+    let trapsFound = 0;
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         const tile = getTileAt(this.map, this.pos.x + dx, this.pos.y + dy);
@@ -1565,6 +1566,7 @@ export class GameWorld extends LitElement {
           if (tile.trap && !tile.trap.detected) {
             tile.trap.detected = true;
             found = true;
+            trapsFound++;
           }
           continue;
         }
@@ -1576,10 +1578,25 @@ export class GameWorld extends LitElement {
         if (tile.trap && !tile.trap.detected) {
           tile.trap.detected = true;
           found = true;
+          trapsFound++;
         }
       }
     }
     this.pushMessage(found ? 'You find something hidden!' : 'You search but find nothing.');
+
+    // Searching uses game time: advance one turn (monsters act, regen 1 HP).
+    const c = this.character;
+    if (c) {
+      c.heal(1);
+      if (trapsFound > 0) {
+        // Award XP for each disarmed trap; scales with difficulty (easy=1 … expert=4).
+        const xpPerTrap = difficultyToInt(c.difficulty) + 1;
+        c.addExperience(xpPerTrap * trapsFound);
+        this.checkLevelUp();
+      }
+    }
+    this.runMonsterTurns();
+
     if (found) {
       // Tile mutation doesn't change the map reference, so dungeon-map's
       // @property dirty-check would skip a re-render. A shallow copy gives it
