@@ -483,9 +483,9 @@ export function getTileStyle(
         break;
 
       case 'door':
-        // Door sprite only in dungeons; village doors are just road (terrain handles it)
+        // Dungeon open door only — village entry is triggered by the building wall
         if (tile.terrain === 'floor') {
-          style = addLayer(`${ICONS}/odoor.png`, style);
+          style = addLayer(`${ICONS}/Items/icon_6.png`, style);
         }
         break;
 
@@ -520,7 +520,7 @@ export function getTileStyle(
         break;
 
       case 'mine-entrance':
-        style = twoLayer(`${ICONS}/mine.png`, `${BITMAPS}/BtGrasMn.png`);
+        style = twoLayer(`${ICONS}/Items/icon_65.png`, `${BITMAPS}/BtGrasMn.png`);
         break;
 
       case 'diagonal-road': {

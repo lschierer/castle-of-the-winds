@@ -164,19 +164,21 @@ function buildMap(spec: MapSpec): TileMap {
           sprite: layer.sprite,
           ...(layer.borderPx !== undefined && { borderPx: layer.borderPx }),
         });
-        // Fill footprint with wall tiles
+        // Fill footprint with wall tiles (no building info — entry is directional).
         for (let dy = 0; dy < layer.rows; dy++)
           for (let dx = 0; dx < layer.cols; dx++)
             set(layer.x + dx, layer.y + dy, {
               terrain: 'grass', walkable: false, feature: 'wall', buildingId: layer.id,
             });
-        // Place doors
+        // Door positions become plain road tiles that carry the building entry
+        // trigger. Entry fires only when the player is standing here and moves
+        // toward the wall — so direction is implicit without extra state.
         for (const door of layer.doors) {
           const dt = tiles[door.y]?.[door.x];
           if (dt) {
-            dt.terrain = 'road'; dt.walkable = true; dt.feature = 'door';
-            delete dt.buildingId;
-            if (door.info) dt.building = door.info;
+            dt.terrain = 'road'; dt.walkable = true;
+            delete dt.feature; delete dt.buildingId;
+            if (door.info) dt.building = door.info; else delete dt.building;
           }
         }
         break;
@@ -333,10 +335,8 @@ export function destroyHamlet(): void {
     for (let x = 0; x < VILLAGE_MAP.width; x++) {
       const t = VILLAGE_MAP.tiles[y]?.[x];
       if (!t) continue;
-      if (t.feature === 'door' && t.building) {
-        t.walkable = false;
+      if (t.terrain === 'road' && t.building) {
         delete t.building;
-        t.feature = 'wall';
       }
       if (t.items.length > 0) t.items.length = 0;
     }

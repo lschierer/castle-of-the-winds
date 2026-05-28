@@ -37,7 +37,7 @@ import {
   STORY_SEGMENTS,
   destroyHamlet,
   isWalkable,
-  buildingAt,
+
   exitAt,
   getTileAt,
   dropItem,
@@ -548,6 +548,15 @@ export class GameWorld extends LitElement {
     }
 
     if (!isWalkable(this.map, nx, ny)) {
+      // Open a building only when the player is standing on the specific road
+      // tile in front of it and moves toward the wall — directional entry.
+      const currentTile = getTileAt(this.map, this.pos.x, this.pos.y);
+      if (currentTile.building) {
+        this.activeBuilding = currentTile.building;
+        this.overlay = 'building';
+        this.locationName = currentTile.building.name;
+        return;
+      }
       // If a monster is diagonally adjacent (but not in this exact direction),
       // tell the player so they're not left guessing.
       const diagMonster = this.monsters.find((m) => {
@@ -601,15 +610,7 @@ export class GameWorld extends LitElement {
       this.pushMessage('You see stairs leading up. (< to ascend)');
     }
 
-    const building = buildingAt(this.map, nx, ny);
-    if (building) {
-      this.activeBuilding = building;
-      this.overlay = 'building';
-      this.locationName = building.name;
-      logger.debug(`Entering building: ${building.name}`);
-    } else {
-      this.locationName = '';
-    }
+    this.locationName = '';
 
     this.runMonsterTurns();
   }
