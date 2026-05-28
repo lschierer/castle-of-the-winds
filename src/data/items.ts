@@ -476,7 +476,7 @@ export interface WeaponSpec {
 export const WEAPON_SPECS: readonly WeaponSpec[] = [
   { name: 'Broken Sword',      weight:  1000, bulk:  5000, weaponClass:  0, weaponType: 'blade', tier: 1 },
   { name: 'Club',              weight:  1500, bulk:  3000, weaponClass:  1, weaponType: 'blunt', tier: 1 },
-  { name: 'Normal Dagger',     weight:   500, bulk:   500, weaponClass:  2, weaponType: 'blade', tier: 1 },
+  { name: 'Dagger',            weight:   500, bulk:   500, weaponClass:  2, weaponType: 'blade', tier: 1 },
   { name: 'Hammer',            weight:  2000, bulk:  3000, weaponClass:  2, weaponType: 'blunt', tier: 1 },
   { name: 'Hand Axe',          weight:  1000, bulk:  3000, weaponClass:  3, weaponType: 'blade', tier: 1 },
   { name: 'Quarterstaff',      weight:   750, bulk:  5000, weaponClass:  3, weaponType: 'polearm', tier: 1 },
