@@ -413,7 +413,7 @@ export const MONSTERS: readonly MonsterSpec[] = [
     name: 'Ogre',
     minLevel: 4, maxLevel: 14,
     hp: 45, attack: 20, ac: 24, dodge: 8, xp: 16,
-    icon: '/assets/sprites/icons/ogre.png',
+    icon: '/assets/sprites/icons/Monsters/icon_395.png',
     description: 'A brutish humanoid, roughly equivalent to a fifth-level adventurer. Usually armoured.',
     loot: [
       { chance: 0.70, coins: { kind: 'silver', min:  5, max: 25 } },
