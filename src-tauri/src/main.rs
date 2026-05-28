@@ -29,11 +29,14 @@ fn resolve_log_dir() -> PathBuf {
 }
 
 fn resolve_config_dir() -> PathBuf {
-    // In development, use the project's config/ directory.
-    // In production, use the platform config directory.
-    let dev_config = PathBuf::from("config");
-    if dev_config.exists() {
-        return dev_config;
+    // In development, use the project's config/ directory (absolute path baked
+    // in at compile time so it works regardless of the binary's working dir).
+    let dev_config = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(|p| p.join("config"))
+        .filter(|p| p.exists());
+    if let Some(path) = dev_config {
+        return path;
     }
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
