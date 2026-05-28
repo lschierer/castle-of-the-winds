@@ -67,6 +67,11 @@ import {
   applyDrainAttack,
   poisonTick,
 } from '../engine/combat.ts';
+import {
+  type CombatEffect,
+  makeMonsterRangedEffect,
+  makeSpellEffect,
+} from '../engine/combat-effects.ts';
 import { monsterById, healthDescription, rollMonsterLoot } from '../data/monsters.ts';
 import { castSpell, spellTargetKind, type SpellTarget } from '../engine/spell-engine.ts';
 import { type DungeonFloor } from '../engine/dungeon-gen.ts';
@@ -152,6 +157,18 @@ export class GameWorld extends LitElement {
 
   /** Player is dead — game over. */
   @state() private dead: { killedBy: string } | null = null;
+
+  /** Currently-displayed combat effect (ranged attack / spell projectile). */
+  @state() private combatEffect: CombatEffect | null = null;
+  /** Queue of effects waiting to be displayed one-by-one. */
+  private readonly effectQueue: CombatEffect[] = [];
+  /** Handle for the effect-display timer so it can be cancelled. */
+  private effectTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * When true, effects are suppressed (rest / sleep loops process many turns
+   * automatically and generating a new overlay for each would be distracting).
+   */
+  private inRestLoop = false;
 
   /** Pending sell confirmation — click item once to select, again to confirm. */
 
@@ -882,6 +899,47 @@ export class GameWorld extends LitElement {
     }
   }
 
+  // ── Combat effect display ─────────────────────────────────────────────────
+
+  /**
+   * Enqueue a combat effect to display after the current action resolves.
+   * Silently dropped during rest/sleep loops to prevent visual spam.
+   * Queue is capped at 4 entries so rest-adjacent combat doesn't linger.
+   */
+  private queueEffect(effect: CombatEffect): void {
+    if (this.inRestLoop) return;
+    if (this.effectQueue.length < 4) this.effectQueue.push(effect);
+  }
+
+  /**
+   * Start sequential playback of the effect queue (if not already running).
+   * Each effect shows for ~380 ms, then a brief null state ensures the DOM
+   * element is removed and recreated before the next (which restarts the
+   * CSS fade-out animation cleanly).
+   */
+  private runEffectQueue(): void {
+    if (this.effectTimer !== null) return;  // already playing
+    this.stepEffect();
+  }
+
+  private stepEffect(): void {
+    this.effectTimer = null;
+    if (this.effectQueue.length === 0) {
+      this.combatEffect = null;
+      return;
+    }
+    const next = this.effectQueue.shift()!;
+    // Clear first — two rAF cycles let Lit remove the old DOM element so the
+    // animation restarts cleanly when the new element appears.
+    this.combatEffect = null;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this.combatEffect = next;
+        this.effectTimer = setTimeout(() => { this.stepEffect(); }, 380);
+      });
+    });
+  }
+
   /** Run all monsters' turns after the player acts. */
   private runMonsterTurns(): void {
     const c = this.character;
@@ -978,6 +1036,9 @@ export class GameWorld extends LitElement {
           swarmCounter,
         });
         swarmCounter += 10;
+        // Queue visual — projectile travels from monster (m.x, m.y) to player
+        const fx = makeMonsterRangedEffect(rangedSpecial, m.x, m.y, this.pos.x, this.pos.y);
+        if (fx) this.queueEffect(fx);
         this.pushMessage(result.message);
         if (!result.dodged && result.damage > 0) {
           c.takeDamage(result.damage);
@@ -1035,6 +1096,8 @@ export class GameWorld extends LitElement {
     if (charChanged) {
       this.autoSave();
     }
+    // Start playing any queued visual effects (non-blocking; safe to call every turn)
+    this.runEffectQueue();
   }
 
   private pushMessage(text: string): void {
@@ -1201,6 +1264,11 @@ export class GameWorld extends LitElement {
     const sy = Math.sign(dy);
     const steps = Math.max(adx, ady, 1);
 
+    // Track the last reachable tile for the visual effect even when no monster
+    // is hit (bolt hits a wall or travels to maximum range).
+    let effectTargetX = px + sx;
+    let effectTargetY = py + sy;
+
     for (let i = 1; i <= 20; i++) {
       // Bresenham: project the i-th step along the line from (0,0) to (dx,dy)
       const tx = px + Math.round((dx * i) / steps);
@@ -1214,12 +1282,22 @@ export class GameWorld extends LitElement {
       if (m) {
         const dist = Math.max(Math.abs(tx - px), Math.abs(ty - py));
         target = { dx: sx, dy: sy, monster: m, distance: dist };
+        effectTargetX = tx;
+        effectTargetY = ty;
         break;
       }
 
       // Stop at solid walls
       if (!isWalkable(this.map, tx, ty)) break;
+
+      effectTargetX = tx;
+      effectTargetY = ty;
     }
+
+    // Queue the visual before the spell resolves (effect travels from player to target)
+    const spellFx = makeSpellEffect(spellId, px, py, effectTargetX, effectTargetY);
+    if (spellFx) this.queueEffect(spellFx);
+
     this.executeCast(spellId, target);
   }
 
@@ -1360,6 +1438,7 @@ export class GameWorld extends LitElement {
     // Rest: recover HP over multiple turns. Each turn has a chance of monster interrupt.
     const turnsNeeded = Math.ceil((c.maxHitPoints - c.hitPoints) / 2);
     let interrupted = false;
+    this.inRestLoop = true;
     for (let t = 0; t < turnsNeeded; t++) {
       // 5% chance per turn of being interrupted by a monster with line of sight
       const nearby = this.monsters.some((m) =>
@@ -1373,6 +1452,7 @@ export class GameWorld extends LitElement {
       this.runMonsterTurns();
       if (this.dead) return;
     }
+    this.inRestLoop = false;
     if (!interrupted) {
       const ch = this.character as Character;
       this.pushMessage(`You rest until healed. HP: ${ch.hitPoints}/${ch.maxHitPoints}`);
@@ -1393,6 +1473,7 @@ export class GameWorld extends LitElement {
     const mpNeeded = c.maxMana - c.mana;
     const turnsNeeded = Math.ceil(Math.max(hpNeeded / 2, mpNeeded));
     let interrupted = false;
+    this.inRestLoop = true;
     for (let t = 0; t < turnsNeeded; t++) {
       // 10% chance per turn of interrupt by a monster with line of sight
       const nearby = this.monsters.some((m) =>
@@ -1413,6 +1494,7 @@ export class GameWorld extends LitElement {
       this.runMonsterTurns();
       if (this.dead) return;
     }
+    this.inRestLoop = false;
     if (!interrupted) {
       const ch = this.character as Character;
       this.pushMessage(`You sleep until restored. HP: ${ch.hitPoints}/${ch.maxHitPoints}, Mana: ${ch.mana}/${ch.maxMana}`);
@@ -2037,6 +2119,7 @@ export class GameWorld extends LitElement {
               .pos=${this.pos}
               .monsters=${this.monsters}
               .playerStatus=${this.playerStatus}
+              .combatEffect=${this.combatEffect}
               .heroGender=${this.character.gender}
               ?inDungeon=${this.currentDungeonLevel > 0}
               ?minimap=${this.mapMode}
