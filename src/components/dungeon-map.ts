@@ -8,7 +8,7 @@ import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { FOV } from 'rot-js';
 import type { TileMap, Vec2 } from '../data/tile-map.ts';
-import { getTileAt } from '../data/tile-map.ts';
+import { getTileAt, trapIcon } from '../data/tile-map.ts';
 import type { MonsterInstance } from '../engine/combat.ts';
 import type { PlayerStatus } from '../engine/combat.ts';
 import type { CombatEffect } from '../engine/combat-effects.ts';
@@ -43,6 +43,7 @@ export class DungeonMap extends LitElement {
       grid-template-rows: repeat(var(--vp-rows), ${TILE_PX}px);
       image-rendering: pixelated;
     }
+    :host([crosshair]) .map-grid { cursor: crosshair; }
     .tile { width: ${TILE_PX}px; height: ${TILE_PX}px; }
     /* Combat effect overlay — fades out over the display duration */
     .effect-layer {
@@ -64,6 +65,7 @@ export class DungeonMap extends LitElement {
   @property({ attribute: false }) monsters: MonsterInstance[] = [];
   @property({ attribute: false }) playerStatus: PlayerStatus = {};
   @property({ attribute: false }) combatEffect: CombatEffect | null = null;
+  @property({ type: Boolean, reflect: true }) crosshair = false;
   @property() heroGender: Gender = 'male';
   @property({ type: Boolean }) inDungeon = false;
   @property({ type: Boolean }) minimap = false;
@@ -118,6 +120,12 @@ export class DungeonMap extends LitElement {
         const inLOS = !this.inDungeon || detectMonsters || sameRoom || visibleSet.has(`${mx},${my}`);
         const monster = inLOS ? monsterAt.get(`${mx},${my}`) : undefined;
 
+        // Show detected, not-yet-triggered traps as a floor overlay.
+        const trapData = tile.trap;
+        const trapIconSrc = (trapData?.detected && !trapData.triggered)
+          ? trapIcon(trapData.kind)
+          : undefined;
+
         if (monster) {
           const spec = monsterById(monster.specId);
           const iconSrc = monsterSpriteSrc(monster.specId)
@@ -133,6 +141,22 @@ export class DungeonMap extends LitElement {
             ${iconSrc ? html`<img src="${iconSrc}" alt="${spec?.name ?? ''}"
               title="${spec?.name ?? ''} — ${healthDescription(monster.hp, monster.maxHp)}"
               style="position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;object-fit:contain;">` : ''}
+            ${trapIconSrc ? html`<img src="${trapIconSrc}"
+              title="Detected trap: ${trapData?.kind}"
+              style="position:absolute;right:0;bottom:0;width:50%;height:50%;image-rendering:pixelated;object-fit:contain;opacity:0.9;">` : ''}
+          </div>`);
+        } else if (trapIconSrc) {
+          tiles.push(html`<div class="tile" style="
+            background-color: ${s.backgroundColor ?? 'transparent'};
+            background-image: ${s.backgroundImage};
+            background-size: ${s.backgroundSize};
+            background-position: ${s.backgroundPosition};
+            background-repeat: ${s.backgroundRepeat};
+            position: relative;
+          ">
+            <img src="${trapIconSrc}"
+              title="Detected trap: ${trapData?.kind}"
+              style="position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;object-fit:contain;">
           </div>`);
         } else {
           tiles.push(html`<div class="tile" style="

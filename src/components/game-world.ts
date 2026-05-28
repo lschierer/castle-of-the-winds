@@ -152,6 +152,9 @@ export class GameWorld extends LitElement {
   /** Spell targeting mode: spell selected, waiting for direction input. */
   @state() private castingSpell: string | null = null;
 
+  /** Disarm mode: player pressed D, waiting for a tile click to attempt disarm. */
+  @state() private disarmMode = false;
+
   /** Pending spell learning: character leveled up and can pick a new spell. */
   @state() private pendingSpellLearn = false;
 
@@ -516,6 +519,15 @@ export class GameWorld extends LitElement {
     if (e.key === 'Escape') {
       e.preventDefault();
       this.castingSpell = null;
+      this.disarmMode = false;
+      return;
+    }
+
+    // Disarm mode: any non-escape key cancels
+    if (this.disarmMode) {
+      e.preventDefault();
+      this.disarmMode = false;
+      this.pushMessage('Disarm cancelled.');
       return;
     }
 
@@ -568,6 +580,12 @@ export class GameWorld extends LitElement {
     if (e.key === '<' || e.key === ',') {
       e.preventDefault();
       this.useStairs('up');
+      return;
+    }
+    if ((e.key === 'd' || e.key === 'D') && this.currentDungeonLevel > 0) {
+      e.preventDefault();
+      this.disarmMode = true;
+      this.pushMessage('Disarm — click an adjacent trap (Esc to cancel).');
       return;
     }
 
@@ -1614,10 +1632,11 @@ export class GameWorld extends LitElement {
     const avoidChance = Math.min(80, Math.max(5, (dex - 30) * 2));
     if (Math.random() * 100 < avoidChance && trap.detected) {
       this.pushMessage('You carefully step over a trap.');
-      return;
+      return;  // trap stays armed — only an explicit disarm removes it permanently
     }
-    trap.triggered = true;
     trap.detected = true; // triggering reveals it
+    // Glyph traps are one-shot; everything else can fire again.
+    if (trap.kind === 'glyph') trap.triggered = true;
     const damage = rollTrapDamage(trap.kind);
     const trapName = trap.kind.replace(/([a-z])([A-Z])/g, '$1 $2');
     if (trap.kind === 'teleport') {
@@ -1646,6 +1665,78 @@ export class GameWorld extends LitElement {
     if (this.character.isDead) {
       this.dead = { killedBy: `${trapName} trap` };
     }
+    // Force map re-render so the trap icon updates (disappears for one-shot glyphs,
+    // persists for everything else).
+    this.map = { ...this.map };
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  /**
+   * Attempt to disarm the trap at (tx, ty).
+   *
+   * Must be within Chebyshev distance 1.  Three outcomes, weighted by DEX:
+   *   • Success  — trap removed; XP awarded as for search-detection.
+   *   • Failure  — trap stays armed; nothing else happens.
+   *   • Fumble   — trap triggers on the player (same as stepping on it).
+   *
+   * Disarming uses one turn of game time regardless of outcome.
+   */
+  private doDisarm(tx: number, ty: number): void {
+    const c = this.character;
+    if (!c) return;
+
+    // Must be within reach (Chebyshev ≤ 1)
+    if (Math.max(Math.abs(tx - this.pos.x), Math.abs(ty - this.pos.y)) > 1) {
+      this.pushMessage('That tile is out of reach — must be adjacent.');
+      this.runMonsterTurns();
+      return;
+    }
+
+    const tile = getTileAt(this.map, tx, ty);
+    const trap = tile.trap;
+
+    if (!trap || trap.triggered) {
+      this.pushMessage('There is no trap there to disarm.');
+      this.runMonsterTurns();
+      return;
+    }
+
+    if (!trap.detected) {
+      // Undetected traps can still be targeted blind; auto-detect first but
+      // increase fumble risk (no prior knowledge).
+      trap.detected = true;
+    }
+
+    // DEX-based probabilities:
+    //   disarm  40–80 %   (rises with DEX)
+    //   fumble   5–25 %   (falls with DEX)
+    //   fail    remainder (nothing happens)
+    const dex = c.stats.dexterity;
+    const disarmChance = Math.min(80, Math.max(40, (dex - 30) * 0.8));
+    const fumbleChance = Math.min(25, Math.max(5,  (70 - dex) * 0.4));
+    const roll = Math.random() * 100;
+    const trapName = trap.kind.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+    if (roll < disarmChance) {
+      // ── Success ───────────────────────────────────────────────────────────
+      trap.triggered = true;  // neutralised in place
+      this.map = { ...this.map }; // force re-render (trap icon disappears)
+      this.pushMessage(`You carefully disarm the ${trapName} trap.`);
+      const xp = difficultyToInt(c.difficulty) + 1;
+      c.addExperience(xp);
+      this.checkLevelUp();
+    } else if (roll < disarmChance + fumbleChance) {
+      // ── Fumble — trap fires ───────────────────────────────────────────────
+      this.pushMessage(`You fumble and trigger the ${trapName} trap!`);
+      this.triggerTrap(tile);
+      if (this.dead) return;
+    } else {
+      // ── Fail — nothing happens ────────────────────────────────────────────
+      this.pushMessage(`You fail to disarm the ${trapName} trap.`);
+    }
+
+    this.runMonsterTurns();
     this.autoSave();
     this.requestUpdate();
   }
@@ -2192,6 +2283,7 @@ export class GameWorld extends LitElement {
               .heroGender=${this.character.gender}
               ?inDungeon=${this.currentDungeonLevel > 0}
               ?minimap=${this.mapMode}
+              ?crosshair=${this.disarmMode}
               @map-click=${(e: CustomEvent<{dx: number; dy: number; tileX: number; tileY: number}>) => {
                 if (this.castingSpell) {
                   // Fire along the actual angle to the clicked tile (Bresenham ray trace handles walls)
@@ -2199,6 +2291,9 @@ export class GameWorld extends LitElement {
                   const rawDy = e.detail.tileY - this.pos.y;
                   this.fireDirectionalSpell(this.castingSpell, rawDx, rawDy);
                   this.castingSpell = null;
+                } else if (this.disarmMode) {
+                  this.disarmMode = false;
+                  this.doDisarm(e.detail.tileX, e.detail.tileY);
                 } else {
                   this.tryMove(e.detail.dx, e.detail.dy);
                 }
@@ -2207,6 +2302,8 @@ export class GameWorld extends LitElement {
 
             ${this.castingSpell
               ? html`<div class="location-banner" style="color:var(--game-text-bright);background:rgba(0,0,0,0.7);padding:4px 12px">⚡ Choose direction — arrow keys / numpad · Esc to cancel</div>`
+              : this.disarmMode
+              ? html`<div class="location-banner" style="color:var(--game-text-bright);background:rgba(0,0,0,0.7);padding:4px 12px">🔧 Click an adjacent trap to disarm · Esc to cancel</div>`
               : this.locationName
               ? html`<div class="location-banner">${this.locationName}</div>`
               : ''}
