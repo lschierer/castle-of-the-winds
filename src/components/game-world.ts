@@ -61,6 +61,9 @@ import {
   type PlayerStatus,
   playerMeleeAttack,
   monsterMeleeAttack,
+  monsterRangedAttack,
+  RANGED_SPECIALS,
+  RANGED_MAX_DIST,
   applyDrainAttack,
   poisonTick,
 } from '../engine/combat.ts';
@@ -964,6 +967,34 @@ export class GameWorld extends LitElement {
           }
         }
         continue;
+      }
+
+      // Ranged attack: not adjacent, has LOS, and within the safe ceiling distance
+      const rangedSpecial = spec.specials?.find((s) => RANGED_SPECIALS.has(s));
+      if (rangedSpecial && canSeePlayer && dist <= RANGED_MAX_DIST) {
+        const result = monsterRangedAttack(spec, rangedSpecial, c, updatedStatus, {
+          difficulty: difficultyToInt(c.difficulty),
+          equipmentAC: this.playerAC,
+          swarmCounter,
+        });
+        swarmCounter += 10;
+        this.pushMessage(result.message);
+        if (!result.dodged && result.damage > 0) {
+          c.takeDamage(result.damage);
+          charChanged = true;
+          if (c.isDead) {
+            this.dead = { killedBy: spec.name };
+            return;
+          }
+          if (result.specialTriggered === 'poison' && !updatedStatus.poisoned) {
+            updatedStatus = { ...updatedStatus, poisoned: true, poisonStrength: 1 };
+          } else if (result.specialTriggered) {
+            const drainResult = applyDrainAttack(result.specialTriggered, updatedStatus);
+            updatedStatus = drainResult.status;
+            if (drainResult.message) this.pushMessage(drainResult.message);
+          }
+        }
+        continue; // fired ranged — don't also move this turn
       }
 
       // Move toward player

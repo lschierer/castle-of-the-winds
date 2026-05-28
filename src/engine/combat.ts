@@ -518,6 +518,133 @@ export function monsterMeleeAttack(
   };
 }
 
+// ── Monster ranged attack on the player ──────────────────────────────────────
+
+/** Ranged special types that trigger a distance attack instead of a move. */
+export const RANGED_SPECIALS = new Set<SpecialAttack>([
+  'ranged_arrow', 'ranged_stone', 'ranged_spike', 'ranged_ice',
+  'breath_fire', 'breath_cold', 'breath_lightning', 'breath_poison',
+]);
+
+/**
+ * Max tile distance for ranged attacks.  The original binary has no hard cap —
+ * the monster AI's own 10-tile LOS check is the implicit limit.  We keep a
+ * generous ceiling here purely as a safety bound (avoids cross-room sniping on
+ * very large generated levels where LOS could theoretically reach further).
+ */
+export const RANGED_MAX_DIST = 12;
+
+function rangedMissMsg(name: string, special: SpecialAttack): string {
+  const map: Partial<Record<SpecialAttack, string[]>> = {
+    ranged_arrow:      [`The ${name}'s arrow misses!`, `You dodge the ${name}'s arrow.`],
+    ranged_stone:      [`The ${name}'s stone flies wide!`, `You dodge the hurled stone.`],
+    ranged_ice:        [`The ${name}'s ice shard misses!`],
+    ranged_spike:      [`The ${name}'s spike misses you!`],
+    breath_fire:       [`The ${name}'s fire breath misses you!`],
+    breath_cold:       [`The ${name}'s cold breath misses you!`],
+    breath_lightning:  [`The ${name}'s lightning misses you!`],
+    breath_poison:     [`The ${name}'s poison breath misses you!`],
+  };
+  return pickMsg(map[special] ?? [`The ${name} misses you!`]);
+}
+
+function rangedHitMsg(name: string, special: SpecialAttack): string {
+  const map: Partial<Record<SpecialAttack, string[]>> = {
+    ranged_arrow:      [`The ${name} shoots you with an arrow!`, `An arrow from the ${name} strikes you!`],
+    ranged_stone:      [`The ${name} hits you with a stone!`, `A stone from the ${name} hits you!`],
+    ranged_ice:        [`The ${name} pelts you with ice!`],
+    ranged_spike:      [`The ${name} hits you with a spike!`],
+    breath_fire:       [`The ${name} breathes fire at you!`],
+    breath_cold:       [`The ${name} breathes cold at you!`],
+    breath_lightning:  [`The ${name} breathes lightning at you!`],
+    breath_poison:     [`The ${name} breathes poison at you!`],
+  };
+  return pickMsg(map[special] ?? [`The ${name} hits you from a distance!`]);
+}
+
+/**
+ * Resolve a monster's ranged attack (arrow, stone, breath, etc.) on the player.
+ *
+ * Uses the same squared to-hit formula as melee, including the swarm counter
+ * (DAT_0x4D28).  The EXE makes no distinction between melee and ranged for the
+ * to-hit path — both dispatch through FUN_1090_21b4.
+ *
+ * Damage uses the same NdM roll as melee (attackToNdM); the EXE's ranged
+ * attack entries share the same 4-byte format as melee attack entries and carry
+ * no "double dice" modifier for breath weapons.  Elemental resist stacks apply
+ * as right-shifts, identical to the melee path.
+ */
+export function monsterRangedAttack(
+  monster: MonsterSpec,
+  rangedSpecial: SpecialAttack,
+  char: Character,
+  status: PlayerStatus,
+  ctx: CombatContext,
+): CombatResult {
+  // To-hit — identical squared formula to melee, swarm counter included.
+  const monOff = offensiveAC(monster.attack);
+  const shieldBonus = status.shielded ? 10 : 0;
+  const playerSpeed = char.derived.speed + ctx.equipmentAC + shieldBonus;
+  const swarm = ctx.swarmCounter ?? 0;
+  const T = 10 * monOff + swarm - playerSpeed + 265;
+  const threshold = Math.max(1, (T * T) / 1000 + (ctx.difficulty - 1) * GAME_DH_A4);
+  log.debug(`[${monster.name} ranged→player] to-hit: T=${T} threshold=${Math.round(threshold)}% (monOff=${monOff} speed=${playerSpeed} swarm=${swarm})`);
+  if (rand() * 100 >= threshold) {
+    return { damage: 0, message: rangedMissMsg(monster.name, rangedSpecial), dodged: true };
+  }
+
+  // Damage — NdM from the monster's attack value, same as melee.
+  // Resist stacks for elemental types apply as right-shifts per phase 10.
+  const { n, m } = attackToNdM(monster.attack);
+  let rawDamage: number;
+  let resistStacks = 0;
+
+  switch (rangedSpecial) {
+    case 'ranged_arrow':
+    case 'ranged_spike':
+    case 'ranged_stone':
+      rawDamage = rollNdM(n, m);
+      break;
+    case 'ranged_ice':
+      rawDamage = rollNdM(n, m);
+      resistStacks = status.resistCold ?? 0;
+      break;
+    case 'breath_fire':
+      rawDamage = rollNdM(n, m);
+      resistStacks = status.resistFire ?? 0;
+      break;
+    case 'breath_cold':
+      rawDamage = rollNdM(n, m);
+      resistStacks = status.resistCold ?? 0;
+      break;
+    case 'breath_lightning':
+      rawDamage = rollNdM(n, m);
+      resistStacks = status.resistLightning ?? 0;
+      break;
+    case 'breath_poison':
+      rawDamage = rollNdM(n, m);
+      break;
+    default:
+      rawDamage = rollNdM(n, m);
+  }
+
+  if (resistStacks > 0) rawDamage = rawDamage >>> resistStacks;
+  const netDamage = Math.max(1, rawDamage);
+
+  let specialTriggered: SpecialAttack | undefined;
+  if (rangedSpecial === 'breath_poison' && rand() < 0.5) {
+    specialTriggered = 'poison';
+  }
+  const poisonNote = specialTriggered === 'poison' ? ' You feel poisoned!' : '';
+
+  return {
+    damage: netDamage,
+    message: rangedHitMsg(monster.name, rangedSpecial) + poisonNote,
+    dodged: false,
+    ...(specialTriggered !== undefined ? { specialTriggered } : {}),
+  };
+}
+
 // ── Player spell attack on a monster ─────────────────────────────────────────
 
 export interface SpellAttackParams {
