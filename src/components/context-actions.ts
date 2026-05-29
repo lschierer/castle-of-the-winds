@@ -10,6 +10,7 @@
  */
 
 import type { Item } from '../data/items.ts';
+import { displayName } from '../data/items.ts';
 import type { TileMap, Vec2 } from '../data/tile-map.ts';
 import { getTileAt } from '../data/tile-map.ts';
 import type { CharacterModel } from '../model/Character.ts';
@@ -41,20 +42,22 @@ export function gatherContextActions(
     actions.push({ label: 'Drink from Well', id: 'well-drink', source: 'tile' });
   }
 
-  // ── Item actions (belt, free hand, pack) ────────────────────────────────
+  // ── Item actions — free hand and belt slots only ────────────────────────
+  // Belt slots are only accessible when a belt-type container is in the belt
+  // slot on the paper doll. Pack contents require taking items out first.
   const usableItems: Item[] = [
-    ...(character.belt?.slots?.flatMap((s) => s.items) ?? []),
     ...(character.freeHand ? [character.freeHand] : []),
-    ...(character.pack?.slots?.flatMap((s) => s.items) ?? []),
+    ...(character.belt?.slots?.flatMap((s) => s.items) ?? []),
   ];
 
   for (const item of usableItems) {
+    const name = displayName(item);
     if (item.name === 'Scrap of Parchment') {
       actions.push({ label: 'Read Parchment', id: `use-${item.id}`, source: 'item', item });
     } else if (item.kind === 'scroll') {
-      actions.push({ label: `Read ${item.name}`, id: `use-${item.id}`, source: 'item', item });
+      actions.push({ label: `Read ${name}`, id: `use-${item.id}`, source: 'item', item });
     } else if (item.kind === 'potion') {
-      actions.push({ label: `Drink ${item.name}`, id: `use-${item.id}`, source: 'item', item });
+      actions.push({ label: `Drink ${name}`, id: `use-${item.id}`, source: 'item', item });
     }
   }
 
