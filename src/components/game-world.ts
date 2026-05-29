@@ -830,7 +830,9 @@ export class GameWorld extends LitElement {
       return;
     }
     if (result.exitToSurface) {
-      // Nudge the player to read the parchment if they're carrying it
+      this.pushMessage('You emerge from the mine into daylight.');
+      this.enterMap('farm-map', { x: 24, y: 2 });
+      // Nudge appears after map transition so it's the top message in the log
       if (!this.parchmentRead) {
         const allItems: Item[] = [
           ...(this.character?.pack?.slots?.flatMap((s) => s.items) ?? []),
@@ -838,11 +840,9 @@ export class GameWorld extends LitElement {
           ...(this.character?.freeHand ? [this.character.freeHand] : []),
         ];
         if (allItems.some((it) => it.name === 'Scrap of Parchment')) {
-          this.pushMessage('You feel a strange urge to examine the scrap of parchment you found.');
+          this.pushMessage('As you step into the daylight, you feel a strange urge to examine the scrap of parchment you found in the mine. (Use… menu)');
         }
       }
-      this.pushMessage('You emerge from the mine into daylight.');
-      this.enterMap('farm-map', { x: 24, y: 2 });
       return;
     }
     this.pushMessage('You ascend the stairs…');
