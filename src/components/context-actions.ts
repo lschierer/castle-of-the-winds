@@ -45,9 +45,11 @@ export function gatherContextActions(
   // ── Item actions — free hand and belt slots only ────────────────────────
   // Belt slots are only accessible when a belt-type container is in the belt
   // slot on the paper doll. Pack contents require taking items out first.
+  // Exception: the Scrap of Parchment is a unique story item readable from anywhere.
   const usableItems: Item[] = [
     ...(character.freeHand ? [character.freeHand] : []),
     ...(character.belt?.slots?.flatMap((s) => s.items) ?? []),
+    ...(character.pack?.slots?.flatMap((s) => s.items.filter((i) => i.name === 'Scrap of Parchment')) ?? []),
   ];
 
   for (const item of usableItems) {

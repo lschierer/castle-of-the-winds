@@ -35,6 +35,8 @@ export type Direction = 'N' | 'S' | 'E' | 'W' | 'NE' | 'NW' | 'SE' | 'SW';
 export type MapId =
   | 'village'
   | 'farm-map'
+  | 'mountain-pass'       // phase-2 overworld: mountain corridor to Bjarnarhaven
+  | 'bjarnarhaven'        // phase-2 town: Bjarnarhaven (wooden fort)
   | 'dungeon-1'           // static first-floor reference kept for backward compat
   | `dungeon-${number}`   // legacy generated-floor IDs
   | `mine-${number}`      // mine floor N (1-8)

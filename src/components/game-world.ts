@@ -36,6 +36,7 @@ import {
   HAMLET_DESTROYED_NARRATIVE,
   STORY_SEGMENTS,
   destroyHamlet,
+  openPhaseTwo,
   isWalkable,
 
   exitAt,
@@ -395,8 +396,8 @@ export class GameWorld extends LitElement {
       if (state.currentDungeonLevel > 0) {
         revealAround(this.map, state.pos.x, state.pos.y);
       }
-      // Re-apply hamlet destruction if it was already triggered
-      if (this.hamletDestroyed) destroyHamlet();
+      // Re-apply hamlet destruction and phase-two unlock if already triggered
+      if (this.hamletDestroyed) { destroyHamlet(); openPhaseTwo(); }
       return;
     }
     const character = loadCharacter();
@@ -760,6 +761,7 @@ export class GameWorld extends LitElement {
         if (this.parchmentRead && !this.hamletDestroyed) {
           this.hamletDestroyed = true;
           destroyHamlet();
+          openPhaseTwo();
           this.showNarrative(HAMLET_DESTROYED_NARRATIVE);
         } else if (this.hamletDestroyed) {
           this.pushMessage('The hamlet lies in ruins. There is nothing left for you here.');
@@ -828,12 +830,15 @@ export class GameWorld extends LitElement {
       return;
     }
     if (result.exitToSurface) {
-      // Exit to surface — force-read parchment if carried and unread
+      // Nudge the player to read the parchment if they're carrying it
       if (!this.parchmentRead) {
-        const packItems: Item[] = this.character?.pack?.slots?.flatMap((s) => s.items) ?? [];
-        if (packItems.some((it) => it.name === 'Scrap of Parchment')) {
-          this.parchmentRead = true;
-          this.showNarrative(PARCHMENT_TEXT);
+        const allItems: Item[] = [
+          ...(this.character?.pack?.slots?.flatMap((s) => s.items) ?? []),
+          ...(this.character?.belt?.slots?.flatMap((s) => s.items) ?? []),
+          ...(this.character?.freeHand ? [this.character.freeHand] : []),
+        ];
+        if (allItems.some((it) => it.name === 'Scrap of Parchment')) {
+          this.pushMessage('You feel a strange urge to examine the scrap of parchment you found.');
         }
       }
       this.pushMessage('You emerge from the mine into daylight.');
@@ -1780,6 +1785,10 @@ export class GameWorld extends LitElement {
     if (action.item) {
       const item = action.item;
       if (item.name === 'Scrap of Parchment') {
+        // Remove from inventory — the parchment burns after reading
+        if (!this.character!.removeFromPack(item.id)) {
+          this.character!.removeFromBelt(item.id);
+        }
         this.showNarrative(PARCHMENT_TEXT);
         this.parchmentRead = true;
         return;
