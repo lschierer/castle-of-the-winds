@@ -269,7 +269,7 @@ function groundItemIcon(items: Item[]): string | undefined {
   if (items.length === 0) return undefined;
   if (items.length === 1) {
     const it = items[0];
-    return it?.icon ?? PILE_ICON;
+    return it ? getItemIcon(it) : PILE_ICON;
   }
   // 2+ items: if all coins, show best denomination
   if (items.every((i) => i.kind === 'coin')) {

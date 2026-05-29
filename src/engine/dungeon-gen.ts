@@ -6,7 +6,7 @@
  *
  * Dungeon structure (Castle of the Winds canon):
  *   Mine     — 4 floors  (floor 1 fixed spawn; floors 1-3 no upstairs)
- *                          Scrap of Parchment on floor 4 (deepest)
+ *                          Scrap of Parchment on floor 8 (deepest)
  *   Fortress — 11 floors (floor 1 fixed spawn; Hrungnir + ogre guards on floor 11)
  *   Castle   — 25 floors (boss encounters at floors 16, 18, 20, 22, 25)
  *

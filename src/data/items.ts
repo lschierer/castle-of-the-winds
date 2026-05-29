@@ -607,7 +607,7 @@ export function makeScroll(spellId: string, spellName: string): Item {
     cursed: false,
     broken: false,
     enchantment: 0,
-    icon: '/assets/sprites/icons/Items/icon_141.png',
+    icon: '/assets/sprites/icons/scroll.png',
     charges: 1,
   };
 }
@@ -646,7 +646,7 @@ export function makePotion(name: string): Item {
     cursed: false,
     broken: false,
     enchantment: 0,
-    icon: '/assets/sprites/icons/Items/icon_145.png',
+    icon: '/assets/sprites/icons/Items/icon_142.png',
   };
 }
 
