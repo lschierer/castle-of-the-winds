@@ -148,6 +148,7 @@ export class GameWorld extends LitElement {
 
   /** Replay the events from a session action into the view. */
   private applyEvents(result: ActionResult, opts?: { suppressEffects?: boolean }): void {
+    let pendingCast: string | null = null;
     for (const e of result.events) {
       switch (e.kind) {
         case 'message': this.pushMessage(e.text); break;
@@ -159,11 +160,15 @@ export class GameWorld extends LitElement {
         case 'map-changed': break; // sync() reclones the map anyway
         case 'location': this.locationName = e.name; break;
         case 'open-overlay': this.openOverlayFromEvent(e.overlay); break;
+        case 'begin-cast': pendingCast = e.spellId; break;
         case 'request-save': this.autoSave(); break;
       }
     }
     this.sync();
     this.runEffectQueue();
+    // Run any deferred cast after state has settled (avoids reentrant applyEvents
+    // mid-loop). beginCast enters targeting mode or resolves a self-cast.
+    if (pendingCast !== null) this.beginCast(pendingCast);
   }
 
   private openOverlayFromEvent(kind: Overlay): void {

@@ -41,6 +41,7 @@ export type GameEvent =
   | { kind: 'map-changed' }
   | { kind: 'location'; name: string }
   | { kind: 'open-overlay'; overlay: OverlayKind }
+  | { kind: 'begin-cast'; spellId: string }
   | { kind: 'request-save' };
 
 export interface ActionResult {
@@ -64,5 +65,6 @@ export const ev = {
   mapChanged: (): GameEvent => ({ kind: 'map-changed' }),
   location: (name: string): GameEvent => ({ kind: 'location', name }),
   openOverlay: (overlay: OverlayKind): GameEvent => ({ kind: 'open-overlay', overlay }),
+  beginCast: (spellId: string): GameEvent => ({ kind: 'begin-cast', spellId }),
   requestSave: (): GameEvent => ({ kind: 'request-save' }),
 } as const;

@@ -848,15 +848,11 @@ export class GameSession {
         if (spellId) {
           if (!c.removeFromPack(item.id)) c.removeFromBelt(item.id);
           events.push(ev.message(`You read the ${displayName(item)}. It crumbles to dust.`));
-          const intent = this.beginCast(spellId);
-          if (intent.needsDirection) {
-            // View must enter targeting mode; signal via message for now.
-            events.push(ev.message('Choose a direction to cast… (arrow keys / numpad)'));
-          } else {
-            events.push(...intent.result.events);
-          }
+          // Defer to the view's cast flow: directional spells enter targeting
+          // mode; self-targeted spells resolve immediately. The cast emits its
+          // own request-save, so we don't push one here.
+          events.push(ev.beginCast(spellId));
         }
-        events.push(ev.requestSave());
         return { events };
       }
       if (item.kind === 'potion') {
