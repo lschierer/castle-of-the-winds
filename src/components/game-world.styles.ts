@@ -77,7 +77,7 @@ export const gameWorldStyles = css`
 
     .verbs-menu {
       position: absolute;
-      bottom: calc(100% + 2px);
+      top: calc(100% + 2px);
       left: 0;
       z-index: 50;
       display: flex;
