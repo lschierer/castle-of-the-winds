@@ -42,7 +42,7 @@ export interface DungeonProgression {
  * Within each family, members are ordered weakest → strongest.
  * The spawner picks a family, then selects a member based on depth.
  */
-const SPAWN_FAMILIES: readonly { members: string[] }[] = [
+const SPAWN_FAMILIES: readonly { members: string[]; minDanger?: number }[] = [
   // Humans (4)
   { members: ['thief', 'bandit', 'evil_warrior', 'berserker'] },
   // Humanoids (8)
@@ -59,8 +59,8 @@ const SPAWN_FAMILIES: readonly { members: string[] }[] = [
   { members: ['giant_rat', 'wild_dog', 'giant_bat', 'carrion_creeper', 'gray_wolf', 'white_wolf', 'brown_bear', 'bear', 'manticore'] },
   // Insects (3)
   { members: ['giant_red_ant', 'giant_trapdoor_spider', 'giant_scorpion'] },
-  // Constructs (2)
-  { members: ['wooden_statue', 'bronze_statue'] },
+  // Constructs (2) — wooden_statue minLevel 5, so hold off until mid-mine
+  { members: ['wooden_statue', 'bronze_statue'], minDanger: 5 },
 ];
 
 /**
@@ -83,6 +83,7 @@ export function eligibleMonstersForDepth(stage: GameStage, localDepth: number): 
   const danger = effectiveDangerLevel(stage, localDepth);
   const eligible: string[] = [];
   for (const family of SPAWN_FAMILIES) {
+    if (family.minDanger !== undefined && danger < family.minDanger) continue;
     // How deep into this family we can reach: scale by danger level
     // At danger 1, only index 0 (weakest). At danger 8, ~half the family. At danger 20+, all.
     const maxIndex = Math.min(family.members.length - 1, Math.floor((danger - 1) * family.members.length / 20));
