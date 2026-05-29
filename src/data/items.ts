@@ -717,6 +717,11 @@ export function displayName(item: Item): string {
       const spec = PACK_SPECS.find((s) => s.name === item.name);
       if (spec?.unidentifiedName) return spec.unidentifiedName;
     }
+    // Consumables: real name is hidden until identified
+    if (item.kind === 'potion') return 'a Potion';
+    if (item.kind === 'scroll') return 'a Scroll';
+    if (item.kind === 'wand')   return 'a Wand';
+    if (item.kind === 'staff')  return 'a Staff';
     return item.name;
   }
 
