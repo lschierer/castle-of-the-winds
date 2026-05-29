@@ -12,7 +12,7 @@
  *     context-action  detail: { action: ContextAction }
  */
 
-import { LitElement, html, type TemplateResult } from 'lit';
+import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { gameWorldStyles } from './game-world.styles.ts';
 import { spellById } from '../data/spells.ts';
@@ -21,7 +21,9 @@ import type { ContextAction } from './context-actions.ts';
 
 @customElement('spell-bar')
 export class SpellBar extends LitElement {
-  static styles = gameWorldStyles;
+  // display:contents lets the inner .spell-bar be a direct flex item of the
+  // parent .layout, exactly as before this component was extracted.
+  static styles = [gameWorldStyles, css`:host { display: contents; }`];
 
   @property({ attribute: false }) character!: CharacterModel;
   @property({ attribute: false }) quickSpells: (string | null)[] = [];

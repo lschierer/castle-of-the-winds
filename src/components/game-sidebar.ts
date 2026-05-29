@@ -8,7 +8,7 @@
  *   events: none (read-only panel)
  */
 
-import { LitElement, html, type TemplateResult } from 'lit';
+import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { gameWorldStyles } from './game-world.styles.ts';
 import { xpForLevel } from '../data/character.ts';
@@ -22,7 +22,8 @@ import './message-log.ts';
 
 @customElement('game-sidebar')
 export class GameSidebar extends LitElement {
-  static styles = gameWorldStyles;
+  // display:contents lets the inner .sidebar be a direct flex item of .game-row.
+  static styles = [gameWorldStyles, css`:host { display: contents; }`];
 
   @property({ attribute: false }) character!: CharacterModel;
   @property({ attribute: false }) playerStatus: PlayerStatus = {};

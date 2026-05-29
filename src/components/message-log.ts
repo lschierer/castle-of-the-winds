@@ -5,7 +5,7 @@
  * Contract: prop `.messages`; no events.
  */
 
-import { LitElement, html, type TemplateResult } from 'lit';
+import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { gameWorldStyles } from './game-world.styles.ts';
 
@@ -16,7 +16,7 @@ export interface LogMessage {
 
 @customElement('message-log')
 export class MessageLog extends LitElement {
-  static styles = gameWorldStyles;
+  static styles = [gameWorldStyles, css`:host { display: contents; }`];
 
   @property({ attribute: false }) messages: LogMessage[] = [];
 
