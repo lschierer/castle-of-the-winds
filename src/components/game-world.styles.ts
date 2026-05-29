@@ -184,8 +184,8 @@ export const gameWorldStyles = css`
     }
 
     .tile {
-      width: 2px;
-      height: 2px;
+      width: 32px;
+      height: 32px;
     }
 
     .location-banner {
