@@ -96,7 +96,7 @@ function difficultyToInt(d: Character['difficulty']): number {
 }
 
 
-type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells' | 'game-menu';
+type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells' | 'game-menu' | 'verbs';
 
 @customElement('game-world')
 export class GameWorld extends LitElement {
@@ -2065,9 +2065,24 @@ export class GameWorld extends LitElement {
           <button class="spell-bar-btn" @click=${() => { this.doRest(); }}>Rest</button>
           <button class="spell-bar-btn ${this.overlay === 'inventory' ? 'active' : ''}" @click=${() => { this.toggleOverlay('inventory'); }}>Inventory</button>
           <button class="spell-bar-btn ${this.overlay === 'spells' ? 'active' : ''}" @click=${() => { this.toggleOverlay('spells'); }}>Spells</button>
-          ${this.character ? gatherContextActions(this.character, this.map, this.pos).map((a) =>
-            html`<button class="spell-bar-btn" @click=${() => { this.executeContextAction(a); }}>${a.label}</button>`
-          ) : ''}
+          ${this.character ? (() => {
+            const actions = gatherContextActions(this.character!, this.map, this.pos);
+            if (actions.length === 0) return '';
+            return html`
+              <div class="verbs-wrap">
+                <button class="spell-bar-btn ${this.overlay === 'verbs' ? 'active' : ''}"
+                  @click=${() => { this.toggleOverlay('verbs'); }}>Use…</button>
+                ${this.overlay === 'verbs' ? html`
+                  <div class="verbs-menu">
+                    ${actions.map((a) => html`
+                      <button class="verbs-item" @click=${() => {
+                        this.overlay = 'none';
+                        this.executeContextAction(a);
+                      }}>${a.label}</button>
+                    `)}
+                  </div>` : ''}
+              </div>`;
+          })() : ''}
         </div>
         <div class="spell-slots">
           ${this.quickSpells.map((spellId, i) => {
