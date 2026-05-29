@@ -21,14 +21,16 @@ import type { Gender } from '../data/character.ts';
 const TILE_PX = 32;
 
 /**
- * Largest odd number of tiles that fits in `px`, floored to whole tiles and at
- * least 7. Odd so the hero sits in the exact centre cell; flooring (rather than
- * `| 1`, which can round an even count *up* and overflow) guarantees the grid
- * never exceeds its container.
+ * Smallest odd number of tiles that fully *covers* `px` (at least 7).
+ *
+ * We round UP and let the host's `overflow: hidden` clip the partial tiles at
+ * the edges, so the grid fills the panel edge-to-edge with no dead margin. Odd
+ * so the hero sits in the exact centre cell and the half-tile overflow is split
+ * evenly on opposite sides.
  */
-function oddTileFit(px: number): number {
-  const f = Math.floor(px / TILE_PX);
-  return Math.max(7, f % 2 === 0 ? f - 1 : f);
+function oddTileCover(px: number): number {
+  const c = Math.ceil(px / TILE_PX);
+  return Math.max(7, c % 2 === 0 ? c + 1 : c);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ export class DungeonMap extends LitElement {
   private viewport(): { cols: number; rows: number } {
     const w = this.availW || (window.innerWidth - 212);
     const h = this.availH || (window.innerHeight - 48);
-    return { cols: oddTileFit(w), rows: oddTileFit(h) };
+    return { cols: oddTileCover(w), rows: oddTileCover(h) };
   }
 
   protected render(): TemplateResult {
