@@ -15,13 +15,15 @@ import { LitElement, html, type TemplateResult } from 'lit';
 import { gameWorldStyles } from './game-world.styles.ts';
 import { customElement, state } from 'lit/decorators.js';
 import type { Character } from '../data/character.ts';
-import { maxSpellLevelAt, xpForLevel } from '../data/character.ts';
+import { xpForLevel } from '../data/character.ts';
+import { spellIdsAvailableAtLevel } from '../data/binary-data/spell-grants.ts';
 import { CharacterModel } from '../model/Character.ts';
 import { WorldModel } from '../model/World.ts';
 import './player-inventory.ts';
 import './dungeon-map.ts';
 import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../engine/save.ts';
 import { gatherContextActions, type ContextAction } from './context-actions.ts';
+import { initLogging } from '../engine/logging.ts';
 import {
   type TileMap,
   type MapId,
@@ -35,13 +37,14 @@ import {
   STORY_SEGMENTS,
   destroyHamlet,
   isWalkable,
-  buildingAt,
+
   exitAt,
   getTileAt,
   dropItem,
   revealAround,
   hasLineOfSight,
 } from '../data/world-map.ts';
+import { type Tile, rollTrapDamage } from '../data/tile-map.ts';
 import { spellById } from '../data/spells.ts';
 import { LEARNABLE_SPELLS } from '../data/spells.ts';
 import {
@@ -58,11 +61,19 @@ import {
   type PlayerStatus,
   playerMeleeAttack,
   monsterMeleeAttack,
+  monsterRangedAttack,
+  RANGED_SPECIALS,
+  RANGED_MAX_DIST,
   applyDrainAttack,
   poisonTick,
 } from '../engine/combat.ts';
+import {
+  type CombatEffect,
+  makeMonsterRangedEffect,
+  makeSpellEffect,
+} from '../engine/combat-effects.ts';
 import { monsterById, healthDescription, rollMonsterLoot } from '../data/monsters.ts';
-import { castSpell, spellTargetKind, type SpellTarget } from '../engine/spell-engine.ts';
+import { castSpell, isBallSpell, spellTargetKind, type SpellTarget } from '../engine/spell-engine.ts';
 import { type DungeonFloor } from '../engine/dungeon-gen.ts';
 import { type GameStage } from '../data/progression.ts';
 import { type ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../data/equipment.ts';
@@ -85,7 +96,7 @@ function difficultyToInt(d: Character['difficulty']): number {
 }
 
 
-type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells';
+type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells' | 'game-menu';
 
 @customElement('game-world')
 export class GameWorld extends LitElement {
@@ -97,7 +108,7 @@ export class GameWorld extends LitElement {
   @state() private pos: Vec2 = { ...VILLAGE_MAP.entryPosition };
   @state() private messages: Array<{ text: string; fresh: boolean }> = [
     { text: 'You stand in the village. Arrow keys, hjklyubn, or numpad to move.', fresh: true },
-    { text: 'I = inventory · P = spells · G = get · S = search · R/r = rest · M = map', fresh: false },
+    { text: 'F1 = menu · I = inv · P = spells · G = get · S = search · R = rest · Z = sleep · M = map', fresh: false },
   ];
   @state() private locationName = '';
   @state() private overlay: Overlay = 'none';
@@ -142,11 +153,26 @@ export class GameWorld extends LitElement {
   /** Spell targeting mode: spell selected, waiting for direction input. */
   @state() private castingSpell: string | null = null;
 
+  /** Disarm mode: player pressed D, waiting for a tile click to attempt disarm. */
+  @state() private disarmMode = false;
+
   /** Pending spell learning: character leveled up and can pick a new spell. */
   @state() private pendingSpellLearn = false;
 
   /** Player is dead — game over. */
   @state() private dead: { killedBy: string } | null = null;
+
+  /** Currently-displayed combat effect (ranged attack / spell projectile). */
+  @state() private combatEffect: CombatEffect | null = null;
+  /** Queue of effects waiting to be displayed one-by-one. */
+  private readonly effectQueue: CombatEffect[] = [];
+  /** Handle for the effect-display timer so it can be cancelled. */
+  private effectTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * When true, effects are suppressed (rest / sleep loops process many turns
+   * automatically and generating a new overlay for each would be distracting).
+   */
+  private inRestLoop = false;
 
   /** Pending sell confirmation — click item once to select, again to confirm. */
 
@@ -313,6 +339,7 @@ export class GameWorld extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    void initLogging();
 
     // Check if this is a fresh new game (from character creation)
     const url = new URL(window.location.href);
@@ -419,6 +446,41 @@ export class GameWorld extends LitElement {
       return;
     }
 
+    // F1 toggles the game menu
+    if (e.key === 'F1') {
+      e.preventDefault();
+      this.toggleOverlay('game-menu');
+      return;
+    }
+
+    // Game menu open — letter shortcuts execute directly, no mouse needed
+    if (this.overlay === 'game-menu') {
+      e.preventDefault();
+      const menuActions: Record<string, () => void> = {
+        g: () => this.pickupGround(),   G: () => this.pickupGround(),
+        s: () => this.doSearch(),       S: () => this.doSearch(),
+        r: () => this.doRest(),         R: () => this.doRest(),
+        z: () => this.doSleep(),        Z: () => this.doSleep(),
+        m: () => { this.mapMode = !this.mapMode; },
+        M: () => { this.mapMode = !this.mapMode; },
+        i: () => this.toggleOverlay('inventory'),
+        I: () => this.toggleOverlay('inventory'),
+        p: () => this.toggleOverlay('spells'),
+        P: () => this.toggleOverlay('spells'),
+        '<': () => this.useStairs('up'),   ',': () => this.useStairs('up'),
+        '>': () => this.useStairs('down'), '.': () => this.useStairs('down'),
+        '?': () => this.toggleOverlay('story'),
+      };
+      const fn = menuActions[e.key];
+      if (fn) {
+        this.overlay = 'none';
+        fn();
+      } else if (e.key === 'Escape' || e.key === 'Enter') {
+        this.overlay = 'none';
+      }
+      return;
+    }
+
     // Other overlays
     if (this.overlay !== 'none') {
       if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
@@ -458,6 +520,15 @@ export class GameWorld extends LitElement {
     if (e.key === 'Escape') {
       e.preventDefault();
       this.castingSpell = null;
+      this.disarmMode = false;
+      return;
+    }
+
+    // Disarm mode: any non-escape key cancels
+    if (this.disarmMode) {
+      e.preventDefault();
+      this.disarmMode = false;
+      this.pushMessage('Disarm cancelled.');
       return;
     }
 
@@ -497,7 +568,7 @@ export class GameWorld extends LitElement {
       this.doRest();
       return;
     }
-    if (e.key === 'R' && e.shiftKey) {
+    if ((e.key === 'R' && e.shiftKey) || e.key === 'z' || e.key === 'Z') {
       e.preventDefault();
       this.doSleep();
       return;
@@ -510,6 +581,12 @@ export class GameWorld extends LitElement {
     if (e.key === '<' || e.key === ',') {
       e.preventDefault();
       this.useStairs('up');
+      return;
+    }
+    if ((e.key === 'd' || e.key === 'D') && this.currentDungeonLevel > 0) {
+      e.preventDefault();
+      this.disarmMode = true;
+      this.pushMessage('Disarm — click an adjacent trap (Esc to cancel).');
       return;
     }
 
@@ -545,6 +622,15 @@ export class GameWorld extends LitElement {
     }
 
     if (!isWalkable(this.map, nx, ny)) {
+      // Open a building only when the player is standing on the specific road
+      // tile in front of it and moves toward the wall — directional entry.
+      const currentTile = getTileAt(this.map, this.pos.x, this.pos.y);
+      if (currentTile.building) {
+        this.activeBuilding = currentTile.building;
+        this.overlay = 'building';
+        this.locationName = currentTile.building.name;
+        return;
+      }
       // If a monster is diagonally adjacent (but not in this exact direction),
       // tell the player so they're not left guessing.
       const diagMonster = this.monsters.find((m) => {
@@ -566,8 +652,12 @@ export class GameWorld extends LitElement {
 
     this.moveTo(nx, ny);
 
-    // Special tile messages
+    // Check for traps
     const tile = getTileAt(this.map, nx, ny);
+    if (tile.trap && !tile.trap.triggered) {
+      this.triggerTrap(tile);
+      if (this.character?.isDead) return;
+    }
 
     // Notify about ground items
     if (tile.items.length > 0) {
@@ -594,15 +684,7 @@ export class GameWorld extends LitElement {
       this.pushMessage('You see stairs leading up. (< to ascend)');
     }
 
-    const building = buildingAt(this.map, nx, ny);
-    if (building) {
-      this.activeBuilding = building;
-      this.overlay = 'building';
-      this.locationName = building.name;
-      logger.debug(`Entering building: ${building.name}`);
-    } else {
-      this.locationName = '';
-    }
+    this.locationName = '';
 
     this.runMonsterTurns();
   }
@@ -827,13 +909,54 @@ export class GameWorld extends LitElement {
           this.pushMessage(`The ${spec.name} drops ${loot.length === 1 && firstLoot ? displayName(firstLoot) : `${loot.length} items`}.`);
         }
       } else {
-        const desc = healthDescription(newHp, spec.hp);
+        const desc = healthDescription(newHp, target.maxHp);
         this.pushMessage(`The ${spec.name} is ${desc}.`);
         this.monsters = this.monsters.map((m) =>
           m.instanceId === target.instanceId ? { ...m, hp: newHp } : m,
         );
       }
     }
+  }
+
+  // ── Combat effect display ─────────────────────────────────────────────────
+
+  /**
+   * Enqueue a combat effect to display after the current action resolves.
+   * Silently dropped during rest/sleep loops to prevent visual spam.
+   * Queue is capped at 4 entries so rest-adjacent combat doesn't linger.
+   */
+  private queueEffect(effect: CombatEffect): void {
+    if (this.inRestLoop) return;
+    if (this.effectQueue.length < 4) this.effectQueue.push(effect);
+  }
+
+  /**
+   * Start sequential playback of the effect queue (if not already running).
+   * Each effect shows for ~380 ms, then a brief null state ensures the DOM
+   * element is removed and recreated before the next (which restarts the
+   * CSS fade-out animation cleanly).
+   */
+  private runEffectQueue(): void {
+    if (this.effectTimer !== null) return;  // already playing
+    this.stepEffect();
+  }
+
+  private stepEffect(): void {
+    this.effectTimer = null;
+    if (this.effectQueue.length === 0) {
+      this.combatEffect = null;
+      return;
+    }
+    const next = this.effectQueue.shift()!;
+    // Clear first — two rAF cycles let Lit remove the old DOM element so the
+    // animation restarts cleanly when the new element appears.
+    this.combatEffect = null;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this.combatEffect = next;
+        this.effectTimer = setTimeout(() => { this.stepEffect(); }, 380);
+      });
+    });
   }
 
   /** Run all monsters' turns after the player acts. */
@@ -923,6 +1046,37 @@ export class GameWorld extends LitElement {
         continue;
       }
 
+      // Ranged attack: not adjacent, has LOS, and within the safe ceiling distance
+      const rangedSpecial = spec.specials?.find((s) => RANGED_SPECIALS.has(s));
+      if (rangedSpecial && canSeePlayer && dist <= RANGED_MAX_DIST) {
+        const result = monsterRangedAttack(spec, rangedSpecial, c, updatedStatus, {
+          difficulty: difficultyToInt(c.difficulty),
+          equipmentAC: this.playerAC,
+          swarmCounter,
+        });
+        swarmCounter += 10;
+        // Queue visual — projectile travels from monster (m.x, m.y) to player
+        const fx = makeMonsterRangedEffect(rangedSpecial, m.x, m.y, this.pos.x, this.pos.y);
+        if (fx) this.queueEffect(fx);
+        this.pushMessage(result.message);
+        if (!result.dodged && result.damage > 0) {
+          c.takeDamage(result.damage);
+          charChanged = true;
+          if (c.isDead) {
+            this.dead = { killedBy: spec.name };
+            return;
+          }
+          if (result.specialTriggered === 'poison' && !updatedStatus.poisoned) {
+            updatedStatus = { ...updatedStatus, poisoned: true, poisonStrength: 1 };
+          } else if (result.specialTriggered) {
+            const drainResult = applyDrainAttack(result.specialTriggered, updatedStatus);
+            updatedStatus = drainResult.status;
+            if (drainResult.message) this.pushMessage(drainResult.message);
+          }
+        }
+        continue; // fired ranged — don't also move this turn
+      }
+
       // Move toward player
       const stepX = dx0 === 0 ? 0 : dx0 > 0 ? 1 : -1;
       const stepY = dy0 === 0 ? 0 : dy0 > 0 ? 1 : -1;
@@ -961,6 +1115,8 @@ export class GameWorld extends LitElement {
     if (charChanged) {
       this.autoSave();
     }
+    // Start playing any queued visual effects (non-blocking; safe to call every turn)
+    this.runEffectQueue();
   }
 
   private pushMessage(text: string): void {
@@ -1082,11 +1238,15 @@ export class GameWorld extends LitElement {
       const { hpGain, mpGain } = this.character.levelUp();
       this.pushMessage(`*** Level up! You are now level ${this.character.level}! ***`);
       this.pushMessage(`HP: ${this.character.maxHitPoints} (+${hpGain})  Mana: ${this.character.maxMana} (+${mpGain})`);
-      // Check if new spell tier unlocked
-      const maxSpell = maxSpellLevelAt(this.character.level);
+      // Check if new spells are available.  We use the EXE-derived
+      // per-character-level grant table from binary-data/spell-grants.ts
+      // (see REPORT_PHASE16 §3) rather than maxSpellLevelAt — the EXE's
+      // availability isn't strictly by spell-level tier but by a fixed
+      // per-spell threshold at char level 2/4/6/8/10.
       const char = this.character;
+      const exeAvailable = spellIdsAvailableAtLevel(this.character.level);
       const available = LEARNABLE_SPELLS.filter(
-        (s) => s.level <= maxSpell && !char.spells.includes(s.id),
+        (s) => exeAvailable.has(s.id) && !char.spells.includes(s.id),
       );
       if (available.length > 0) {
         this.pendingSpellLearn = true;
@@ -1113,6 +1273,11 @@ export class GameWorld extends LitElement {
   private fireDirectionalSpell(spellId: string, dx: number, dy: number): void {
     // Trace a ray from player toward (dx, dy) using Bresenham's line algorithm.
     // Supports arbitrary angles, not just 8 cardinal directions.
+    //
+    // Bolt spells stop at the first solid wall (line of fire).
+    // Ball spells arc over obstacles — walls never stop them; only a monster in
+    // the path (the detonation target) or the range limit ends the trace.
+    const isBall = isBallSpell(spellId);
     let target: SpellTarget = { dx: Math.sign(dx), dy: Math.sign(dy) };
     const px = this.pos.x;
     const py = this.pos.y;
@@ -1123,7 +1288,18 @@ export class GameWorld extends LitElement {
     const sy = Math.sign(dy);
     const steps = Math.max(adx, ady, 1);
 
-    for (let i = 1; i <= 20; i++) {
+    // For a click-targeted ball spell (steps > 1) cap the loop at the exact
+    // clicked tile so the blast lands where the player aimed, not beyond it.
+    // For key-press targeting (steps === 1) the loop still runs 20 iterations
+    // so the spell travels its full range in the given direction.
+    const maxI = isBall && steps > 1 ? steps : 20;
+
+    // Track the last reachable tile for the visual effect even when no monster
+    // is hit (bolt hits a wall, ball reaches max range or aimed tile).
+    let effectTargetX = px + sx;
+    let effectTargetY = py + sy;
+
+    for (let i = 1; i <= maxI; i++) {
       // Bresenham: project the i-th step along the line from (0,0) to (dx,dy)
       const tx = px + Math.round((dx * i) / steps);
       const ty = py + Math.round((dy * i) / steps);
@@ -1131,17 +1307,36 @@ export class GameWorld extends LitElement {
       // Don't re-check the player's tile
       if (tx === px && ty === py) continue;
 
-      // Check for a monster
-      const m = this.monsters.find((mon) => mon.x === tx && mon.y === ty);
-      if (m) {
-        const dist = Math.max(Math.abs(tx - px), Math.abs(ty - py));
-        target = { dx: sx, dy: sy, monster: m, distance: dist };
-        break;
+      // Bolt spells stop at the first monster hit; ball spells arc past monsters
+      // and detonate at the aimed tile — creatures are caught by the area blast.
+      if (!isBall) {
+        const m = this.monsters.find((mon) => mon.x === tx && mon.y === ty);
+        if (m) {
+          const dist = Math.max(Math.abs(tx - px), Math.abs(ty - py));
+          target = { dx: sx, dy: sy, monster: m, distance: dist };
+          effectTargetX = tx;
+          effectTargetY = ty;
+          break;
+        }
       }
 
-      // Stop at solid walls
+      // Both spell types stop at solid walls and closed doors
       if (!isWalkable(this.map, tx, ty)) break;
+
+      effectTargetX = tx;
+      effectTargetY = ty;
     }
+
+    // Ball spells always carry an explicit explosion tile so castAttack can
+    // compute the full 3×3 AOE even when nothing occupies the centre tile.
+    if (isBall) {
+      target = { ...target, explodeTile: { x: effectTargetX, y: effectTargetY } };
+    }
+
+    // Queue the visual before the spell resolves (effect travels from player to target)
+    const spellFx = makeSpellEffect(spellId, px, py, effectTargetX, effectTargetY);
+    if (spellFx) this.queueEffect(spellFx);
+
     this.executeCast(spellId, target);
   }
 
@@ -1254,12 +1449,44 @@ export class GameWorld extends LitElement {
           this.monsters = this.monsters.filter((mon) => mon.instanceId !== instanceId);
         } else {
           const spec = monsterById(m.specId);
-          if (spec) this.pushMessage(`The ${spec.name} is ${healthDescription(newHp, spec.hp)}.`);
+          if (spec) this.pushMessage(`The ${spec.name} is ${healthDescription(newHp, m.maxHp)}.`);
           this.monsters = this.monsters.map((mon) =>
             mon.instanceId === instanceId ? { ...mon, hp: newHp } : mon,
           );
         }
       }
+    }
+
+    // AOE ball spell: apply damage to every monster in the blast radius.
+    // Monsters that die are removed in sequence; the damage messages were
+    // already pushed from the spell engine result above.
+    if (result.monsterDamages && result.monsterDamages.length > 0) {
+      let survivors = this.monsters;
+      for (const { instanceId, damage } of result.monsterDamages) {
+        const m = survivors.find((mon) => mon.instanceId === instanceId);
+        if (!m) continue;
+        const newHp = m.hp - damage;
+        if (newHp <= 0) {
+          const spec = monsterById(m.specId);
+          if (spec) {
+            this.pushMessage(`You defeat the ${spec.name}!`);
+            c.addExperience(spec.xp);
+            this.checkLevelUp();
+            const loot = rollMonsterLoot(spec, 1);
+            for (const item of loot) dropItem(this.map, m.x, m.y, item);
+            if (loot.length > 0) {
+              const firstDrop = loot[0];
+              this.pushMessage(`The ${spec.name} drops ${loot.length === 1 && firstDrop ? displayName(firstDrop) : `${loot.length} items`}.`);
+            }
+          }
+          survivors = survivors.filter((mon) => mon.instanceId !== instanceId);
+        } else {
+          survivors = survivors.map((mon) =>
+            mon.instanceId === instanceId ? { ...mon, hp: newHp } : mon,
+          );
+        }
+      }
+      this.monsters = survivors;
     }
 
     if (result.statusChanges) {
@@ -1282,6 +1509,7 @@ export class GameWorld extends LitElement {
     // Rest: recover HP over multiple turns. Each turn has a chance of monster interrupt.
     const turnsNeeded = Math.ceil((c.maxHitPoints - c.hitPoints) / 2);
     let interrupted = false;
+    this.inRestLoop = true;
     for (let t = 0; t < turnsNeeded; t++) {
       // 5% chance per turn of being interrupted by a monster with line of sight
       const nearby = this.monsters.some((m) =>
@@ -1295,6 +1523,7 @@ export class GameWorld extends LitElement {
       this.runMonsterTurns();
       if (this.dead) return;
     }
+    this.inRestLoop = false;
     if (!interrupted) {
       const ch = this.character as Character;
       this.pushMessage(`You rest until healed. HP: ${ch.hitPoints}/${ch.maxHitPoints}`);
@@ -1315,6 +1544,7 @@ export class GameWorld extends LitElement {
     const mpNeeded = c.maxMana - c.mana;
     const turnsNeeded = Math.ceil(Math.max(hpNeeded / 2, mpNeeded));
     let interrupted = false;
+    this.inRestLoop = true;
     for (let t = 0; t < turnsNeeded; t++) {
       // 10% chance per turn of interrupt by a monster with line of sight
       const nearby = this.monsters.some((m) =>
@@ -1335,6 +1565,7 @@ export class GameWorld extends LitElement {
       this.runMonsterTurns();
       if (this.dead) return;
     }
+    this.inRestLoop = false;
     if (!interrupted) {
       const ch = this.character as Character;
       this.pushMessage(`You sleep until restored. HP: ${ch.hitPoints}/${ch.maxHitPoints}, Mana: ${ch.mana}/${ch.maxMana}`);
@@ -1345,18 +1576,169 @@ export class GameWorld extends LitElement {
 
   private doSearch(): void {
     let found = false;
+    let trapsFound = 0;
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue;
         const tile = getTileAt(this.map, this.pos.x + dx, this.pos.y + dy);
+        if (dx === 0 && dy === 0) {
+          // Check current tile for traps
+          if (tile.trap && !tile.trap.detected) {
+            tile.trap.detected = true;
+            found = true;
+            trapsFound++;
+          }
+          continue;
+        }
         if (tile.feature === 'secret-door') {
           tile.feature = 'door';
           tile.walkable = true;
           found = true;
         }
+        if (tile.trap && !tile.trap.detected) {
+          tile.trap.detected = true;
+          found = true;
+          trapsFound++;
+        }
       }
     }
-    this.pushMessage(found ? 'You find a hidden door!' : 'You search but find nothing.');
+    this.pushMessage(found ? 'You find something hidden!' : 'You search but find nothing.');
+
+    // Searching uses game time: advance one turn (monsters act, regen 1 HP).
+    const c = this.character;
+    if (c) {
+      c.heal(1);
+      if (trapsFound > 0) {
+        // Award XP for each disarmed trap; scales with difficulty (easy=1 … expert=4).
+        const xpPerTrap = difficultyToInt(c.difficulty) + 1;
+        c.addExperience(xpPerTrap * trapsFound);
+        this.checkLevelUp();
+      }
+    }
+    this.runMonsterTurns();
+
+    if (found) {
+      // Tile mutation doesn't change the map reference, so dungeon-map's
+      // @property dirty-check would skip a re-render. A shallow copy gives it
+      // a new reference while keeping all the mutated tile data intact.
+      this.map = { ...this.map };
+    }
+    this.requestUpdate();
+  }
+
+  private triggerTrap(tile: Tile): void {
+    const trap = tile.trap;
+    if (!trap || !this.character) return;
+    // DEX-based avoidance: higher DEX = better chance to avoid
+    const dex = this.character.stats.dexterity;
+    const avoidChance = Math.min(80, Math.max(5, (dex - 30) * 2));
+    if (Math.random() * 100 < avoidChance && trap.detected) {
+      this.pushMessage('You carefully step over a trap.');
+      return;  // trap stays armed — only an explicit disarm removes it permanently
+    }
+    trap.detected = true; // triggering reveals it
+    // Glyph traps are one-shot; everything else can fire again.
+    if (trap.kind === 'glyph') trap.triggered = true;
+    const damage = rollTrapDamage(trap.kind);
+    const trapName = trap.kind.replace(/([a-z])([A-Z])/g, '$1 $2');
+    if (trap.kind === 'teleport') {
+      this.pushMessage(`You trigger a teleport trap!`);
+      // Random teleport on current floor
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const tx = Math.floor(Math.random() * this.map.width);
+        const ty = Math.floor(Math.random() * this.map.height);
+        if (isWalkable(this.map, tx, ty) && !this.monsters.some((m) => m.x === tx && m.y === ty)) {
+          this.moveTo(tx, ty);
+          break;
+        }
+      }
+    } else if (trap.kind === 'dart') {
+      this.pushMessage(`A poison dart hits you! (${damage} damage)`);
+      this.character.takeDamage(damage);
+      this.playerStatus = { ...this.playerStatus, poisoned: true, poisonStrength: 1 };
+    } else if (trap.kind === 'gas') {
+      this.pushMessage(`Poison gas fills the air! (${damage} damage)`);
+      this.character.takeDamage(damage);
+      this.playerStatus = { ...this.playerStatus, poisoned: true, poisonStrength: 2 };
+    } else {
+      this.pushMessage(`You trigger a ${trapName} trap! (${damage} damage)`);
+      this.character.takeDamage(damage);
+    }
+    if (this.character.isDead) {
+      this.dead = { killedBy: `${trapName} trap` };
+    }
+    // Force map re-render so the trap icon updates (disappears for one-shot glyphs,
+    // persists for everything else).
+    this.map = { ...this.map };
+    this.autoSave();
+    this.requestUpdate();
+  }
+
+  /**
+   * Attempt to disarm the trap at (tx, ty).
+   *
+   * Must be within Chebyshev distance 1.  Three outcomes, weighted by DEX:
+   *   • Success  — trap removed; XP awarded as for search-detection.
+   *   • Failure  — trap stays armed; nothing else happens.
+   *   • Fumble   — trap triggers on the player (same as stepping on it).
+   *
+   * Disarming uses one turn of game time regardless of outcome.
+   */
+  private doDisarm(tx: number, ty: number): void {
+    const c = this.character;
+    if (!c) return;
+
+    // Must be within reach (Chebyshev ≤ 1)
+    if (Math.max(Math.abs(tx - this.pos.x), Math.abs(ty - this.pos.y)) > 1) {
+      this.pushMessage('That tile is out of reach — must be adjacent.');
+      this.runMonsterTurns();
+      return;
+    }
+
+    const tile = getTileAt(this.map, tx, ty);
+    const trap = tile.trap;
+
+    if (!trap || trap.triggered) {
+      this.pushMessage('There is no trap there to disarm.');
+      this.runMonsterTurns();
+      return;
+    }
+
+    if (!trap.detected) {
+      // Undetected traps can still be targeted blind; auto-detect first but
+      // increase fumble risk (no prior knowledge).
+      trap.detected = true;
+    }
+
+    // DEX-based probabilities:
+    //   disarm  40–80 %   (rises with DEX)
+    //   fumble   5–25 %   (falls with DEX)
+    //   fail    remainder (nothing happens)
+    const dex = c.stats.dexterity;
+    const disarmChance = Math.min(80, Math.max(40, (dex - 30) * 0.8));
+    const fumbleChance = Math.min(25, Math.max(5,  (70 - dex) * 0.4));
+    const roll = Math.random() * 100;
+    const trapName = trap.kind.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+    if (roll < disarmChance) {
+      // ── Success ───────────────────────────────────────────────────────────
+      trap.triggered = true;  // neutralised in place
+      this.map = { ...this.map }; // force re-render (trap icon disappears)
+      this.pushMessage(`You carefully disarm the ${trapName} trap.`);
+      const xp = difficultyToInt(c.difficulty) + 1;
+      c.addExperience(xp);
+      this.checkLevelUp();
+    } else if (roll < disarmChance + fumbleChance) {
+      // ── Fumble — trap fires ───────────────────────────────────────────────
+      this.pushMessage(`You fumble and trigger the ${trapName} trap!`);
+      this.triggerTrap(tile);
+      if (this.dead) return;
+    } else {
+      // ── Fail — nothing happens ────────────────────────────────────────────
+      this.pushMessage(`You fail to disarm the ${trapName} trap.`);
+    }
+
+    this.runMonsterTurns();
+    this.autoSave();
     this.requestUpdate();
   }
 
@@ -1477,9 +1859,9 @@ export class GameWorld extends LitElement {
   private renderSpellLearnOverlay(): TemplateResult {
     const c = this.character;
     if (!c) return html``;
-    const maxSpell = maxSpellLevelAt(c.level);
+    const exeAvailable = spellIdsAvailableAtLevel(c.level);
     const available = LEARNABLE_SPELLS.filter(
-      (s) => s.level <= maxSpell && !c.spells.includes(s.id),
+      (s) => exeAvailable.has(s.id) && !c.spells.includes(s.id),
     );
     if (available.length === 0) {
       this.pendingSpellLearn = false;
@@ -1624,12 +2006,62 @@ export class GameWorld extends LitElement {
     `;
   }
 
+  private renderGameMenu(): TemplateResult {
+    const close = () => { this.overlay = 'none'; };
+    const act = (fn: () => void) => () => { close(); fn(); };
+    const item = (label: string, key: string, fn: () => void) => html`
+      <div class="menu-item" @click=${act(fn)}>
+        <span>${label}</span>
+        ${key ? html`<span class="menu-item-key">${key}</span>` : ''}
+      </div>`;
+    return html`
+      <div class="overlay" @click=${close}>
+        <div class="overlay-box game-menu-box" @click=${(e: Event) => { e.stopPropagation(); }}>
+          <p class="overlay-title">Menu</p>
+          <div class="divider"></div>
+
+          <div class="menu-section">
+            <div class="menu-section-title">Game</div>
+            ${item('Save Game',     '',  () => { this.manualSave(); })}
+            ${item('Load Game…',   '',  () => { this.manualLoad(); })}
+            ${item('Review Story', '?', () => { this.toggleOverlay('story'); })}
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="menu-section">
+            <div class="menu-section-title">Character</div>
+            ${item('Inventory',          'I', () => { this.toggleOverlay('inventory'); })}
+            ${item('Spells &amp; Quickbar', 'P', () => { this.toggleOverlay('spells'); })}
+            ${item('Map View',           'M', () => { this.mapMode = !this.mapMode; })}
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="menu-section">
+            <div class="menu-section-title">Actions</div>
+            ${item('Get Items',               'G', () => { this.pickupGround(); })}
+            ${item('Search',                  'S', () => { this.doSearch(); })}
+            ${item('Rest Until Healed',       'R', () => { this.doRest(); })}
+            ${item('Sleep Until Restored',    'Z', () => { this.doSleep(); })}
+            ${item('Climb Up Stairs',         '<', () => { this.useStairs('up'); })}
+            ${item('Climb Down Stairs',       '>', () => { this.useStairs('down'); })}
+          </div>
+
+          <span class="overlay-close" @click=${close}>[ Esc to close ]</span>
+        </div>
+      </div>
+    `;
+  }
+
   private renderSpellBar(): TemplateResult {
     const c = this.character;
     if (!c) return html``;
     return html`
       <div class="spell-bar">
         <div class="spell-bar-actions">
+          <button class="spell-bar-btn ${this.overlay === 'game-menu' ? 'active' : ''}"
+            @click=${() => { this.toggleOverlay('game-menu'); }} title="Game menu">☰ Menu</button>
           <button class="spell-bar-btn" @click=${() => { this.pickupGround(); }}>Get</button>
           <button class="spell-bar-btn" @click=${() => { this.doRest(); }}>Rest</button>
           <button class="spell-bar-btn ${this.overlay === 'inventory' ? 'active' : ''}" @click=${() => { this.toggleOverlay('inventory'); }}>Inventory</button>
@@ -1791,60 +2223,32 @@ export class GameWorld extends LitElement {
 
         <div class="stat-block">
           <span class="stat-label">Attributes</span>
-          <span class="stat-value">STR ${c.stats.strength}</span>
-          <span class="stat-value">INT ${c.stats.intelligence}</span>
-          <span class="stat-value">CON ${c.stats.constitution}</span>
-          <span class="stat-value">DEX ${c.stats.dexterity}</span>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="stat-block">
-          <span class="stat-label">Purse</span>
-          ${c.purse ? html`
-            ${coinsIn(c.purse, 'copper')   > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'copper').toLocaleString()} cp</span>` : ''}
-            ${coinsIn(c.purse, 'silver')   > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'silver').toLocaleString()} sp</span>` : ''}
-            ${coinsIn(c.purse, 'gold')     > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'gold').toLocaleString()} gp</span>` : ''}
-            ${coinsIn(c.purse, 'platinum') > 0 ? html`<span class="stat-value">${coinsIn(c.purse, 'platinum').toLocaleString()} pp</span>` : ''}
-          ` : html`<span class="stat-value" style="color:var(--game-text-disabled)">No purse</span>`}
+          <div class="attrs-grid">
+            <span class="stat-value">STR ${c.stats.strength}</span>
+            <span class="stat-value">INT ${c.stats.intelligence}</span>
+            <span class="stat-value">CON ${c.stats.constitution}</span>
+            <span class="stat-value">DEX ${c.stats.dexterity}</span>
+          </div>
         </div>
 
         <div class="divider"></div>
 
         <div class="stat-block">
           <span class="stat-label">Spells (${known.length})</span>
-          ${known.map((id) => {
-            const sp = spellById(id);
-            return sp ? html`
-              <div class="spell-entry">
-                <span class="spell-entry-name">${sp.name}</span>
-                <span class="spell-cost">${sp.baseMana}mp</span>
-              </div>
-            ` : html``;
-          })}
+          <div class="spell-list">
+            ${known.map((id) => {
+              const sp = spellById(id);
+              return sp ? html`
+                <div class="spell-entry">
+                  <span class="spell-entry-name">${sp.name}</span>
+                  <span class="spell-cost">${sp.baseMana}mp</span>
+                </div>
+              ` : html``;
+            })}
+          </div>
         </div>
 
         <div class="divider"></div>
-
-        <div class="key-hint-row">
-          <button
-            class="key-hint-btn ${this.overlay === 'inventory' ? 'active' : ''}"
-            @click=${() => { this.toggleOverlay('inventory'); }}
-          >[I] Inv</button>
-          <button
-            class="key-hint-btn ${this.overlay === 'spells' ? 'active' : ''}"
-            @click=${() => { this.toggleOverlay('spells'); }}
-          >[P] Spells</button>
-        </div>
-        <div class="key-hint-row">
-          <button class="key-hint-btn" @click=${() => { this.pickupGround(); }}>[G] Get</button>
-          <button class="key-hint-btn ${this.mapMode ? 'active' : ''}" @click=${() => { this.mapMode = !this.mapMode; }}>[M] Map</button>
-        </div>
-        <div class="key-hint-row">
-          <button class="key-hint-btn" @click=${() => { this.doRest(); }}>[R] Rest</button>
-          <button class="key-hint-btn" @click=${() => { this.useStairs('up'); }}>[<] Up</button>
-          <button class="key-hint-btn" @click=${() => { this.useStairs('down'); }}>[>] Down</button>
-        </div>
 
         <div class="stat-block">
           <span class="stat-label">Experience</span>
@@ -1876,9 +2280,11 @@ export class GameWorld extends LitElement {
               .pos=${this.pos}
               .monsters=${this.monsters}
               .playerStatus=${this.playerStatus}
+              .combatEffect=${this.combatEffect}
               .heroGender=${this.character.gender}
               ?inDungeon=${this.currentDungeonLevel > 0}
               ?minimap=${this.mapMode}
+              ?crosshair=${this.disarmMode}
               @map-click=${(e: CustomEvent<{dx: number; dy: number; tileX: number; tileY: number}>) => {
                 if (this.castingSpell) {
                   // Fire along the actual angle to the clicked tile (Bresenham ray trace handles walls)
@@ -1886,6 +2292,9 @@ export class GameWorld extends LitElement {
                   const rawDy = e.detail.tileY - this.pos.y;
                   this.fireDirectionalSpell(this.castingSpell, rawDx, rawDy);
                   this.castingSpell = null;
+                } else if (this.disarmMode) {
+                  this.disarmMode = false;
+                  this.doDisarm(e.detail.tileX, e.detail.tileY);
                 } else {
                   this.tryMove(e.detail.dx, e.detail.dy);
                 }
@@ -1894,6 +2303,8 @@ export class GameWorld extends LitElement {
 
             ${this.castingSpell
               ? html`<div class="location-banner" style="color:var(--game-text-bright);background:rgba(0,0,0,0.7);padding:4px 12px">⚡ Choose direction — arrow keys / numpad · Esc to cancel</div>`
+              : this.disarmMode
+              ? html`<div class="location-banner" style="color:var(--game-text-bright);background:rgba(0,0,0,0.7);padding:4px 12px">🔧 Click an adjacent trap to disarm · Esc to cancel</div>`
               : this.locationName
               ? html`<div class="location-banner">${this.locationName}</div>`
               : ''}
@@ -1915,15 +2326,17 @@ export class GameWorld extends LitElement {
                         @inventory-message=${(e: CustomEvent<string>) => { this.pushMessage(e.detail); }}
                       ></player-inventory>
                     </div>`
-                  : this.overlay === 'spells'
-                    ? this.renderSpellsOverlay()
-                    : this.overlay === 'spell-learn'
-                      ? this.renderSpellLearnOverlay()
-                      : this.overlay === 'story'
-                        ? this.renderStoryOverlay()
-                        : this.overlay === 'customize-spells'
-                          ? this.renderCustomizeSpellsOverlay()
-                          : ''}
+                  : this.overlay === 'game-menu'
+                    ? this.renderGameMenu()
+                    : this.overlay === 'spells'
+                      ? this.renderSpellsOverlay()
+                      : this.overlay === 'spell-learn'
+                        ? this.renderSpellLearnOverlay()
+                        : this.overlay === 'story'
+                          ? this.renderStoryOverlay()
+                          : this.overlay === 'customize-spells'
+                            ? this.renderCustomizeSpellsOverlay()
+                            : ''}
           </div>
           ${this.renderSidebar()}
         </div>

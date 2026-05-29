@@ -4,7 +4,7 @@
  * ground items, action menus, and inspect popups.
  */
 
-import { LitElement, html, css, type TemplateResult } from 'lit';
+import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import { type CharacterModel } from '../model/Character.ts';
 import {
@@ -35,6 +35,15 @@ type DragSrc =
   | { from: 'belt'; slotIndex: number; item: Item }
   | { from: 'ground'; item: Item };
 
+type DragSrcData =
+  | { from: 'equip'; slotKey: string; itemId: string }
+  | { from: 'pack'; itemId: string }
+  | { from: 'sub-container'; containerId: string; itemId: string }
+  | { from: 'belt'; slotIndex: number; itemId: string }
+  | { from: 'ground'; itemId: string };
+
+const INVENTORY_DRAG_MIME = 'application/x-dungeons-crawl-item';
+
 @customElement('player-inventory')
 export class PlayerInventory extends LitElement {
   static styles = css`
@@ -54,8 +63,8 @@ export class PlayerInventory extends LitElement {
     .equip-slot:hover { border-color: var(--game-border-strong); background: var(--game-bg-dim); }
     .equip-slot.filled { border-color: var(--game-border-strong); background: var(--game-bg-dim); }
     .equip-slot.char-portrait { border: none; background: var(--game-bg-deep); cursor: default; grid-column: 2 / 5; grid-row: 2 / 5; }
-    .equip-slot-icon { width: 32px; height: 32px; image-rendering: pixelated; opacity: 0.35; }
-    .equip-slot.filled .equip-slot-icon { opacity: 1; }
+    .equip-slot-icon { width: 32px; height: 32px; image-rendering: pixelated; opacity: 0.35; filter: grayscale(1); }
+    .equip-slot.filled .equip-slot-icon { opacity: 1; filter: none; }
     .equip-slot-label { font-size: 0.48rem; color: var(--game-text-disabled); letter-spacing: 0.06em; text-transform: uppercase; text-align: center; line-height: 1.1; }
     .equip-slot.filled .equip-slot-label { color: var(--game-border-accent); }
     .equip-slot-name { font-size: 0.52rem; color: var(--game-text-body); text-align: center; line-height: 1.2; max-width: 68px; overflow: hidden; word-break: break-word; }
@@ -90,10 +99,11 @@ export class PlayerInventory extends LitElement {
   @state() private closedContainers: Set<string> = new Set();
   @state() private customizingSlot: number | null = null;
   private dragSrc: DragSrc | null = null;
+  private pointerDrag: { src: DragSrc; startX: number; startY: number; dragging: boolean } | null = null;
 
   // ── Slot mappings ────────────────────────────────────────────────────────
   private readonly EQUIP_SLOT_MAP: Record<string, keyof Character> = {
-    weapon: 'weapon', armor: 'armor', helm: 'helm', shield: 'shield',
+    weapon: 'weapon', armor: 'armor', helm: 'helm', helmet: 'helm', shield: 'shield',
     boots: 'boots', cloak: 'cloak', bracers: 'bracers', gauntlets: 'gauntlets',
     'ring-l': 'ringLeft', 'ring-r': 'ringRight', amulet: 'amulet',
     belt: 'belt', freeh: 'freeHand', pack: 'pack', purse: 'purse',
@@ -125,12 +135,93 @@ export class PlayerInventory extends LitElement {
     return undefined;
   }
 
+  private findItemInContainer(container: Item | null | undefined, itemId: string): Item | undefined {
+    return container?.slots?.flatMap((slot) => slot.items).find((item) => item.id === itemId);
+  }
+
+  private serializeDragSrc(src: DragSrc): DragSrcData {
+    if (src.from === 'equip') return { from: 'equip', slotKey: src.slotKey, itemId: src.item.id };
+    if (src.from === 'sub-container') return { from: 'sub-container', containerId: src.containerId, itemId: src.item.id };
+    if (src.from === 'belt') return { from: 'belt', slotIndex: src.slotIndex, itemId: src.item.id };
+    return { from: src.from, itemId: src.item.id };
+  }
+
+  private dragSrcFromDataTransfer(e: DragEvent): DragSrc | null {
+    const c = this.character;
+    const raw = e.dataTransfer?.getData(INVENTORY_DRAG_MIME);
+    if (!c || !raw) return null;
+    let data: DragSrcData;
+    try {
+      data = JSON.parse(raw) as DragSrcData;
+    } catch {
+      return null;
+    }
+    if (data.from === 'equip') {
+      const key = this.EQUIP_SLOT_MAP[data.slotKey];
+      const item = key ? (c as unknown as Record<string, Item | null>)[key] : null;
+      return item?.id === data.itemId ? { from: 'equip', slotKey: data.slotKey, item } : null;
+    }
+    if (data.from === 'pack') {
+      const item = this.findItemInContainer(c.pack, data.itemId);
+      return item ? { from: 'pack', item } : null;
+    }
+    if (data.from === 'sub-container') {
+      const container = this.findSubContainerInPack(data.containerId);
+      const item = this.findItemInContainer(container, data.itemId);
+      return item ? { from: 'sub-container', containerId: data.containerId, item } : null;
+    }
+    if (data.from === 'belt') {
+      const item = this.findItemInContainer(c.belt, data.itemId);
+      return item ? { from: 'belt', slotIndex: data.slotIndex, item } : null;
+    }
+    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
+    const item = tile.items.find((it) => it.id === data.itemId);
+    return item ? { from: 'ground', item } : null;
+  }
+
+  private getDropSrc(e: DragEvent): DragSrc | null {
+    if (this.dragSrc) return this.dragSrc;
+    this.dragSrc = this.dragSrcFromDataTransfer(e);
+    return this.dragSrc;
+  }
+
+  private returnToDragSource(item: Item): boolean {
+    const src = this.dragSrc;
+    const c = this.character;
+    if (!src || !c) return false;
+    if (src.from === 'equip') {
+      const key = this.EQUIP_SLOT_MAP[src.slotKey];
+      if (!key) return false;
+      (c as unknown as Record<string, unknown>)[key] = item;
+      return true;
+    }
+    if (src.from === 'pack' && c.pack) return addToContainer(c.pack, item);
+    if (src.from === 'sub-container') {
+      const container = this.findSubContainerInPack(src.containerId);
+      return container ? addToContainer(container, item) : false;
+    }
+    if (src.from === 'belt' && c.belt?.slots) {
+      const slot = c.belt.slots[src.slotIndex];
+      if (slot && slot.items.length === 0) {
+        slot.items.push(item);
+        return true;
+      }
+      return addToContainer(c.belt, item);
+    }
+    if (src.from === 'ground') {
+      dropItem(this.map, this.pos.x, this.pos.y, item);
+      return true;
+    }
+    return false;
+  }
+
   // ── Drag and drop ────────────────────────────────────────────────────────
   private onItemDragStart(src: DragSrc, e: DragEvent): void {
     this.dragSrc = src;
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', 'drag');
+      e.dataTransfer.setData(INVENTORY_DRAG_MIME, JSON.stringify(this.serializeDragSrc(src)));
     }
     (e.currentTarget as HTMLElement).style.opacity = '0.5';
   }
@@ -140,8 +231,85 @@ export class PlayerInventory extends LitElement {
     setTimeout(() => { this.dragSrc = null; }, 0);
   }
 
+  private readonly onPointerDragMove = (e: PointerEvent): void => {
+    const drag = this.pointerDrag;
+    if (!drag) return;
+    const moved = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+    if (!drag.dragging && moved >= 4) {
+      drag.dragging = true;
+      this.dragSrc = drag.src;
+      document.body.style.cursor = 'grabbing';
+    }
+    if (drag.dragging) e.preventDefault();
+  };
+
+  private readonly onPointerDragEnd = (e: PointerEvent): void => {
+    const drag = this.pointerDrag;
+    window.removeEventListener('pointermove', this.onPointerDragMove);
+    window.removeEventListener('pointerup', this.onPointerDragEnd);
+    document.body.style.cursor = '';
+    this.pointerDrag = null;
+    if (!drag?.dragging) return;
+    e.preventDefault();
+    this.dragSrc = drag.src;
+    const target = this.findPointerDropTarget(e.clientX, e.clientY);
+    if (target) {
+      this.dispatchPointerDrop(target);
+    } else {
+      this.dragSrc = null;
+    }
+  };
+
+  private onItemPointerDown(src: DragSrc, e: PointerEvent): void {
+    if (e.button !== 0) return;
+    this.pointerDrag = { src, startX: e.clientX, startY: e.clientY, dragging: false };
+    window.addEventListener('pointermove', this.onPointerDragMove, { passive: false });
+    window.addEventListener('pointerup', this.onPointerDragEnd);
+  }
+
+  private findPointerDropTarget(clientX: number, clientY: number): HTMLElement | null {
+    const root = this.shadowRoot;
+    if (!root) return null;
+    const targets = Array.from(root.querySelectorAll<HTMLElement>('[data-drop-type]'));
+    return targets
+      .filter((target) => {
+        if (!target.dataset.dropType) return false;
+        const rect = target.getBoundingClientRect();
+        return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+      })
+      .sort((a, b) => {
+        const aRect = a.getBoundingClientRect();
+        const bRect = b.getBoundingClientRect();
+        return (aRect.width * aRect.height) - (bRect.width * bRect.height);
+      })[0] ?? null;
+  }
+
+  private dispatchPointerDrop(target: HTMLElement): void {
+    const fakeEvent = {
+      currentTarget: target,
+      preventDefault: () => undefined,
+      stopPropagation: () => undefined,
+    } as unknown as DragEvent;
+    switch (target.dataset.dropType) {
+      case 'equip':
+        this.onDropEquipSlot(target.dataset.slotKey ?? '', fakeEvent);
+        break;
+      case 'pack':
+        this.onDropPack(fakeEvent);
+        break;
+      case 'sub-container':
+        this.onDropSubContainer(target.dataset.containerId ?? '', fakeEvent);
+        break;
+      case 'belt':
+        this.onDropBeltSlot(Number(target.dataset.slotIndex ?? -1), fakeEvent);
+        break;
+      case 'ground':
+        this.onDropGround(fakeEvent);
+        break;
+    }
+  }
+
   private onDropZoneDragOver(e: DragEvent): void {
-    if (!this.dragSrc) return;
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     (e.currentTarget as HTMLElement).classList.add('drag-over');
@@ -183,14 +351,14 @@ export class PlayerInventory extends LitElement {
   private onDropEquipSlot(slotKey: string, e: DragEvent): void {
     (e.currentTarget as HTMLElement).classList.remove('drag-over');
     e.preventDefault();
-    const src = this.dragSrc;
+    const src = this.getDropSrc(e);
     const c = this.character;
     if (!src || !c) return;
 
     const SLOT_ACCEPTS: Record<string, ReadonlyArray<string> | null> = {
       weapon: ['weapon'], armor: ['armor'], helm: ['helm'], shield: ['shield'],
       boots: ['boots'], cloak: ['cloak'], bracers: ['bracers'], gauntlets: ['gauntlets'],
-      'ring-l': ['ring'], 'ring-r': ['ring'], amulet: ['amulet'],
+      'ring-l': ['ring'], 'ring-r': ['ring'], amulet: ['amulet'], helmet: ['helm'],
       belt: ['belt', 'container'], freeh: null, pack: ['container', 'belt'], purse: ['container'],
     };
     const accepted = SLOT_ACCEPTS[slotKey];
@@ -235,7 +403,7 @@ export class PlayerInventory extends LitElement {
     (e.currentTarget as HTMLElement).classList.remove('drag-over');
     e.preventDefault();
     e.stopPropagation();
-    const src = this.dragSrc;
+    const src = this.getDropSrc(e);
     if (!src) { this.dragSrc = null; return; }
     if (src.item.id === containerId) {
       this.emitMessage('A container cannot hold itself.');
@@ -245,13 +413,13 @@ export class PlayerInventory extends LitElement {
     const target = this.findSubContainerInPack(containerId);
     if (!target) { this.dragSrc = null; return; }
     if (src.from === 'sub-container' && src.containerId === containerId) { this.dragSrc = null; return; }
-    if (!this.removeDragSrc()) { this.dragSrc = null; return; }
+    const removed = this.removeDragSrc();
+    if (!removed) { this.dragSrc = null; return; }
     if (addToContainer(target, src.item)) {
       this.emitMessage(`${displayName(src.item)} → ${displayName(target)}.`);
     } else {
-      const c = this.character;
-      if (c?.pack && addToContainer(c.pack, src.item)) {
-        this.emitMessage(`${displayName(target)} is full — kept in pack.`);
+      if (this.returnToDragSource(src.item)) {
+        this.emitMessage(`${displayName(target)} has no room for ${displayName(src.item)}.`);
       } else {
         dropItem(this.map, this.pos.x, this.pos.y, src.item);
         this.emitMessage(`${displayName(target)} is full — ${displayName(src.item)} dropped.`);
@@ -265,7 +433,7 @@ export class PlayerInventory extends LitElement {
   private onDropPack(e: DragEvent): void {
     (e.currentTarget as HTMLElement).classList.remove('drag-over');
     e.preventDefault();
-    const src = this.dragSrc;
+    const src = this.getDropSrc(e);
     const c = this.character;
     if (!src || !c) return;
     if (src.from === 'pack') { this.dragSrc = null; return; }
@@ -285,7 +453,7 @@ export class PlayerInventory extends LitElement {
   private onDropBeltSlot(slotIndex: number, e: DragEvent): void {
     (e.currentTarget as HTMLElement).classList.remove('drag-over');
     e.preventDefault();
-    const src = this.dragSrc;
+    const src = this.getDropSrc(e);
     const c = this.character;
     if (!src || !c || !c.belt?.slots) return;
     const slot = c.belt.slots[slotIndex];
@@ -314,7 +482,7 @@ export class PlayerInventory extends LitElement {
   private onDropGround(e: DragEvent): void {
     (e.currentTarget as HTMLElement).classList.remove('drag-over');
     e.preventDefault();
-    const src = this.dragSrc;
+    const src = this.getDropSrc(e);
     const c = this.character;
     if (!src || !c || src.from === 'ground') { this.dragSrc = null; return; }
     if (src.from === 'equip' && src.item.cursed && src.item.identified) {
@@ -663,6 +831,8 @@ export class PlayerInventory extends LitElement {
     return html`
       <div
         class="equip-slot ${item ? 'filled' : ''}"
+        data-drop-type="equip"
+        data-slot-key=${key}
         style="grid-area:${gridArea};${item ? 'cursor:pointer' : ''}"
         @click=${onClick}
         @contextmenu=${item ? (e: Event) => { this.onInspectItem(item, e); } : undefined}
@@ -672,12 +842,13 @@ export class PlayerInventory extends LitElement {
       >
         ${item ? html`
           <img class="equip-slot-icon" src="${getItemIcon(item)}" alt="${displayName(item)}"
-            draggable="true"
+            draggable="false"
             @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'equip', slotKey: key, item }, e); }}
-            @dragend=${this.onItemDragEnd.bind(this)}>
+            @dragend=${this.onItemDragEnd.bind(this)}
+            @pointerdown=${(e: PointerEvent) => { this.onItemPointerDown({ from: 'equip', slotKey: key, item }, e); }}>
           <span class="equip-slot-name">${displayName(item)}</span>
         ` : html`
-          <img class="equip-slot-icon" src="${iconSrc}" alt="${label}">
+          ${iconSrc ? html`<img class="equip-slot-icon" src="${iconSrc}" alt="${label}">` : ''}
           <span class="equip-slot-label">${label}</span>
         `}
       </div>
@@ -694,7 +865,6 @@ export class PlayerInventory extends LitElement {
     const gp = purse ? coinsIn(purse, 'gold') : 0;
     const pp = purse ? coinsIn(purse, 'platinum') : 0;
     const packItems: Item[] = c.pack?.slots?.flatMap((s) => s.items) ?? [];
-    const beltItems: Item[] = (c.belt?.slots ?? []).flatMap((s) => s.items);
     const portraitSrc = `${IC}/${c.gender === 'female' ? 'woman' : 'man'}.png`;
 
     return html`
@@ -710,23 +880,25 @@ export class PlayerInventory extends LitElement {
             'belt    char    char    char    freeh'
             'pack    purse   boots   ring-r  x';
         ">
-          ${this.renderEquipSlot(c.bracers, 'Bracers', `${IC}/bracers.png`, 'bracers')}
-          ${this.renderEquipSlot(c.weapon, 'Weapon', `${IC}/sword.png`, 'weapon')}
-          ${this.renderEquipSlot(c.ringLeft, 'Ring', `${IC}/ring.png`, 'ring-l')}
-          ${this.renderEquipSlot(c.belt, 'Belt', `${IC}/belt.png`, 'belt')}
-          ${this.renderEquipSlot(c.pack, 'Pack', `${IC}/pack.png`, 'pack')}
-          ${this.renderEquipSlot(c.armor, 'Armor', `${IC}/armor.png`, 'armor')}
-          ${this.renderEquipSlot(c.amulet, 'Amulet', `${IC}/amulet.png`, 'amulet')}
-          ${this.renderEquipSlot(c.cloak, 'Cloak', `${IC}/cloak.png`, 'cloak')}
-          ${this.renderEquipSlot(c.helm, 'Helmet', `${IC}/helmet.png`, 'helmet')}
+          ${this.renderEquipSlot(c.bracers, 'Bracers', `${IC}/Bracers/icon_127.png`, 'bracers')}
+          ${this.renderEquipSlot(c.weapon, 'Weapon', `${IC}/Weapons/icon_111.png`, 'weapon')}
+          ${this.renderEquipSlot(c.ringLeft, 'Ring', `${IC}/Rings/ring.png`, 'ring-l')}
+          ${this.renderEquipSlot(c.belt, 'Belt', `${IC}/Containers/icon_137.png`, 'belt')}
+          ${this.renderEquipSlot(c.pack, 'Pack', `${IC}/Containers/icon_143.png`, 'pack')}
+          ${this.renderEquipSlot(c.armor, 'Armor', `${IC}/Armor/icon_115.png`, 'armor')}
+          ${this.renderEquipSlot(c.amulet, 'Amulet', `${IC}/Amulets/icon_107.png`, 'amulet')}
+          ${this.renderEquipSlot(c.cloak, 'Cloak', `${IC}/Cloaks/cloak.png`, 'cloak')}
+          ${this.renderEquipSlot(c.helm, 'Helmet', `${IC}/Helmets/icon_123.png`, 'helmet')}
           <div class="equip-slot char-portrait" style="grid-area:char">
             <img class="char-portrait-img" src="${portraitSrc}" alt="${c.name}">
           </div>
-          ${this.renderEquipSlot(c.shield, 'Shield', `${IC}/shield.png`, 'shield')}
-          ${this.renderEquipSlot(c.gauntlets, 'Gauntlets', `${IC}/gauntlet.png`, 'gauntlets')}
-          ${this.renderEquipSlot(c.freeHand, 'Free Hand', `${IC}/wand.png`, 'freeh')}
+          ${this.renderEquipSlot(c.shield, 'Shield', `${IC}/Shields/icon_119.png`, 'shield')}
+          ${this.renderEquipSlot(c.gauntlets, 'Gauntlets', `${IC}/Gauntlets/icon_129.png`, 'gauntlets')}
+          ${this.renderEquipSlot(c.freeHand, 'Free Hand', '', 'freeh')}
           <div
             class="equip-slot ${purse ? 'filled' : ''}"
+            data-drop-type="equip"
+            data-slot-key="purse"
             style="grid-area:purse;${purse ? 'cursor:pointer' : ''}"
             @click=${purse ? (e: Event) => { e.stopPropagation(); this.actionItem = { item: purse, source: 'equip', slotName: 'purse' }; } : undefined}
             @contextmenu=${purse ? (e: Event) => { this.onInspectItem(purse, e); } : undefined}
@@ -735,39 +907,51 @@ export class PlayerInventory extends LitElement {
             @drop=${(e: DragEvent) => { this.onDropEquipSlot('purse', e); }}
           >
             ${purse ? html`
-              <img class="equip-slot-icon" src="${IC}/purse.png" alt="Purse"
-                draggable="true"
+              <img class="equip-slot-icon" src="${IC}/Containers/icon_157.png" alt="Purse"
+                draggable="false"
                 @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'equip', slotKey: 'purse', item: purse }, e); }}
-                @dragend=${this.onItemDragEnd.bind(this)}>
+                @dragend=${this.onItemDragEnd.bind(this)}
+                @pointerdown=${(e: PointerEvent) => { this.onItemPointerDown({ from: 'equip', slotKey: 'purse', item: purse }, e); }}>
               <span class="equip-slot-name" style="font-size:0.45rem">
                 ${cp > 0 ? `${cp.toLocaleString()}cp ` : ''}${sp > 0 ? `${sp.toLocaleString()}sp ` : ''}${gp > 0 ? `${gp.toLocaleString()}gp ` : ''}${pp > 0 ? `${pp.toLocaleString()}pp` : ''}
               </span>
             ` : html`
-              <img class="equip-slot-icon" src="${IC}/purse.png" alt="Purse">
+              <img class="equip-slot-icon" src="${IC}/Containers/icon_157.png" alt="Purse">
               <span class="equip-slot-label">Purse</span>
             `}
           </div>
-          ${this.renderEquipSlot(c.boots, 'Boots', `${IC}/boots.png`, 'boots')}
-          ${this.renderEquipSlot(c.ringRight, 'Ring', `${IC}/ring.png`, 'ring-r')}
+          ${this.renderEquipSlot(c.boots, 'Boots', `${IC}/Boots/boots.png`, 'boots')}
+          ${this.renderEquipSlot(c.ringRight, 'Ring', `${IC}/Rings/ring.png`, 'ring-r')}
           <div style="grid-area:x; background:var(--game-bg-deep)"></div>
         </div>
 
         <div class="inv-containers">
-          ${beltItems.length > 0 ? html`
+          ${c.belt?.slots?.length ? html`
             <div class="inv-container-block">
-              <div class="inv-container-label">Belt — ${c.belt?.name ?? 'Belt'}</div>
+              <div class="inv-container-label">Belt — ${c.belt.name}</div>
               <div class="belt-slots">
-                ${beltItems.map((it) => html`
-                  <div class="belt-slot filled" style="cursor:pointer"
-                    @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'belt' }; }}
-                    @contextmenu=${(e: Event) => { this.onInspectItem(it, e); }}
-                    draggable="true"
-                    @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'belt', slotIndex: 0, item: it }, e); }}
-                    @dragend=${this.onItemDragEnd.bind(this)}>
-                    <img class="inv-item-icon" src="${getItemIcon(it)}" alt="">
-                    <span style="font-size:0.5rem;color:var(--game-text-body);text-align:center;padding:2px">${displayName(it)}</span>
-                  </div>
-                `)}
+                ${c.belt.slots.map((slot, slotIndex) => {
+                  const it = slot.items[0] ?? null;
+                  return html`
+                    <div class="belt-slot ${it ? 'filled' : ''}" style="${it ? 'cursor:pointer' : ''}"
+                      data-drop-type="belt"
+                      data-slot-index=${String(slotIndex)}
+                      @dragover=${this.onDropZoneDragOver.bind(this)}
+                      @dragleave=${this.onDropZoneDragLeave.bind(this)}
+                      @drop=${(e: DragEvent) => { this.onDropBeltSlot(slotIndex, e); }}
+                      @click=${it ? (e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'belt' }; } : undefined}
+                      @contextmenu=${it ? (e: Event) => { this.onInspectItem(it, e); } : undefined}
+                      draggable="false"
+                      @dragstart=${it ? (e: DragEvent) => { this.onItemDragStart({ from: 'belt', slotIndex, item: it }, e); } : undefined}
+                      @dragend=${it ? this.onItemDragEnd.bind(this) : undefined}
+                      @pointerdown=${it ? (e: PointerEvent) => { this.onItemPointerDown({ from: 'belt', slotIndex, item: it }, e); } : undefined}>
+                      ${it ? html`
+                        <img class="inv-item-icon" src="${getItemIcon(it)}" alt="" draggable="false">
+                        <span style="font-size:0.5rem;color:var(--game-text-body);text-align:center;padding:2px">${displayName(it)}</span>
+                      ` : html`<span class="equip-slot-label">Empty</span>`}
+                    </div>
+                  `;
+                })}
               </div>
             </div>
           ` : ''}
@@ -782,6 +966,7 @@ export class PlayerInventory extends LitElement {
                 </span>
               </div>
               <div class="pack-items"
+                data-drop-type="pack"
                 @dragover=${this.onDropZoneDragOver.bind(this)}
                 @dragleave=${this.onDropZoneDragLeave.bind(this)}
                 @drop=${this.onDropPack.bind(this)}>
@@ -797,15 +982,18 @@ export class PlayerInventory extends LitElement {
                       } : null;
                       return html`
                         <div class="belt-slot filled" style="cursor:pointer"
-                          draggable="true"
+                          data-drop-type=${isContainer ? 'sub-container' : nothing}
+                          data-container-id=${isContainer ? it.id : nothing}
+                          draggable="false"
                           @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'pack', item: it }, e); }}
                           @dragend=${this.onItemDragEnd.bind(this)}
+                          @pointerdown=${(e: PointerEvent) => { this.onItemPointerDown({ from: 'pack', item: it }, e); }}
                           @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'pack' }; }}
                           @contextmenu=${(e: Event) => { this.onInspectItem(it, e); }}
                           @dragover=${dropOpts?.dragover}
                           @dragleave=${dropOpts?.dragleave}
                           @drop=${dropOpts?.drop}>
-                          <img class="inv-item-icon" src="${getItemIcon(it)}" alt="">
+                          <img class="inv-item-icon" src="${getItemIcon(it)}" alt="" draggable="false">
                           <span style="font-size:0.5rem;color:var(--game-text-body);text-align:center;padding:2px">${isContainer ? (isOpen ? '▾ ' : '▸ ') : ''}${displayName(it)}</span>
                         </div>
                       `;
@@ -824,17 +1012,19 @@ export class PlayerInventory extends LitElement {
             <div class="inv-container-block">
               <div class="inv-container-label">On the ground</div>
               <div class="pack-items"
+                data-drop-type="ground"
                 @dragover=${this.onDropZoneDragOver.bind(this)}
                 @dragleave=${this.onDropZoneDragLeave.bind(this)}
                 @drop=${this.onDropGround.bind(this)}>
                 ${tile.items.map((it) => html`
                   <div class="inv-item" style="cursor:pointer;display:flex;align-items:center;gap:4px"
-                    draggable="true"
+                    draggable="false"
                     @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'ground', item: it }, e); }}
                     @dragend=${this.onItemDragEnd.bind(this)}
+                    @pointerdown=${(e: PointerEvent) => { this.onItemPointerDown({ from: 'ground', item: it }, e); }}
                     @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'ground' }; }}
                     @contextmenu=${(e: Event) => { this.onInspectItem(it, e); }}>
-                    <img class="inv-item-icon" src="${getItemIcon(it)}" alt="">
+                    <img class="inv-item-icon" src="${getItemIcon(it)}" alt="" draggable="false">
                     <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}</span>
                   </div>
                 `)}
@@ -853,12 +1043,17 @@ export class PlayerInventory extends LitElement {
     const items = container.slots?.flatMap((s) => s.items) ?? [];
     const close = (): void => { this.openedContainers.delete(container.id); this.requestUpdate(); };
     return html`
-      <div class="inv-container-block" style="margin-top:0.4rem;border-left:2px solid var(--game-border-default);padding-left:0.5rem">
+      <div class="inv-container-block"
+        data-drop-type="sub-container"
+        data-container-id=${container.id}
+        style="margin-top:0.4rem;border-left:2px solid var(--game-border-default);padding-left:0.5rem">
         <div class="inv-container-label" style="display:flex;justify-content:space-between;align-items:center">
           <span>↳ ${displayName(container)}</span>
           <button class="sort-pack-btn" @click=${close} title="Close container">Close</button>
         </div>
         <div class="pack-items"
+          data-drop-type="sub-container"
+          data-container-id=${container.id}
           @dragover=${this.onDropZoneDragOver.bind(this)}
           @dragleave=${this.onDropZoneDragLeave.bind(this)}
           @drop=${(e: DragEvent) => { this.onDropSubContainer(container.id, e); }}>
@@ -866,12 +1061,13 @@ export class PlayerInventory extends LitElement {
             ? html`<div class="inv-empty">Empty</div>`
             : items.map((it) => html`
                 <div class="inv-item" style="cursor:pointer;display:flex;align-items:center;gap:4px"
-                  draggable="true"
+                  draggable="false"
                   @dragstart=${(e: DragEvent) => { this.onItemDragStart({ from: 'sub-container', containerId: container.id, item: it }, e); }}
                   @dragend=${this.onItemDragEnd.bind(this)}
+                  @pointerdown=${(e: PointerEvent) => { this.onItemPointerDown({ from: 'sub-container', containerId: container.id, item: it }, e); }}
                   @click=${(e: Event) => { e.stopPropagation(); this.actionItem = { item: it, source: 'pack', containerId: container.id }; }}
                   @contextmenu=${(e: Event) => { this.onInspectItem(it, e); }}>
-                  <img class="inv-item-icon" src="${getItemIcon(it)}" alt="">
+                  <img class="inv-item-icon" src="${getItemIcon(it)}" alt="" draggable="false">
                   <span>${it.quantity > 1 ? `${it.quantity.toLocaleString()} × ` : ''}${displayName(it)}${it.cursed && it.identified ? html` <span style="color:var(--game-status-danger)">(cursed)</span>` : ''}</span>
                 </div>
               `)}

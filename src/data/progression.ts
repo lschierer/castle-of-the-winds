@@ -46,7 +46,7 @@ const SPAWN_FAMILIES: readonly { members: string[] }[] = [
   // Humans (4)
   { members: ['thief', 'bandit', 'evil_warrior', 'berserker'] },
   // Humanoids (8)
-  { members: ['goblin', 'kobold', 'hobgoblin', 'goblin_fighter', 'rat_man', 'wolf_man', 'bear_man'] },
+  { members: ['goblin', 'kobold', 'hobgoblin', 'orc', 'goblin_fighter', 'rat_man', 'wolf_man', 'bear_man'] },
   // Giants/Trolls (3)
   { members: ['ogre', 'troll', 'hill_giant'] },
   // Reptiles (3)
@@ -56,9 +56,9 @@ const SPAWN_FAMILIES: readonly { members: string[] }[] = [
   // Undead (7)
   { members: ['skeleton', 'walking_corpse', 'ghost', 'tunnel_wight', 'barrow_wight', 'pale_wraith', 'shadow'] },
   // Animals (9)
-  { members: ['giant_rat', 'wild_dog', 'giant_bat', 'carrion_creeper', 'gray_wolf', 'white_wolf', 'bear', 'manticore'] },
+  { members: ['giant_rat', 'wild_dog', 'giant_bat', 'carrion_creeper', 'gray_wolf', 'white_wolf', 'brown_bear', 'bear', 'manticore'] },
   // Insects (3)
-  { members: ['giant_scorpion', 'giant_trapdoor_spider'] },
+  { members: ['giant_red_ant', 'giant_trapdoor_spider', 'giant_scorpion'] },
   // Constructs (2)
   { members: ['wooden_statue', 'bronze_statue'] },
 ];

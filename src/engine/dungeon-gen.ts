@@ -16,6 +16,7 @@
 
 import { Map as RotMap } from 'rot-js';
 import type { Tile, TileMap, Vec2 } from '../data/tile-map.ts';
+import { ALL_TRAP_KINDS, type TrapKind } from '../data/tile-map.ts';
 import type { MonsterInstance } from './combat.ts';
 import type { Difficulty } from '../data/character.ts';
 import { monstersForDepth } from '../data/monsters.ts';
@@ -102,14 +103,18 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   const h = opts.height ?? Math.min(64, 34 + dungeonLevel * 3);
 
   // Generate using rot.js Irregular (CotW-style: irregular rooms + diagonal corridors)
+  // Room count: 3 at depth 1, +2 per floor down (→ 3, 5, 7 … 17 across 8 mine floors).
+  // A range of ±4 gives variance without wild swings.
+  const baseRooms = 1 + 2 * dungeonLevel;
   const generator = new RotMap.Irregular(w, h, {
-    roomCount: [5, Math.min(12, 6 + Math.floor(dungeonLevel / 2))],
+    roomCount: [baseRooms, baseRooms + 4],
     roomWidth: [4, 9],
     roomHeight: [3, 7],
     irregularity: 0.4,
     diagonalChance: 0.3,
     extraConnections: 2,
-    dugPercentage: 0.3 + dungeonLevel * 0.02,
+    // Target floor coverage grows with depth; _fillToDugPercentage enforces it.
+    dugPercentage: 0.28 + dungeonLevel * 0.02,
   });
 
   const floorSet = new Set<string>();
@@ -285,6 +290,7 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   const monsters = spawnMonsters(grid, w, h, stage, dungeonLevel, stairsUp, monsterCount, diff);
 
   placeLoot(grid, w, h, lootLevel, rooms, diff);
+  placeTraps(grid, w, h, stairsUp, diff);
 
   if (stage === 'mine' && dungeonLevel === 1) {
     placeGuaranteedMineSpawns(grid, rooms, stairsUp, monsters);
@@ -368,8 +374,14 @@ function placeLoot(
   grid: Tile[][], w: number, h: number, lootLevel: number,
   rooms: RotRoom[], difficulty: number,
 ): void {
-  // Per RE phase 14: less treasure at higher difficulty
-  // Reduce loot chance by ~20% per difficulty step
+  // The manual claims "less treasure at higher difficulty."  RE phase 14 and
+  // subsequent searches found no dedicated loot-density formula in the EXE;
+  // every difficulty-keyed loot effect we located emerges from the spawn-
+  // count formula (FUN_seg10_0x1b90) — fewer monsters → fewer drops.
+  //
+  // The reimpl keeps an additional per-tile reduction (-20%/step) as a
+  // playability-tuned approximation since the reimpl's tile-scatter floor
+  // loot has no direct EXE analog to start with.  Drop if too generous.
   const lootMult = 1.0 - 0.2 * difficulty;
   const roomSet = new Set<string>();
   for (const room of rooms) {
@@ -388,6 +400,44 @@ function placeLoot(
       const items = generateTileLoot({ level: lootLevel, inRoom: roomSet.has(`${x},${y}`) });
       t.items.push(...items);
     }
+  }
+}
+
+// ── Trap placement ────────────────────────────────────────────────────────────
+
+/**
+ * Place traps on walkable floor tiles.
+ * Per RE Phase 14: count = rand(floorSeed) + 4 * difficulty
+ * Traps are hidden until detected via Detect Traps spell or searching.
+ */
+function placeTraps(
+  grid: Tile[][], w: number, h: number, stairsUp: Vec2, difficulty: number,
+): void {
+  // Base count scales with map size; difficulty adds +4 per step
+  const floorSeed = Math.floor(w * h / 200);
+  const count = Math.floor(Math.random() * floorSeed) + 4 * difficulty;
+
+  const walkable: Vec2[] = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const t = getTile(grid, x, y);
+      if (t && t.terrain === 'floor' && t.walkable && !t.feature && !t.trap) {
+        // Don't place traps on or adjacent to stairs
+        const dist = Math.abs(x - stairsUp.x) + Math.abs(y - stairsUp.y);
+        if (dist >= 3) walkable.push({ x, y });
+      }
+    }
+  }
+
+  for (let i = 0; i < count && walkable.length > 0; i++) {
+    const idx = rand(walkable.length);
+    const pos = walkable[idx];
+    if (!pos) continue;
+    walkable.splice(idx, 1);
+    const tile = getTile(grid, pos.x, pos.y);
+    if (!tile) continue;
+    const kind = ALL_TRAP_KINDS[rand(ALL_TRAP_KINDS.length)] as TrapKind;
+    tile.trap = { kind, detected: false, triggered: false };
   }
 }
 

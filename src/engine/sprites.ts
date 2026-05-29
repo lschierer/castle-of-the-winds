@@ -292,7 +292,6 @@ const LEGACY_ICON: Record<string, string> = {
   'armor.png': '/assets/sprites/icons/Armor/icon_115.png',
   'helm.png': '/assets/sprites/icons/Helmets/icon_123.png',
   'shield.png': '/assets/sprites/icons/Shields/icon_119.png',
-  'boots.png': '/assets/sprites/icons/Items/icon_135.png',
   'cloak.png': '/assets/sprites/icons/Items/icon_131.png',
   'bracers.png': '/assets/sprites/icons/Helmets/icon_127.png',
   'gauntlets.png': '/assets/sprites/icons/Gauntlets/icon_129.png',
@@ -318,7 +317,6 @@ const LEGACY_ICON: Record<string, string> = {
   'platinum.png': '/assets/sprites/icons/Items/icon_155.png',
   'BAG.png': '/assets/sprites/icons/Containers/icon_139.png',
   'pack.png': '/assets/sprites/icons/Containers/icon_143.png',
-  'purse.png': '/assets/sprites/icons/Containers/icon_157.png',
   'pile.png': '/assets/sprites/icons/Items/icon_147.png',
 };
 
@@ -485,9 +483,9 @@ export function getTileStyle(
         break;
 
       case 'door':
-        // Door sprite only in dungeons; village doors are just road (terrain handles it)
+        // Dungeon open door only — village entry is triggered by the building wall
         if (tile.terrain === 'floor') {
-          style = addLayer(`${ICONS}/odoor.png`, style);
+          style = addLayer(`${ICONS}/Items/icon_6.png`, style);
         }
         break;
 
@@ -522,7 +520,7 @@ export function getTileStyle(
         break;
 
       case 'mine-entrance':
-        style = twoLayer(`${ICONS}/mine.png`, `${BITMAPS}/BtGrasMn.png`);
+        style = twoLayer(`${ICONS}/Items/icon_65.png`, `${BITMAPS}/BtGrasMn.png`);
         break;
 
       case 'diagonal-road': {

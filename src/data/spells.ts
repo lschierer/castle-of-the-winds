@@ -122,6 +122,18 @@ export const SPELLS: readonly Spell[] = [
     description: 'Halves fire damage received. Cumulative.',
   },
   {
+    id: 'resist_acid',
+    name: 'Resist Acid',
+    level: 3, baseMana: 3, school: 'defense', gameClock: 5,
+    description: 'Halves acid damage received. Cumulative.',
+  },
+  {
+    id: 'resist_fear',
+    name: 'Resist Fear',
+    level: 3, baseMana: 3, school: 'defense', gameClock: 5,
+    description: 'Wards off fear effects. Cumulative.',
+  },
+  {
     id: 'heal_medium_wounds',
     name: 'Heal Medium Wounds',
     level: 3, baseMana: 3, school: 'defense', gameClock: 5,

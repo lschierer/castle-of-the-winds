@@ -62,6 +62,71 @@ export interface MapExit {
 
 import type { Item } from './items.ts';
 
+// ── Traps ─────────────────────────────────────────────────────────────────────
+
+export type TrapKind =
+  | 'pit'        // fall damage
+  | 'arrow'      // projectile damage
+  | 'dart'       // poison dart
+  | 'blade'      // slashing damage
+  | 'acid'       // acid splash
+  | 'gas'        // poison gas cloud
+  | 'teleport'   // random teleport
+  | 'deadfall'   // falling rocks
+  | 'glyph'      // magical glyph (elemental damage)
+  | 'trapdoor';  // fall to next floor
+
+export interface Trap {
+  kind: TrapKind;
+  /** Whether the player has detected this trap (visible on map). */
+  detected: boolean;
+  /** Whether this trap has already been triggered (some are one-shot). */
+  triggered: boolean;
+}
+
+const TRAP_DAMAGE: Record<TrapKind, { min: number; max: number }> = {
+  pit:      { min: 2, max: 8 },
+  arrow:    { min: 3, max: 10 },
+  dart:     { min: 1, max: 4 },
+  blade:    { min: 4, max: 12 },
+  acid:     { min: 3, max: 10 },
+  gas:      { min: 2, max: 6 },
+  teleport: { min: 0, max: 0 },
+  deadfall: { min: 5, max: 15 },
+  glyph:    { min: 4, max: 14 },
+  trapdoor: { min: 2, max: 8 },
+};
+
+const TRAP_ICONS: Record<TrapKind, string> = {
+  pit:      '/assets/sprites/icons/Traps/pit.png',
+  arrow:    '/assets/sprites/icons/Traps/arrow.png',
+  dart:     '/assets/sprites/icons/Traps/dart.png',
+  blade:    '/assets/sprites/icons/Traps/blade.png',
+  acid:     '/assets/sprites/icons/Traps/acid.png',
+  gas:      '/assets/sprites/icons/Traps/gas.png',
+  teleport: '/assets/sprites/icons/Traps/teleport.png',
+  deadfall: '/assets/sprites/icons/Traps/deadfall.png',
+  glyph:    '/assets/sprites/icons/Traps/glyph.png',
+  trapdoor: '/assets/sprites/icons/Traps/trapdoor.png',
+};
+
+/** Get the icon for a trap (only shown when detected). */
+export function trapIcon(kind: TrapKind): string {
+  return TRAP_ICONS[kind];
+}
+
+/** Roll trap damage. Returns 0 for non-damaging traps. */
+export function rollTrapDamage(kind: TrapKind): number {
+  const { min, max } = TRAP_DAMAGE[kind];
+  if (max === 0) return 0;
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+/** All trap kinds for random selection. */
+export const ALL_TRAP_KINDS: readonly TrapKind[] = [
+  'pit', 'arrow', 'dart', 'blade', 'acid', 'gas', 'teleport', 'deadfall', 'glyph', 'trapdoor',
+];
+
 /**
  * A single map cell. All rendering and gameplay info is explicit.
  */
@@ -77,6 +142,8 @@ export interface Tile {
   items: Item[];
   /** Whether the player has seen this tile. */
   explored?: boolean;
+  /** Hidden trap on this tile. */
+  trap?: Trap;
   /**
    * Dungeon room index. Set on floor tiles inside a room (not corridors).
    * Used by the sprite system (room vs corridor wall art) and fog-of-war

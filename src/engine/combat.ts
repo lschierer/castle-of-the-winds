@@ -35,7 +35,10 @@ import type { Item } from '../data/items.ts';
 import { WEAPON_SPECS } from '../data/items.ts';
 import type { ElementType } from '../data/equipment.ts';
 import { GAUNTLET_SPECS } from '../data/equipment.ts';
-import { RANGE_FALLOFF, findAttackFormula } from '../data/binary-data/index.ts';
+import { RANGE_FALLOFF, findAttackFormula, findMonsterAttacks } from '../data/binary-data/index.ts';
+import { getLogger } from './logging.ts';
+
+const log = getLogger('game:combat');
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -131,6 +134,10 @@ function rand(): number {
   return Math.random();
 }
 
+function pickMsg(msgs: string[]): string {
+  return msgs[Math.floor(rand() * msgs.length)] as string;
+}
+
 /**
  * Strength damage modifier.
  * Above 50: +0.2 per point (max +10 at STR=100).
@@ -201,6 +208,29 @@ function weaponDice(weaponClass: number): { n: number; m: number; base: number }
   const wc = Math.max(0, weaponClass);
   if (wc === 0) return { n: 1, m: 2, base: 0 }; // unarmed / broken weapon
   return { n: 1, m: wc * 3, base: 0 };
+}
+
+/**
+ * Map an EXE damage-type code (from a monster's 4-byte attack entry, byte[1] >> 1)
+ * to the number of right-shifts to apply per the player's matching resist stack.
+ *
+ * Derived from FUN_1090_1d44's 37-case switch:
+ *   case  1, 23 → fire-resist bit
+ *   case  2, 24 → cold-resist bit
+ *   case  3, 25 → lightning-resist bit
+ *   case  4, 26 → acid-resist bit       (no reimpl analog)
+ *   case  5, 6, 7, 13, 27 → drain/poison group  (no resist-stack analog)
+ *   case  0, 20–22, 28–32, 34 → magic-resist bit (no reimpl analog)
+ *   case  8–19 (except 13), 33, 35, 36 → no resist (always full damage)
+ *
+ * Only the three reimpl-tracked elements (fire / cold / lightning) currently
+ * affect damage here; other channels would need new fields on PlayerStatus.
+ */
+function damageTypeResistStacks(damageType: number, status: PlayerStatus): number {
+  if (damageType === 1 || damageType === 23) return status.resistFire ?? 0;
+  if (damageType === 2 || damageType === 24) return status.resistCold ?? 0;
+  if (damageType === 3 || damageType === 25) return status.resistLightning ?? 0;
+  return 0;
 }
 
 /**
@@ -299,8 +329,15 @@ export function playerMeleeAttack(
           + slayAffixToHit
           + (1 - ctx.difficulty) * GAME_DH_A6;
   const threshold = Math.max(1, T);
+  log.debug(`[player→${monster.name}] to-hit: T=${T} threshold=${threshold}% (lvl=${char.level} monDef=${monDef} speed=${playerSpeed})`);
   if (rand() * 100 >= threshold) {
-    return { damage: 0, message: `You miss the ${monster.name}.`, dodged: true };
+    const missMsgs = [
+      `You miss the ${monster.name}.`,
+      `Your swing goes wide!`,
+      `You slash at air as the ${monster.name} dances back.`,
+      `You lunge at the ${monster.name}, but fumble the thrust.`,
+    ];
+    return { damage: 0, message: pickMsg(missMsgs), dodged: true };
   }
 
   // Damage: NdM from weapon class + base + STR + gauntlet + enchantment + slay affixes
@@ -309,12 +346,8 @@ export function playerMeleeAttack(
   const { n, m, base } = weaponDice(wc);
   let damage = rollNdM(n, m) + base;
 
-  let weaponName: string;
   if (weapon) {
-    weaponName = weapon.name;
     damage += weapon.enchantment;
-  } else {
-    weaponName = 'fists';
   }
 
   if (char.gauntlets) {
@@ -329,9 +362,40 @@ export function playerMeleeAttack(
 
   const netDamage = Math.max(1, damage);
 
+  // Varied hit messages based on damage ratio and monster type
+  const name = monster.name;
+  log.debug(`[player→${name}] damage: ${netDamage} (hp: ${monster.hp}/${monster.hp} maxHp used for ratio)`);
+  const isHumanoid = /goblin|kobold|hobgoblin|orc|bandit|warrior|thief|berserker|wizard|necromancer|man$|ogre|troll|giant/i.test(name);
+  const isScaly = /dragon|snake|viper|lizard/i.test(name);
+  let hitMsg: string;
+  const ratio = netDamage / monster.hp;
+  if (ratio >= 0.5) {
+    const msgs = isScaly
+      ? [`Your mighty blow smashes through the ${name}'s scales!`, `You cleave the ${name} wide open!`, `You thrust deep into the ${name}!`]
+      : [`You deal the ${name} a crushing blow!`, `You cleave the ${name} wide open!`, `You thrust deep into the ${name}!`];
+    hitMsg = pickMsg(msgs);
+  } else if (ratio >= 0.25) {
+    const msgs = isHumanoid
+      ? [`You deal the ${name} a solid blow!`, `You hit the ${name} in the chest!`, `You smite the ${name}, driving it back a step.`]
+      : [`You deal the ${name} a solid blow!`, `You strike the ${name} hard!`, `The ${name} staggers from your assault.`];
+    hitMsg = pickMsg(msgs);
+  } else if (ratio >= 0.1) {
+    const msgs = isHumanoid
+      ? [`You hit the ${name}!`, `You slip past the ${name}'s guard and hit!`, `The ${name} gasps as your weapon strikes home.`]
+      : isScaly
+        ? [`You hit the ${name}!`, `Your cut barely scratches the ${name}'s scales.`, `The ${name} flinches as you score a hit.`]
+        : [`You hit the ${name}!`, `You strike the ${name}!`, `The ${name} flinches as you score a hit.`];
+    hitMsg = pickMsg(msgs);
+  } else {
+    const msgs = isScaly
+      ? [`Your thrust glances from the ${name}'s scales.`, `You barely hit the ${name}.`, `Your strike barely mars the ${name}'s scales.`]
+      : [`You barely hit the ${name}.`, `You scratch the ${name}.`, `You strike the ${name} a glancing blow.`];
+    hitMsg = pickMsg(msgs);
+  }
+
   return {
     damage: netDamage,
-    message: `You hit the ${monster.name} with your ${weaponName} for ${netDamage} damage.`,
+    message: hitMsg,
     dodged: false,
   };
 }
@@ -377,18 +441,46 @@ export function monsterMeleeAttack(
           - playerSpeed
           + 265;
   const threshold = Math.max(1, (T * T) / 1000 + (ctx.difficulty - 1) * GAME_DH_A4);
+  log.debug(`[${monster.name}→player] to-hit: T=${T} threshold=${Math.round(threshold)}% (monOff=${monOff} playerSpeed=${playerSpeed} swarm=${swarm})`);
   if (rand() * 100 >= threshold) {
-    return { damage: 0, message: `The ${monster.name} swings at you and misses.`, dodged: true };
+    const missMsgs = [
+      `The ${monster.name} missed you!`,
+      `The ${monster.name} swings at you and misses.`,
+      `The ${monster.name} narrowly misses you.`,
+    ];
+    return { damage: 0, message: pickMsg(missMsgs), dodged: true };
   }
 
-  // Damage: NdM + monster weapon enchantment.  Original EXE applies player
-  // resist stacks here too as right-shifts (1 stack = halve, etc.); for plain
-  // physical melee the only resist channels that would apply are the global
-  // resistance buffs, and monster.attack carries no damage-type tag.  When
-  // attack-entry data is extracted from the EXE we can apply the per-element
-  // resist shifts here.  See FUN_1090_224c in REPORT_PHASE10_COMBAT.md §4.
-  const { n, m } = attackToNdM(monster.attack);
-  const rawDamage = rollNdM(n, m) + monsterEnch;
+  // Damage: NdM + monster weapon enchantment.
+  //
+  // For monsters with extracted attack data, execute the FULL attack list
+  // each turn, with each attack's multiHit count looping the dice roll.
+  // This matches FUN_1090_2044 in the EXE which iterates the attack rotor
+  // through all entries at +0x22, each respecting its byte+3 low-nibble
+  // (multi-hit count).
+  //
+  // Per-attack element resist: the EXE's FUN_1090_1d44 switches on the
+  // damage_type code and looks up the player's resist stack via the table
+  // at autodata 0x4918.  Each stack right-shifts damage by one
+  // (1 stack = halve, 2 = quarter, etc.).  We mirror that here for the
+  // resist channels the reimpl tracks (fire / cold / lightning).
+  let rawDamage = 0;
+  const data = findMonsterAttacks(monster.id);
+  if (data && data.attacks.length > 0) {
+    for (const atk of data.attacks) {
+      const stacks = damageTypeResistStacks(atk.damageType, status);
+      const hits = Math.max(1, atk.multiHit);
+      for (let i = 0; i < hits; i++) {
+        let dmg = rollNdM(atk.n, atk.m);
+        if (stacks > 0) dmg = dmg >>> stacks;
+        rawDamage += dmg;
+      }
+    }
+  } else {
+    const { n, m } = attackToNdM(monster.attack);
+    rawDamage = rollNdM(n, m);
+  }
+  rawDamage += monsterEnch;
 
   const netDamage = Math.max(1, rawDamage);
 
@@ -399,9 +491,155 @@ export function monsterMeleeAttack(
   }
 
   const poisonNote = specialTriggered === 'poison' ? ' You feel poisoned!' : '';
+
+  // Total number of rolls — display only if > 1 to flag multi-attack monsters.
+  let totalHits = 0;
+  if (data && data.attacks.length > 0) {
+    for (const atk of data.attacks) totalHits += Math.max(1, atk.multiHit);
+  } else {
+    totalHits = 1;
+  }
+
+  // Varied monster hit messages
+  const name = monster.name;
+  let hitMsg: string;
+  if (totalHits > 1) {
+    hitMsg = `The ${name} attacks you ${totalHits} times!`;
+  } else {
+    const msgs = [`The ${name} hits you!`, `The ${name} strikes you!`, `The ${name} lands a blow!`];
+    hitMsg = pickMsg(msgs);
+  }
+
   return {
     damage: netDamage,
-    message: `The ${monster.name} hits you for ${netDamage} damage.${poisonNote}`,
+    message: `${hitMsg}${poisonNote}`,
+    dodged: false,
+    ...(specialTriggered !== undefined ? { specialTriggered } : {}),
+  };
+}
+
+// ── Monster ranged attack on the player ──────────────────────────────────────
+
+/** Ranged special types that trigger a distance attack instead of a move. */
+export const RANGED_SPECIALS = new Set<SpecialAttack>([
+  'ranged_arrow', 'ranged_stone', 'ranged_spike', 'ranged_ice',
+  'breath_fire', 'breath_cold', 'breath_lightning', 'breath_poison',
+]);
+
+/**
+ * Max tile distance for ranged attacks.  The original binary has no hard cap —
+ * the monster AI's own 10-tile LOS check is the implicit limit.  We keep a
+ * generous ceiling here purely as a safety bound (avoids cross-room sniping on
+ * very large generated levels where LOS could theoretically reach further).
+ */
+export const RANGED_MAX_DIST = 12;
+
+function rangedMissMsg(name: string, special: SpecialAttack): string {
+  const map: Partial<Record<SpecialAttack, string[]>> = {
+    ranged_arrow:      [`The ${name}'s arrow misses!`, `You dodge the ${name}'s arrow.`],
+    ranged_stone:      [`The ${name}'s stone flies wide!`, `You dodge the hurled stone.`],
+    ranged_ice:        [`The ${name}'s ice shard misses!`],
+    ranged_spike:      [`The ${name}'s spike misses you!`],
+    breath_fire:       [`The ${name}'s fire breath misses you!`],
+    breath_cold:       [`The ${name}'s cold breath misses you!`],
+    breath_lightning:  [`The ${name}'s lightning misses you!`],
+    breath_poison:     [`The ${name}'s poison breath misses you!`],
+  };
+  return pickMsg(map[special] ?? [`The ${name} misses you!`]);
+}
+
+function rangedHitMsg(name: string, special: SpecialAttack): string {
+  const map: Partial<Record<SpecialAttack, string[]>> = {
+    ranged_arrow:      [`The ${name} shoots you with an arrow!`, `An arrow from the ${name} strikes you!`],
+    ranged_stone:      [`The ${name} hits you with a stone!`, `A stone from the ${name} hits you!`],
+    ranged_ice:        [`The ${name} pelts you with ice!`],
+    ranged_spike:      [`The ${name} hits you with a spike!`],
+    breath_fire:       [`The ${name} breathes fire at you!`],
+    breath_cold:       [`The ${name} breathes cold at you!`],
+    breath_lightning:  [`The ${name} breathes lightning at you!`],
+    breath_poison:     [`The ${name} breathes poison at you!`],
+  };
+  return pickMsg(map[special] ?? [`The ${name} hits you from a distance!`]);
+}
+
+/**
+ * Resolve a monster's ranged attack (arrow, stone, breath, etc.) on the player.
+ *
+ * Uses the same squared to-hit formula as melee, including the swarm counter
+ * (DAT_0x4D28).  The EXE makes no distinction between melee and ranged for the
+ * to-hit path — both dispatch through FUN_1090_21b4.
+ *
+ * Damage uses the same NdM roll as melee (attackToNdM); the EXE's ranged
+ * attack entries share the same 4-byte format as melee attack entries and carry
+ * no "double dice" modifier for breath weapons.  Elemental resist stacks apply
+ * as right-shifts, identical to the melee path.
+ */
+export function monsterRangedAttack(
+  monster: MonsterSpec,
+  rangedSpecial: SpecialAttack,
+  char: Character,
+  status: PlayerStatus,
+  ctx: CombatContext,
+): CombatResult {
+  // To-hit — identical squared formula to melee, swarm counter included.
+  const monOff = offensiveAC(monster.attack);
+  const shieldBonus = status.shielded ? 10 : 0;
+  const playerSpeed = char.derived.speed + ctx.equipmentAC + shieldBonus;
+  const swarm = ctx.swarmCounter ?? 0;
+  const T = 10 * monOff + swarm - playerSpeed + 265;
+  const threshold = Math.max(1, (T * T) / 1000 + (ctx.difficulty - 1) * GAME_DH_A4);
+  log.debug(`[${monster.name} ranged→player] to-hit: T=${T} threshold=${Math.round(threshold)}% (monOff=${monOff} speed=${playerSpeed} swarm=${swarm})`);
+  if (rand() * 100 >= threshold) {
+    return { damage: 0, message: rangedMissMsg(monster.name, rangedSpecial), dodged: true };
+  }
+
+  // Damage — NdM from the monster's attack value, same as melee.
+  // Resist stacks for elemental types apply as right-shifts per phase 10.
+  const { n, m } = attackToNdM(monster.attack);
+  let rawDamage: number;
+  let resistStacks = 0;
+
+  switch (rangedSpecial) {
+    case 'ranged_arrow':
+    case 'ranged_spike':
+    case 'ranged_stone':
+      rawDamage = rollNdM(n, m);
+      break;
+    case 'ranged_ice':
+      rawDamage = rollNdM(n, m);
+      resistStacks = status.resistCold ?? 0;
+      break;
+    case 'breath_fire':
+      rawDamage = rollNdM(n, m);
+      resistStacks = status.resistFire ?? 0;
+      break;
+    case 'breath_cold':
+      rawDamage = rollNdM(n, m);
+      resistStacks = status.resistCold ?? 0;
+      break;
+    case 'breath_lightning':
+      rawDamage = rollNdM(n, m);
+      resistStacks = status.resistLightning ?? 0;
+      break;
+    case 'breath_poison':
+      rawDamage = rollNdM(n, m);
+      break;
+    default:
+      rawDamage = rollNdM(n, m);
+  }
+
+  if (resistStacks > 0) rawDamage = rawDamage >>> resistStacks;
+  const netDamage = Math.max(1, rawDamage);
+
+  let specialTriggered: SpecialAttack | undefined;
+  if (rangedSpecial === 'breath_poison' && rand() < 0.5) {
+    specialTriggered = 'poison';
+  }
+  const poisonNote = specialTriggered === 'poison' ? ' You feel poisoned!' : '';
+
+  return {
+    damage: netDamage,
+    message: rangedHitMsg(monster.name, rangedSpecial) + poisonNote,
     dodged: false,
     ...(specialTriggered !== undefined ? { specialTriggered } : {}),
   };

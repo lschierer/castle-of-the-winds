@@ -30,13 +30,24 @@ export interface SpellTarget {
   monster?: MonsterInstance;
   /** Distance to target in tiles. */
   distance?: number;
+  /**
+   * For ball spells: the tile where the explosion detonates (centre of the
+   * 3×3 AOE).  Set even when no monster occupies that tile, so the blast can
+   * still hit nearby creatures.
+   */
+  explodeTile?: { x: number; y: number };
 }
 
 export interface CastResult {
   success: boolean;
   messages: string[];
-  /** Damage dealt to a monster (if attack spell). */
+  /** Damage dealt to a single monster (bolt / targeted spells). */
   monsterDamage?: { instanceId: string; damage: number };
+  /**
+   * Damage dealt to multiple monsters (AOE ball spells).
+   * Mutually exclusive with `monsterDamage`.
+   */
+  monsterDamages?: Array<{ instanceId: string; damage: number }>;
   /** HP healed on the character. */
   hpHealed?: number;
   /** Updated player status (if buff/utility). */
@@ -71,6 +82,11 @@ const HEAL_AMOUNTS: Record<string, (maxHp: number) => number> = {
   healing:            (max) => max,
 };
 
+/** Returns true for AOE ball spells (fireball, cold_ball, ball_lightning). */
+export function isBallSpell(spellId: string): boolean {
+  return BALL_SPELLS.has(spellId);
+}
+
 /** What kind of targeting a spell needs. */
 export function spellTargetKind(spellId: string): SpellTargetKind {
   if (BOLT_SPELLS.has(spellId) || BALL_SPELLS.has(spellId)) return 'directional';
@@ -84,7 +100,7 @@ export function castSpell(
   character: Character,
   spellId: string,
   target: SpellTarget,
-  _monsters: MonsterInstance[],
+  monsters: MonsterInstance[],
   playerStatus: PlayerStatus,
 ): CastResult {
   const spell = spellById(spellId);
@@ -101,7 +117,7 @@ export function castSpell(
 
   // Dispatch by spell type
   if (BOLT_SPELLS.has(spellId) || BALL_SPELLS.has(spellId)) {
-    return castAttack(c, spell, spellId, target);
+    return castAttack(c, spell, spellId, target, monsters);
   }
   if (spellId in HEAL_AMOUNTS) {
     return castHeal(c, spell, spellId);
@@ -131,7 +147,67 @@ function castAttack(
   spell: Spell,
   spellId: string,
   target: SpellTarget,
+  allMonsters: MonsterInstance[],
 ): CastResult {
+  const element = SPELL_ELEMENT[spellId];
+  const baseDamage = rollSpellDamage(spellId);
+
+  // ── Ball spells: AOE explosion centred on explodeTile ────────────────────
+  if (BALL_SPELLS.has(spellId)) {
+    const ep = target.explodeTile
+      ?? (target.monster ? { x: target.monster.x, y: target.monster.y } : undefined);
+
+    if (!ep) {
+      return { success: true, messages: [`You cast ${spell.name} but it fizzles.`], character: c };
+    }
+
+    // All monsters within the 3×3 area (Chebyshev distance ≤ 1)
+    const inBlast = allMonsters.filter(
+      (m) => Math.max(Math.abs(m.x - ep.x), Math.abs(m.y - ep.y)) <= 1,
+    );
+
+    if (inBlast.length === 0) {
+      return {
+        success: true,
+        messages: [`You cast ${spell.name}. The explosion shakes the walls but hits nothing.`],
+        character: c,
+      };
+    }
+
+    const messages: string[] = [];
+    const monsterDamages: Array<{ instanceId: string; damage: number }> = [];
+    const elemLabel = element ? ` ${element}` : '';
+
+    for (const m of inBlast) {
+      const spec = monsterById(m.specId);
+      if (!spec) continue;
+
+      const isCenter = Math.max(Math.abs(m.x - ep.x), Math.abs(m.y - ep.y)) === 0;
+      const rawDmg = isCenter ? baseDamage : Math.floor(baseDamage / 2);
+
+      // Ball spells cannot be dodged (isBolt: false skips the range-falloff miss check)
+      const { damage } = playerSpellAttack(spec, {
+        baseDamage: rawDmg,
+        ...(element !== undefined ? { element } : {}),
+        isBolt: false,
+      });
+
+      if (damage > 0) {
+        monsterDamages.push({ instanceId: m.instanceId, damage });
+        if (isCenter) {
+          messages.push(`Your${elemLabel} spell hits the ${spec.name} for ${damage} damage.`);
+        } else {
+          messages.push(`The ${spec.name} is caught in the blast for ${damage} damage.`);
+        }
+      } else {
+        messages.push(`The blast has no effect on the ${spec.name}.`);
+      }
+    }
+
+    return { success: true, messages, monsterDamages, character: c };
+  }
+
+  // ── Bolt spells (magic_arrow, fire_bolt, etc.): single target ────────────
   const monster = target.monster;
   if (!monster) {
     return { success: true, messages: [`You cast ${spell.name} into empty space.`], character: c };
@@ -142,14 +218,10 @@ function castAttack(
     return { success: true, messages: [`You cast ${spell.name}.`], character: c };
   }
 
-  const baseDamage = rollSpellDamage(spellId);
-  const isBolt = BOLT_SPELLS.has(spellId);
-  const element = SPELL_ELEMENT[spellId];
-
   const params: SpellAttackParams = {
     baseDamage,
     ...(element !== undefined ? { element } : {}),
-    isBolt,
+    isBolt: true,
     distance: target.distance ?? 1,
   };
 

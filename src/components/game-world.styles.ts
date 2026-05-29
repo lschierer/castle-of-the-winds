@@ -256,39 +256,21 @@ export const gameWorldStyles = css`
       background: linear-gradient(to right, transparent, var(--game-border-default) 30%, var(--game-border-default) 70%, transparent);
     }
 
-    /* Keyboard hint buttons in sidebar */
-    .key-hint-row {
-      display: flex;
-      gap: 0.3rem;
-    }
-
-    .key-hint-btn {
-      flex: 1;
-      padding: 0.25rem 0.3rem;
-      background: transparent;
-      border: 1px solid var(--game-border-default);
-      color: var(--game-text-muted);
-      font-family: inherit;
-      font-size: 0.65rem;
-      letter-spacing: 0.06em;
-      cursor: pointer;
-      text-transform: uppercase;
-      text-align: center;
-      transition: background 0.1s, color 0.1s;
-    }
-
-    .key-hint-btn:hover {
-      background: var(--game-bg-elevated);
-      color: var(--game-text-body);
-    }
-
-    .key-hint-btn.active {
-      background: var(--game-bg-raised);
-      border-color: var(--game-border-accent);
-      color: var(--game-text-bright);
+    /* 2-column attribute grid */
+    .attrs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.1rem 0.3rem;
     }
 
     /* ── Spell list (sidebar section) ──────────────── */
+    .spell-list {
+      overflow-y: auto;
+      max-height: 7.5rem;
+      scrollbar-width: thin;
+      scrollbar-color: var(--game-border-default) transparent;
+    }
+
     .spell-entry {
       font-size: 0.72rem;
       color: var(--game-text-tertiary);
@@ -331,6 +313,49 @@ export const gameWorldStyles = css`
     }
 
     .msg.fresh { color: var(--game-text-body); }
+
+    /* ── In-game menu ───────────────────────────────── */
+    .game-menu-box {
+      min-width: 260px;
+      max-width: 320px;
+    }
+
+    .menu-section {
+      margin: 0.5rem 0;
+    }
+
+    .menu-section-title {
+      font-size: 0.6rem;
+      color: var(--game-text-muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0 0.25rem 0.3rem;
+    }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+      padding: 0.28rem 0.5rem;
+      font-size: 0.78rem;
+      color: var(--game-text-body);
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+
+    .menu-item:hover {
+      background: var(--game-bg-elevated);
+      border-color: var(--game-border-subtle);
+      color: var(--game-text-bright);
+    }
+
+    .menu-item-key {
+      font-size: 0.65rem;
+      color: var(--game-text-muted);
+      white-space: nowrap;
+      font-family: inherit;
+    }
 
     /* ── Overlays ───────────────────────────────────── */
     .overlay {

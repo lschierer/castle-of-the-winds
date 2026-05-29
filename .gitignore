@@ -35,3 +35,5 @@ logs/
 # TypeScript
 *.tsbuildinfo
 public
+
+.claude

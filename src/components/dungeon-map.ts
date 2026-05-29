@@ -8,9 +8,10 @@ import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { FOV } from 'rot-js';
 import type { TileMap, Vec2 } from '../data/tile-map.ts';
-import { getTileAt } from '../data/tile-map.ts';
+import { getTileAt, trapIcon } from '../data/tile-map.ts';
 import type { MonsterInstance } from '../engine/combat.ts';
 import type { PlayerStatus } from '../engine/combat.ts';
+import type { CombatEffect } from '../engine/combat-effects.ts';
 import { getTileStyle, monsterSpriteSrc } from '../engine/sprites.ts';
 import { monsterById, healthDescription } from '../data/monsters.ts';
 import type { Gender } from '../data/character.ts';
@@ -35,19 +36,36 @@ function viewportSize(): { cols: number; rows: number } {
 export class DungeonMap extends LitElement {
   static styles = css`
     :host { display: block; width: 100%; height: 100%; }
+    .map-wrap { position: relative; display: inline-block; }
     .map-grid {
       display: grid;
       grid-template-columns: repeat(var(--vp-cols), ${TILE_PX}px);
       grid-template-rows: repeat(var(--vp-rows), ${TILE_PX}px);
       image-rendering: pixelated;
     }
+    :host([crosshair]) .map-grid { cursor: crosshair; }
     .tile { width: ${TILE_PX}px; height: ${TILE_PX}px; }
+    /* Combat effect overlay — fades out over the display duration */
+    .effect-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 5;
+      animation: fx-fade 0.4s ease-out forwards;
+    }
+    @keyframes fx-fade {
+      0%   { opacity: 1; }
+      65%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
   `;
 
   @property({ attribute: false }) map!: TileMap;
   @property({ attribute: false }) pos!: Vec2;
   @property({ attribute: false }) monsters: MonsterInstance[] = [];
   @property({ attribute: false }) playerStatus: PlayerStatus = {};
+  @property({ attribute: false }) combatEffect: CombatEffect | null = null;
+  @property({ type: Boolean, reflect: true }) crosshair = false;
   @property() heroGender: Gender = 'male';
   @property({ type: Boolean }) inDungeon = false;
   @property({ type: Boolean }) minimap = false;
@@ -102,6 +120,12 @@ export class DungeonMap extends LitElement {
         const inLOS = !this.inDungeon || detectMonsters || sameRoom || visibleSet.has(`${mx},${my}`);
         const monster = inLOS ? monsterAt.get(`${mx},${my}`) : undefined;
 
+        // Show detected, not-yet-triggered traps as a floor overlay.
+        const trapData = tile.trap;
+        const trapIconSrc = (trapData?.detected && !trapData.triggered)
+          ? trapIcon(trapData.kind)
+          : undefined;
+
         if (monster) {
           const spec = monsterById(monster.specId);
           const iconSrc = monsterSpriteSrc(monster.specId)
@@ -117,6 +141,22 @@ export class DungeonMap extends LitElement {
             ${iconSrc ? html`<img src="${iconSrc}" alt="${spec?.name ?? ''}"
               title="${spec?.name ?? ''} — ${healthDescription(monster.hp, monster.maxHp)}"
               style="position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;object-fit:contain;">` : ''}
+            ${trapIconSrc ? html`<img src="${trapIconSrc}"
+              title="Detected trap: ${trapData?.kind}"
+              style="position:absolute;right:0;bottom:0;width:50%;height:50%;image-rendering:pixelated;object-fit:contain;opacity:0.9;">` : ''}
+          </div>`);
+        } else if (trapIconSrc) {
+          tiles.push(html`<div class="tile" style="
+            background-color: ${s.backgroundColor ?? 'transparent'};
+            background-image: ${s.backgroundImage};
+            background-size: ${s.backgroundSize};
+            background-position: ${s.backgroundPosition};
+            background-repeat: ${s.backgroundRepeat};
+            position: relative;
+          ">
+            <img src="${trapIconSrc}"
+              title="Detected trap: ${trapData?.kind}"
+              style="position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;object-fit:contain;">
           </div>`);
         } else {
           tiles.push(html`<div class="tile" style="
@@ -130,8 +170,88 @@ export class DungeonMap extends LitElement {
       }
     }
 
-    return html`<div class="map-grid" style="--vp-cols:${vp.cols};--vp-rows:${vp.rows}"
-      @click=${(e: MouseEvent) => { this.onGridClick(e, vp, halfX, halfY); }}>${tiles}</div>`;
+    return html`
+      <div class="map-wrap">
+        <div class="map-grid" style="--vp-cols:${vp.cols};--vp-rows:${vp.rows}"
+          @click=${(e: MouseEvent) => { this.onGridClick(e, vp, halfX, halfY); }}>${tiles}</div>
+        ${this.combatEffect ? this.renderEffectLayer(this.combatEffect, vp, halfX, halfY) : ''}
+      </div>`;
+  }
+
+  /**
+   * Render projectile / AOE / breath-weapon icons as a transparent overlay
+   * on top of the tile grid.  Uses absolute positioning within .map-wrap.
+   */
+  private renderEffectLayer(
+    effect: CombatEffect,
+    vp: { cols: number; rows: number },
+    halfX: number,
+    halfY: number,
+  ): TemplateResult {
+    const { pos } = this;
+    const imgs: TemplateResult[] = [];
+
+    /** Push one absolutely-positioned icon at tile (tx, ty). */
+    const addImg = (src: string, tx: number, ty: number): void => {
+      const col = tx - pos.x + halfX;
+      const row = ty - pos.y + halfY;
+      if (col < 0 || col >= vp.cols || row < 0 || row >= vp.rows) return;
+      imgs.push(html`<img src="${src}" style="
+        position:absolute;
+        left:${col * TILE_PX}px; top:${row * TILE_PX}px;
+        width:${TILE_PX}px; height:${TILE_PX}px;
+        image-rendering:pixelated; pointer-events:none;">`);
+    };
+
+    // ── Projectile path (bolt / arrow / stone / ice) ──────────────────────────
+    if (effect.iconSrc) {
+      for (const t of effect.tiles) {
+        addImg(effect.iconSrc, t.x, t.y);
+      }
+    }
+
+    // ── AOE impact (ball spells): single oversized bitmap spanning 3×3 tiles ──
+    if (effect.impactSrc && effect.aoeCentre) {
+      const cx = effect.aoeCentre.x;
+      const cy = effect.aoeCentre.y;
+      // Top-left of the 3×3 area is (cx-1, cy-1)
+      const col = cx - 1 - pos.x + halfX;
+      const row = cy - 1 - pos.y + halfY;
+      // Clamp to viewport — only render if any part is visible
+      if (col + 2 >= 0 && col < vp.cols && row + 2 >= 0 && row < vp.rows) {
+        imgs.push(html`<img src="${effect.impactSrc}" style="
+          position:absolute;
+          left:${col * TILE_PX}px; top:${row * TILE_PX}px;
+          width:${3 * TILE_PX}px; height:${3 * TILE_PX}px;
+          image-rendering:pixelated; pointer-events:none; object-fit:fill;">`);
+      }
+    }
+
+    // ── Breath weapon: single bitmap stretched from monster → player ──────────
+    if (effect.breathSrc && effect.breathFrom && effect.breathTo) {
+      const fc = effect.breathFrom.x - pos.x + halfX;
+      const fr = effect.breathFrom.y - pos.y + halfY;
+      const tc = effect.breathTo.x - pos.x + halfX;
+      const tr = effect.breathTo.y - pos.y + halfY;
+      const minCol = Math.max(0, Math.min(fc, tc));
+      const maxCol = Math.min(vp.cols - 1, Math.max(fc, tc));
+      const minRow = Math.max(0, Math.min(fr, tr));
+      const maxRow = Math.min(vp.rows - 1, Math.max(fr, tr));
+      if (maxCol >= minCol && maxRow >= minRow) {
+        const left   = minCol * TILE_PX;
+        const top    = minRow * TILE_PX;
+        const width  = (maxCol - minCol + 1) * TILE_PX;
+        const height = (maxRow - minRow + 1) * TILE_PX;
+        imgs.push(html`<img src="${effect.breathSrc}" style="
+          position:absolute;
+          left:${left}px; top:${top}px;
+          width:${width}px; height:${height}px;
+          image-rendering:pixelated; pointer-events:none; object-fit:fill;">`);
+      }
+    }
+
+    if (imgs.length === 0) return html``;
+    return html`<div class="effect-layer">${imgs}</div>`;
   }
 
   private renderMiniMap(): TemplateResult {
@@ -155,10 +275,8 @@ export class DungeonMap extends LitElement {
           color = '#0f0';
         } else if (tile.feature === 'stairs-down') {
           color = '#f00';
-        } else if (tile.feature === 'door') {
-          color = '#a86';
         } else if (tile.feature === 'secret-door') {
-          color = '#555';
+          color = '#000'; // secret doors look like unexplored wall until found
         } else if (tile.terrain === 'floor' && tile.walkable) {
           color = tile.roomId !== undefined ? '#338' : '#226';
         } else {
