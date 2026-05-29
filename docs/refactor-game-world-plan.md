@@ -1,6 +1,10 @@
 # Refactor plan: decompose `game-world.ts`
 
-Status: **Wave 1 (planning)** — no code yet.
+Status: **Wave 2 complete — landed GREEN** (`pnpm typecheck` and `pnpm build`
+both pass). The frozen contracts matched on the first pass, so the intentional-red
+intermediate never materialized. That collapses Wave 3 from "parallel repair of a
+broken tree" into "behavioral verification + lint polish" — see the revised Wave 3
+note at the bottom.
 Goal: shrink the 2400-line `game-world` god-component so phase 2 (second village,
 second surface map, second dungeon set) is mostly *data*, not new component code.
 
@@ -176,6 +180,33 @@ compile independently.
 No two chunks share a file. C2 references C3/C4 only by tag name + props/events (frozen),
 so C2 compiles before C3/C4 finish. C1 has zero component imports. Final integration =
 one `pnpm typecheck` across the merged tree + a manual play-through smoke test.
+
+## Wave 3 — REVISED (Wave 2 landed green)
+
+Because the tree compiles and builds, there is no red to repair. Wave 3 is now:
+
+1. **Behavioral verification** (the real risk — types passing ≠ behaves the same).
+   Things to exercise in a play-through:
+   - Movement, fog-of-war reveal, run-in-direction, building entry banner.
+   - Combat: melee kill + loot drop, monster melee/ranged phase, death overlay.
+   - Map clone-on-sync: confirm `<dungeon-map>` refreshes after search/disarm/trap
+     (actions that don't move the player) — the new `sync()` reclones the map.
+   - Rest/sleep effect suppression (the view sets `inRestLoop` around the action and
+     passes `suppressEffects` — verify no projectile spam during a multi-turn rest).
+   - Narrative overlay scroll-to-dismiss, story review, level-up spell-learn.
+   - Save → reload → state restored (incl. hamlet-destroyed phase-two re-apply).
+   - Parchment flow end-to-end (surface nudge → read → hamlet destruction).
+   - Known behavioral gap to confirm/fix: a **directional scroll** read from the
+     context menu pushes "Choose a direction…" but the view does not enter targeting
+     mode (it only does so for spell-bar/overlay casts). Decide whether to wire
+     `contextAction` scrolls through `beginCast` targeting.
+
+2. **Lint polish** of the new files (optional; lint already fails on main with 96
+   pre-existing errors and is not the build gate). Net-new items are the defensive
+   `if (!character) return html\`\`` guards flagged as `no-unnecessary-condition`,
+   matching the existing style.
+
+Parallel agents are no longer necessary for Wave 3 — it's a single verification pass.
 
 ## Risk + mitigation
 
