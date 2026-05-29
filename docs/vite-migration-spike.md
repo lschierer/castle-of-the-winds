@@ -1,6 +1,14 @@
 # Spike: migrate Greenwood → Vite (+ Lit, + Tauri)
 
-Status: **investigation only — no code changed.** Decision-ready estimate.
+Status: **DONE — migration executed and verified.** Original spike preserved below.
+
+Outcome: all four risks retired cleanly. `.ts` extensions, decorators, and JSON
+imports all resolved on the first Vite build (211 modules, no codemod needed); the
+linked `rot-js-fork` generated a fresh fortress floor at runtime with no errors.
+Runtime smoke test passed: dev boots on :1984; `/`, `/create/`, `/game/` all 200;
+load-from-save, movement, inventory overlay; sprites serve `200 image/png`; build →
+`dist/`; typecheck green. Total effort landed near the low end of the estimate because
+the build retired the scary risks in the first few minutes.
 
 ## TL;DR
 
