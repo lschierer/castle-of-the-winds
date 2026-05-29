@@ -541,9 +541,9 @@ function placeScrapOfParchment(
 
   const parchment: Item = {
     id: Math.random().toString(36).slice(2, 10),
-    kind: 'scroll',
+    kind: 'misc',
     name: 'Scrap of Parchment',
-    icon: 'scroll.png',
+    icon: '/assets/sprites/icons/Items/icon_321.png',
     weight: 10,
     bulk: 1,
     quantity: 1,
