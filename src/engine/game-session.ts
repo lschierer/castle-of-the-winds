@@ -43,7 +43,7 @@ import { makeSpellEffect } from './combat-effects.ts';
 import { monsterById, healthDescription, rollMonsterLoot } from '../data/monsters.ts';
 import { castSpell, isBallSpell, spellTargetKind, type SpellTarget } from './spell-engine.ts';
 import { type GameStage } from '../data/progression.ts';
-import { ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../data/equipment.ts';
+import { type ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../data/equipment.ts';
 import { SHOPS, resetVisitPrices, makeShopState, type ShopState } from './shop.ts';
 import type { ContextAction } from '../components/context-actions.ts';
 import type { GameState } from './save.ts';

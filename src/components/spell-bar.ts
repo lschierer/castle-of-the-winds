@@ -40,22 +40,22 @@ export class SpellBar extends LitElement {
       <div class="spell-bar">
         <div class="spell-bar-actions">
           <button class="spell-bar-btn ${this.activeOverlay === 'game-menu' ? 'active' : ''}"
-            @click=${() => this.emit('menu-toggle')} title="Game menu">☰ Menu</button>
-          <button class="spell-bar-btn" @click=${() => this.emit('pickup')}>Get</button>
-          <button class="spell-bar-btn" @click=${() => this.emit('rest')}>Rest</button>
+            @click=${() => { this.emit('menu-toggle'); }} title="Game menu">☰ Menu</button>
+          <button class="spell-bar-btn" @click=${() => { this.emit('pickup'); }}>Get</button>
+          <button class="spell-bar-btn" @click=${() => { this.emit('rest'); }}>Rest</button>
           <button class="spell-bar-btn ${this.activeOverlay === 'inventory' ? 'active' : ''}"
-            @click=${() => this.emit('open-inventory')}>Inventory</button>
+            @click=${() => { this.emit('open-inventory'); }}>Inventory</button>
           <button class="spell-bar-btn ${this.activeOverlay === 'spells' ? 'active' : ''}"
-            @click=${() => this.emit('open-spells')}>Spells</button>
+            @click=${() => { this.emit('open-spells'); }}>Spells</button>
           ${this.contextActions.length > 0 ? html`
             <div class="verbs-wrap">
               <button class="spell-bar-btn ${this.verbsOpen ? 'active' : ''}"
-                @click=${() => this.emit('toggle-verbs')}>Use…</button>
+                @click=${() => { this.emit('toggle-verbs'); }}>Use…</button>
               ${this.verbsOpen ? html`
                 <div class="verbs-menu">
                   ${this.contextActions.map((a) => html`
                     <button class="verbs-item"
-                      @click=${() => this.emit('context-action', { action: a })}>${a.label}</button>
+                      @click=${() => { this.emit('context-action', { action: a }); }}>${a.label}</button>
                   `)}
                 </div>` : ''}
             </div>` : ''}
@@ -73,7 +73,7 @@ export class SpellBar extends LitElement {
             return html`<div
               class="spell-slot ${canCast ? 'castable' : 'no-mana'}"
               title="${sp.name} (${sp.baseMana} mp)${canCast ? '' : ' — not enough mana'}"
-              @click=${canCast ? () => this.emit('cast-spell', { spellId: sp.id }) : undefined}
+              @click=${canCast ? () => { this.emit('cast-spell', { spellId: sp.id }); } : undefined}
             >
               <span class="spell-slot-num">${i + 1}</span>
               <span class="spell-slot-name">${sp.name}</span>
@@ -82,7 +82,7 @@ export class SpellBar extends LitElement {
           })}
         </div>
         <button class="spell-bar-btn" title="Customize spell bar"
-          @click=${() => this.emit('open-customize')}>⚙ Customize</button>
+          @click=${() => { this.emit('open-customize'); }}>⚙ Customize</button>
       </div>
     `;
   }

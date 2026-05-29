@@ -1,101 +1,50 @@
 /**
- * Game world component — sprite tile map view + sidebar + overlays.
+ * Game world component — the view shell.
+ *
+ * After the Wave-2 decomposition this component is intentionally thin: it owns
+ * the {@link GameSession} (all game logic), mirrors session state into Lit
+ * `@state` for rendering, handles keyboard/click input, manages the combat-effect
+ * playback timers, and composes the child components (spell-bar, dungeon-map,
+ * sidebar, overlays). Every player action delegates to the session and replays
+ * the returned {@link GameEvent}s via {@link applyEvents}.
  *
  * Controls:
  *   Arrow keys / hjklyubn / numpad 1-9  — movement (including diagonals)
- *   Home / End / PageUp / PageDown   — diagonal movement
- *   I                                — toggle inventory
- *   P                                — toggle powers/spells panel
- *   ?                                — review story log
- *   Space / Enter (on narrative)     — dismiss overlay
- *   Escape                           — close any open overlay
+ *   I inventory · P spells · ? story · G get · S search · R rest · Z sleep · M map
+ *   Escape — close overlay / cancel targeting
  */
 
 import { LitElement, html, type TemplateResult } from 'lit';
-import { gameWorldStyles } from './game-world.styles.ts';
 import { customElement, state } from 'lit/decorators.js';
-import type { Character } from '../data/character.ts';
-import { xpForLevel } from '../data/character.ts';
-import { spellIdsAvailableAtLevel } from '../data/binary-data/spell-grants.ts';
+import { gameWorldStyles } from './game-world.styles.ts';
 import { CharacterModel } from '../model/Character.ts';
-import { WorldModel } from '../model/World.ts';
-import './player-inventory.ts';
-import './dungeon-map.ts';
 import { loadCharacter, saveGameState, loadGameState, downloadSave, type GameState } from '../engine/save.ts';
 import { gatherContextActions, type ContextAction } from './context-actions.ts';
-import { initLogging } from '../engine/logging.ts';
-import {
-  type TileMap,
-  type MapId,
-  type Vec2,
-  type Building,
-  type MapExit,
-  ALL_MAPS,
-  VILLAGE_MAP,
-  PARCHMENT_TEXT,
-  HAMLET_DESTROYED_NARRATIVE,
-  STORY_SEGMENTS,
-  destroyHamlet,
-  openPhaseTwo,
-  isWalkable,
-
-  exitAt,
-  getTileAt,
-  dropItem,
-  revealAround,
-  hasLineOfSight,
-} from '../data/world-map.ts';
-import { type Tile, rollTrapDamage } from '../data/tile-map.ts';
-import { spellById } from '../data/spells.ts';
-import { LEARNABLE_SPELLS } from '../data/spells.ts';
-import {
-  SHOPS,
-  resetVisitPrices, makeShopState, type ShopState,
-} from '../engine/shop.ts';
+import { initLogging, getLogger } from '../engine/logging.ts';
+import { type TileMap, type Vec2, type Building, getTileAt } from '../data/tile-map.ts';
+import { type Item, PACK_SPECS } from '../data/items.ts';
+import { type MonsterInstance, type PlayerStatus } from '../engine/combat.ts';
+import { type CombatEffect } from '../engine/combat-effects.ts';
+import { SHOPS } from '../engine/shop.ts';
+import { GameSession } from '../engine/game-session.ts';
+import { type ActionResult } from '../engine/game-events.ts';
 import { type ShopBuyDetail, type ShopSellDetail } from './shop-screen.ts';
-import type { BuildingActionDetail } from './building-overlay.ts';
+import { type BuildingActionDetail } from './building-overlay.ts';
+import { type MenuAction } from './overlays/game-menu-overlay.ts';
+import './player-inventory.ts';
+import './dungeon-map.ts';
 import './shop-screen.ts';
 import './building-overlay.ts';
-import { coinsIn, type Item, addToContainer, displayName, addCoins, PACK_SPECS, reportedUnitWeight } from '../data/items.ts';
-import {
-  type MonsterInstance,
-  type PlayerStatus,
-  playerMeleeAttack,
-  monsterMeleeAttack,
-  monsterRangedAttack,
-  RANGED_SPECIALS,
-  RANGED_MAX_DIST,
-  applyDrainAttack,
-  poisonTick,
-} from '../engine/combat.ts';
-import {
-  type CombatEffect,
-  makeMonsterRangedEffect,
-  makeSpellEffect,
-} from '../engine/combat-effects.ts';
-import { monsterById, healthDescription, rollMonsterLoot } from '../data/monsters.ts';
-import { castSpell, isBallSpell, spellTargetKind, type SpellTarget } from '../engine/spell-engine.ts';
-import { type DungeonFloor } from '../engine/dungeon-gen.ts';
-import { type GameStage } from '../data/progression.ts';
-import { type ALL_EQUIPMENT_SPECS, ARMOR_SPECS, SHIELD_SPECS, HELMET_SPECS, GAUNTLET_SPECS, BRACER_SPECS } from '../data/equipment.ts';
-import { getLogger } from '../engine/logging.ts';
+import './spell-bar.ts';
+import './game-sidebar.ts';
+import './overlays/spells-overlay.ts';
+import './overlays/spell-learn-overlay.ts';
+import './overlays/story-overlay.ts';
+import './overlays/death-overlay.ts';
+import './overlays/game-menu-overlay.ts';
+import './overlays/customize-spells-overlay.ts';
 
 const logger = getLogger('game:world');
-
-
-/**
- * Map the reimpl's 3-level `Difficulty` string to the EXE's 0..3 difficulty
- * code (Easy=0, Intermediate=1, Difficult=2, Experts Only=3) used by the
- * combat formulas in `combat.ts`.  The reimpl's 'normal' maps to Intermediate;
- * 'hard' maps to Difficult; there's no reimpl equivalent for Experts Only yet.
- */
-function difficultyToInt(d: Character['difficulty']): number {
-  if (d === 'easy') return 0;
-  if (d === 'hard') return 2;
-  if (d === 'expert') return 3;
-  return 1; // 'normal' (Intermediate)
-}
-
 
 type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 'story' | 'customize-spells' | 'game-menu' | 'verbs';
 
@@ -103,173 +52,155 @@ type Overlay = 'none' | 'inventory' | 'spells' | 'building' | 'spell-learn' | 's
 export class GameWorld extends LitElement {
   static styles = gameWorldStyles;
 
+  /** The authoritative game state + logic. Null until connectedCallback loads it. */
+  private session!: GameSession;
+
+  // ── Render mirrors (copied from the session after each action) ──────────────
   @state() private character: CharacterModel | null = null;
-  @state() private map: TileMap = VILLAGE_MAP;
-  @state() private pos: Vec2 = { ...VILLAGE_MAP.entryPosition };
+  @state() private map!: TileMap;
+  @state() private pos: Vec2 = { x: 0, y: 0 };
+  @state() private monsters: MonsterInstance[] = [];
+  @state() private playerStatus: PlayerStatus = {};
   @state() private messages: Array<{ text: string; fresh: boolean }> = [
     { text: 'You stand in the village. Arrow keys, hjklyubn, or numpad to move.', fresh: true },
     { text: 'F1 = menu · I = inv · P = spells · G = get · S = search · R = rest · Z = sleep · M = map', fresh: false },
   ];
   @state() private locationName = '';
+
+  // ── View-only state ─────────────────────────────────────────────────────────
   @state() private overlay: Overlay = 'none';
   @state() private narrative: string | null = null;
-  /** Whether the narrative overlay has been scrolled to the bottom (or doesn't overflow). */
   @state() private narrativeScrolled = false;
   @state() private activeBuilding: Building | null = null;
-
-  /** Live monsters on the current map level. */
-  @state() private monsters: MonsterInstance[] = [];
-  /** Active status effects on the player. */
-  @state() private playerStatus: PlayerStatus = {};
-
-  /**
-   * Item action menu: which item is selected and where it came from.
-   * `containerId` is set when the item is inside an opened nested
-   * container (e.g. a Bag inside the pack); doDrop / doUnequip / etc.
-   * use it to find the right container to remove the item from.
-   */
-
-  /** Right-click property popup — see help topic 027. */
-
-  /**
-   * IDs of *nested* containers (sub-containers inside the pack) that
-   * the player has explicitly opened.  Default state is closed; nested
-   * containers are visible only when in this set.
-   *
-   * Help topic 027: containers can be opened in-place to view contents.
-   * Required because pre-filled packs spawn on the floor and gelatinous
-   * globs scoop ground items into piles, so the player ends up with
-   * packs-inside-packs that need to be unloaded.
-   */
-
-  /**
-   * IDs of equipped containers (the player's pack) that have been
-   * explicitly closed.  Equipped packs default to *open* (always visible)
-   * so this set rarely has entries; tracking is needed only so that
-   * "Close container" hides the pack pane and stays hidden across
-   * re-renders.
-   */
-
-  /** Spell targeting mode: spell selected, waiting for direction input. */
   @state() private castingSpell: string | null = null;
-
-  /** Disarm mode: player pressed D, waiting for a tile click to attempt disarm. */
   @state() private disarmMode = false;
-
-  /** Pending spell learning: character leveled up and can pick a new spell. */
   @state() private pendingSpellLearn = false;
-
-  /** Player is dead — game over. */
   @state() private dead: { killedBy: string } | null = null;
-
-  /** Currently-displayed combat effect (ranged attack / spell projectile). */
-  @state() private combatEffect: CombatEffect | null = null;
-  /** Queue of effects waiting to be displayed one-by-one. */
-  private readonly effectQueue: CombatEffect[] = [];
-  /** Handle for the effect-display timer so it can be cancelled. */
-  private effectTimer: ReturnType<typeof setTimeout> | null = null;
-  /**
-   * When true, effects are suppressed (rest / sleep loops process many turns
-   * automatically and generating a new overlay for each would be distracting).
-   */
-  private inRestLoop = false;
-
-  /** Pending sell confirmation — click item once to select, again to confirm. */
-
-  /** Map overview mode — zoomed out to show entire level. */
   @state() private mapMode = false;
+  @state() private combatEffect: CombatEffect | null = null;
 
-  /** Up to 10 spell IDs pinned to the quick-cast bar (null = empty slot). */
-  @state() private quickSpells: (string | null)[] = [null, null, null, null, null, null, null, null, null, null];
+  private readonly effectQueue: CombatEffect[] = [];
+  private effectTimer: ReturnType<typeof setTimeout> | null = null;
+  private inRestLoop = false;
+  private saveFileHandle: FileSystemFileHandle | null = null;
 
-  /** Which slot (0-9) is being reassigned in the customize overlay. */
-  @state() private customizingSlot: number | null = null;
+  // ── Lifecycle ───────────────────────────────────────────────────────────────
 
-  /** Counter used to generate unique monster instance IDs. */
-  /** Non-reactive drag state — manipulate CSS classes directly for performance. */
-  private farmNarrativeShown = false;
-  private parchmentRead = false;
-  private hamletDestroyed = false;
-  private storyLog: string[] = [];
+  override connectedCallback(): void {
+    super.connectedCallback();
+    void initLogging();
 
-  /** Shop inventories, keyed by shop name. Generated on first visit. */
-  private shopStates = new Map<string, ShopState>();
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('new')) {
+      url.searchParams.delete('new');
+      window.history.replaceState({}, '', url.toString());
+      const character = loadCharacter();
+      if (!character) { window.location.href = '/'; return; }
+      this.session = new GameSession({ character: CharacterModel.fromJSON(character) });
+      this.sync();
+      return;
+    }
 
-  /** Generated dungeon floors for the current stage, keyed by level number. */
-  private world = new WorldModel(VILLAGE_MAP, { ...VILLAGE_MAP.entryPosition });
+    const state = loadGameState();
+    if (state) {
+      this.session = GameSession.fromState(state);
+      this.migratePackLimits(this.session.character);
+      this.sync();
+      return;
+    }
 
-  /** Current dungeon level within the current stage (0 = not in dungeon). */
-  private get currentDungeonLevel(): number { return this.world.currentDungeonLevel; }
-  private set currentDungeonLevel(v: number) { this.world.currentDungeonLevel = v; }
+    const character = loadCharacter();
+    if (!character) { window.location.href = '/'; return; }
+    this.session = new GameSession({ character: CharacterModel.fromJSON(character) });
+    this.sync();
+  }
 
-  /** Which of the three dungeon stages the player is currently in. */
-  private get currentStage(): GameStage { return this.world.currentStage; }
-  private set currentStage(v: GameStage) { this.world.currentStage = v; }
+  /** Migrate stale pack slot limits from older saves. */
+  private migratePackLimits(character: CharacterModel): void {
+    const pack = character.pack;
+    if (!pack?.slots) return;
+    const spec = PACK_SPECS.find((s) => s.name === pack.name);
+    if (!spec) return;
+    for (const slot of pack.slots) {
+      if (slot.maxWeight !== undefined) slot.maxWeight = spec.maxPayloadWeight;
+      if (slot.maxBulk !== undefined) slot.maxBulk = spec.maxPayloadBulk;
+    }
+  }
 
-  /** Convenience: sync reactive state from world after a transition. */
-  private syncFromWorld(): void {
-    this.map = this.world.map;
-    this.pos = { ...this.world.pos };
-    this.monsters = this.world.monsters;
+  override firstUpdated(): void {
+    this.shadowRoot?.querySelector<HTMLElement>('.layout')?.focus();
+  }
+
+  // ── Session sync + event replay ──────────────────────────────────────────────
+
+  /** Copy session state into the render mirrors and request a re-render. */
+  private sync(): void {
+    const s = this.session;
+    this.character = s.character;
+    // Shallow-clone the map each sync so <dungeon-map>'s property dirty-check
+    // always refreshes (tiles are shared, so mutations remain visible).
+    this.map = { ...s.map };
+    this.pos = { ...s.pos };
+    this.monsters = s.monsters;
+    this.playerStatus = s.playerStatus;
     this.requestUpdate();
   }
 
-
-  /** Set player position and reveal surrounding tiles. */
-
-
-  private moveTo(x: number, y: number): void {
-    this.pos = { x, y };
-    // Fog of war: only reveal in dungeons (village/farm-map are fully visible)
-    if (this.currentDungeonLevel > 0) {
-      // revealAround handles room reveal internally when player is in a room
-      revealAround(this.map, x, y);
+  /** Replay the events from a session action into the view. */
+  private applyEvents(result: ActionResult, opts?: { suppressEffects?: boolean }): void {
+    for (const e of result.events) {
+      switch (e.kind) {
+        case 'message': this.pushMessage(e.text); break;
+        case 'effect': if (!opts?.suppressEffects && !this.inRestLoop) this.queueEffect(e.effect); break;
+        case 'death': this.dead = { killedBy: e.killedBy }; break;
+        case 'narrative': this.showNarrative(e.text); break;
+        case 'story': break; // story log is recorded inside the session
+        case 'level-up': this.pendingSpellLearn = e.canLearnSpell; break;
+        case 'map-changed': break; // sync() reclones the map anyway
+        case 'location': this.locationName = e.name; break;
+        case 'open-overlay': this.openOverlayFromEvent(e.overlay); break;
+        case 'request-save': this.autoSave(); break;
+      }
     }
+    this.sync();
+    this.runEffectQueue();
+  }
+
+  private openOverlayFromEvent(kind: Overlay): void {
+    if (kind === 'building') {
+      this.activeBuilding = this.session.activeBuildingAt(this.pos);
+      this.overlay = 'building';
+    } else {
+      this.overlay = kind;
+    }
+  }
+
+  private pushMessage(text: string): void {
+    this.messages = [
+      ...this.messages.map((m) => ({ ...m, fresh: false })).slice(-9),
+      { text, fresh: true },
+    ];
+  }
+
+  private showNarrative(text: string): void {
+    this.narrativeScrolled = false;
+    this.narrative = text;
   }
 
   private toggleOverlay(which: Overlay): void {
     this.overlay = this.overlay === which ? 'none' : which;
   }
 
-  private buildGameState(): GameState | null {
-    if (!this.character) return null;
-    // Save current floor's monsters back
-    if (this.currentDungeonLevel > 0) {
-      const floor = this.world.dungeonFloors.get(this.currentDungeonLevel);
-      if (floor) floor.monsters = this.monsters;
-    }
-    return {
-      character: this.character.toJSON(),
-      mapId: this.map.id,
-      pos: { ...this.pos },
-      currentStage: this.currentStage,
-      currentDungeonLevel: this.currentDungeonLevel,
-      playerStatus: { ...this.playerStatus },
-      monsters: this.monsters,
-      dungeonFloors: Array.from(this.world.dungeonFloors.entries()).map(([level, floor]) => ({ level, floor })),
-      farmNarrativeShown: this.farmNarrativeShown,
-      parchmentRead: this.parchmentRead,
-      hamletDestroyed: this.hamletDestroyed,
-      storyLog: this.storyLog,
-      quickSpells: [...this.quickSpells],
-      savedAt: new Date().toISOString(),
-    };
-  }
-
   private autoSave(): void {
-    const state = this.buildGameState();
-    if (state) saveGameState(state);
+    if (this.session) saveGameState(this.session.toState());
   }
 
-  /** File handle for save-in-place (File System Access API). */
-  private saveFileHandle: FileSystemFileHandle | null = null;
+  // ── Save / Load (DOM + file pickers stay in the view) ────────────────────────
 
   private async manualSave(): Promise<void> {
-    const state = this.buildGameState();
-    if (!state) return;
+    const state = this.session.toState();
     saveGameState(state);
     const data = JSON.stringify(state, null, 2);
-
     if ('showSaveFilePicker' in window) {
       try {
         if (!this.saveFileHandle) {
@@ -284,12 +215,9 @@ export class GameWorld extends LitElement {
         await writable.close();
         this.pushMessage('Game saved.');
       } catch (e) {
-        if ((e as Error).name !== 'AbortError') {
-          this.pushMessage('Save failed.');
-        }
+        if ((e as Error).name !== 'AbortError') this.pushMessage('Save failed.');
       }
     } else {
-      // Fallback: download
       downloadSave(state);
       this.pushMessage('Game saved.');
     }
@@ -311,12 +239,9 @@ export class GameWorld extends LitElement {
         this.saveFileHandle = handle;
         window.location.reload();
       } catch (e) {
-        if ((e as Error).name !== 'AbortError') {
-          this.pushMessage('Load failed.');
-        }
+        if ((e as Error).name !== 'AbortError') this.pushMessage('Load failed.');
       }
     } else {
-      // Fallback: use a hidden file input (works in Tauri webview and all browsers)
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = '.json,.yaml,.yml';
@@ -329,631 +254,28 @@ export class GameWorld extends LitElement {
           if (!state.character) { this.pushMessage('Invalid save file.'); return; }
           saveGameState(state as GameState);
           window.location.reload();
-        } catch {
-          this.pushMessage('Load failed.');
-        }
+        } catch { this.pushMessage('Load failed.'); }
       };
       input.click();
     }
   }
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-    void initLogging();
+  // ── Combat effect playback (DOM timing — stays in the view) ──────────────────
 
-    // Check if this is a fresh new game (from character creation)
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('new')) {
-      // Remove the param so refresh doesn't re-trigger
-      url.searchParams.delete('new');
-      window.history.replaceState({}, '', url.toString());
-      // Load only the character, ignore any stale game state
-      const character = loadCharacter();
-      if (!character) { window.location.href = '/'; return; }
-      this.character = CharacterModel.fromJSON(character);
-      this.world.dungeonFloors.clear();
-      return;
-    }
-
-    // Try loading full game state first, fall back to character-only
-    const state = loadGameState();
-    if (state) {
-      this.character = CharacterModel.fromJSON(state.character);
-      // Migrate stale pack slot limits from older saves
-      if (this.character.pack?.slots) {
-        const pack = this.character.pack;
-        const spec = PACK_SPECS.find((s) => s.name === pack.name);
-        if (spec && pack.slots) {
-          for (const slot of pack.slots) {
-            if (slot.maxWeight !== undefined) slot.maxWeight = spec.maxPayloadWeight;
-            if (slot.maxBulk !== undefined) slot.maxBulk = spec.maxPayloadBulk;
-          }
-        }
-      }
-      this.pos = state.pos;
-      this.currentStage = state.currentStage;
-      this.currentDungeonLevel = state.currentDungeonLevel;
-      this.playerStatus = state.playerStatus;
-      this.monsters = state.monsters;
-      this.farmNarrativeShown = state.farmNarrativeShown;
-      this.parchmentRead = state.parchmentRead || false;
-      this.hamletDestroyed = state.hamletDestroyed || false;
-      this.storyLog = Array.isArray(state.storyLog) ? state.storyLog : [];
-      this.quickSpells = Array.isArray(state.quickSpells) ? [...state.quickSpells] as (string | null)[] : [null, null, null, null, null, null, null, null, null, null];
-      // Restore dungeon floors
-      for (const { level, floor } of state.dungeonFloors) {
-        this.world.dungeonFloors.set(level, floor);
-      }
-      // Restore the correct map
-      if (state.currentDungeonLevel > 0) {
-        const floor = this.world.dungeonFloors.get(state.currentDungeonLevel);
-        if (floor) this.map = floor.map;
-      } else {
-        const staticMap = ALL_MAPS[state.mapId as keyof typeof ALL_MAPS];
-        if (staticMap) this.map = staticMap;
-      }
-      // Reveal around current position
-      if (state.currentDungeonLevel > 0) {
-        revealAround(this.map, state.pos.x, state.pos.y);
-      }
-      // Re-apply hamlet destruction and phase-two unlock if already triggered
-      if (this.hamletDestroyed) { destroyHamlet(); openPhaseTwo(); }
-      return;
-    }
-    const character = loadCharacter();
-    if (!character) {
-      window.location.href = '/';
-      return;
-    }
-    this.character = CharacterModel.fromJSON(character);
-  }
-
-  override firstUpdated(): void {
-    this.shadowRoot?.querySelector<HTMLElement>('.layout')?.focus();
-  }
-
-  override updated(): void {
-    // After render, check if narrative content fits without scrolling
-    if (this.narrative !== null && !this.narrativeScrolled) {
-      const el = this.shadowRoot?.querySelector('.narrative-scroll');
-      if (el && el.scrollHeight <= el.clientHeight) {
-        this.narrativeScrolled = true;
-      }
-    }
-  }
-
-  // ── Input ─────────────────────────────────────────────────────────────────
-
-  private readonly onKeyDown = (e: KeyboardEvent): void => {
-    // Prevent backspace from acting as browser "back" navigation
-    if (e.key === 'Backspace') {
-      e.preventDefault();
-      return;
-    }
-
-    // Dead — no actions allowed
-    if (this.dead) {
-      e.preventDefault();
-      return;
-    }
-
-    // Narrative overlay — any confirm key dismisses it (must scroll to bottom first)
-    if (this.narrative !== null) {
-      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
-        e.preventDefault();
-        if (this.narrativeScrolled) this.narrative = null;
-      }
-      return;
-    }
-
-    // F1 toggles the game menu
-    if (e.key === 'F1') {
-      e.preventDefault();
-      this.toggleOverlay('game-menu');
-      return;
-    }
-
-    // Game menu open — letter shortcuts execute directly, no mouse needed
-    if (this.overlay === 'game-menu') {
-      e.preventDefault();
-      const menuActions: Record<string, () => void> = {
-        g: () => this.pickupGround(),   G: () => this.pickupGround(),
-        s: () => this.doSearch(),       S: () => this.doSearch(),
-        r: () => this.doRest(),         R: () => this.doRest(),
-        z: () => this.doSleep(),        Z: () => this.doSleep(),
-        m: () => { this.mapMode = !this.mapMode; },
-        M: () => { this.mapMode = !this.mapMode; },
-        i: () => this.toggleOverlay('inventory'),
-        I: () => this.toggleOverlay('inventory'),
-        p: () => this.toggleOverlay('spells'),
-        P: () => this.toggleOverlay('spells'),
-        '<': () => this.useStairs('up'),   ',': () => this.useStairs('up'),
-        '>': () => this.useStairs('down'), '.': () => this.useStairs('down'),
-        '?': () => this.toggleOverlay('story'),
-      };
-      const fn = menuActions[e.key];
-      if (fn) {
-        this.overlay = 'none';
-        fn();
-      } else if (e.key === 'Escape' || e.key === 'Enter') {
-        this.overlay = 'none';
-      }
-      return;
-    }
-
-    // Other overlays
-    if (this.overlay !== 'none') {
-      if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        this.overlay = 'none';
-        this.activeBuilding = null;
-      }
-      return;
-    }
-
-    // Toggle overlays  (use I for inventory, P for powers/spells, ? for story)
-    if (e.key === 'i' || e.key === 'I') {
-      e.preventDefault();
-      this.toggleOverlay('inventory');
-      return;
-    }
-    if (e.key === 'p' || e.key === 'P') {
-      e.preventDefault();
-      this.toggleOverlay('spells');
-      return;
-    }
-    if (e.key === '?') {
-      e.preventDefault();
-      this.toggleOverlay('story');
-      return;
-    }
-    if ((e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      void this.manualSave();
-      return;
-    }
-    if ((e.key === 'l' || e.key === 'L') && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      void this.manualLoad();
-      return;
-    }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      this.castingSpell = null;
-      this.disarmMode = false;
-      return;
-    }
-
-    // Disarm mode: any non-escape key cancels
-    if (this.disarmMode) {
-      e.preventDefault();
-      this.disarmMode = false;
-      this.pushMessage('Disarm cancelled.');
-      return;
-    }
-
-    // Spell targeting mode: directional keys fire the spell
-    if (this.castingSpell) {
-      const delta = KEY_TO_DELTA[e.key];
-      if (delta) {
-        e.preventDefault();
-        this.fireDirectionalSpell(this.castingSpell, delta.dx, delta.dy);
-        this.castingSpell = null;
-      }
-      return;
-    }
-
-    if (e.key === 'g' || e.key === 'G') {
-      e.preventDefault();
-      this.pickupGround();
-      return;
-    }
-    if (e.key === 'f' || e.key === 'F') {
-      e.preventDefault();
-      this.toggleOverlay('inventory');  // Free Hand command
-      return;
-    }
-    if (e.key === 's') {
-      e.preventDefault();
-      this.doSearch();
-      return;
-    }
-    if (e.key === 'm' || e.key === 'M') {
-      e.preventDefault();
-      this.mapMode = !this.mapMode;
-      return;
-    }
-    if (e.key === 'r' && !e.shiftKey) {
-      e.preventDefault();
-      this.doRest();
-      return;
-    }
-    if ((e.key === 'R' && e.shiftKey) || e.key === 'z' || e.key === 'Z') {
-      e.preventDefault();
-      this.doSleep();
-      return;
-    }
-    if (e.key === '>' || e.key === '.') {
-      e.preventDefault();
-      this.useStairs('down');
-      return;
-    }
-    if (e.key === '<' || e.key === ',') {
-      e.preventDefault();
-      this.useStairs('up');
-      return;
-    }
-    if ((e.key === 'd' || e.key === 'D') && this.currentDungeonLevel > 0) {
-      e.preventDefault();
-      this.disarmMode = true;
-      this.pushMessage('Disarm — click an adjacent trap (Esc to cancel).');
-      return;
-    }
-
-    const delta = KEY_TO_DELTA[e.key];
-    if (delta) {
-      e.preventDefault();
-      if (e.shiftKey) {
-        this.runInDirection(delta.dx, delta.dy);
-      } else {
-        this.tryMove(delta.dx, delta.dy);
-      }
-    }
-  };
-
-  // ── Movement ──────────────────────────────────────────────────────────────
-
-  private tryMove(dx: number, dy: number): void {
-    const nx = this.pos.x + dx;
-    const ny = this.pos.y + dy;
-
-    // Check if a monster occupies the destination → melee attack
-    const targetMonster = this.monsters.find((m) => m.x === nx && m.y === ny);
-    if (targetMonster) {
-      this.playerAttacks(targetMonster);
-      this.runMonsterTurns();
-      return;
-    }
-
-    const exit = exitAt(this.map, nx, ny);
-    if (exit) {
-      this.triggerExit(exit);
-      return;
-    }
-
-    if (!isWalkable(this.map, nx, ny)) {
-      // Open a building only when the player is standing on the specific road
-      // tile in front of it and moves toward the wall — directional entry.
-      const currentTile = getTileAt(this.map, this.pos.x, this.pos.y);
-      if (currentTile.building) {
-        this.activeBuilding = currentTile.building;
-        this.overlay = 'building';
-        this.locationName = currentTile.building.name;
-        return;
-      }
-      // If a monster is diagonally adjacent (but not in this exact direction),
-      // tell the player so they're not left guessing.
-      const diagMonster = this.monsters.find((m) => {
-        const mdx = m.x - this.pos.x;
-        const mdy = m.y - this.pos.y;
-        return Math.abs(mdx) <= 1 && Math.abs(mdy) <= 1 && mdx !== 0 && mdy !== 0 && m.hp > 0;
-      });
-      if (diagMonster) {
-        const spec = monsterById(diagMonster.specId);
-        const name = spec?.name ?? 'monster';
-        const mdx = diagMonster.x - this.pos.x;
-        const mdy = diagMonster.y - this.pos.y;
-        const dir = monsterDirectionLabel(-mdx, -mdy);
-        const key = diagonalKeyHint(-mdx, -mdy);
-        this.pushMessage(`A ${name} lurks to the ${dir} — press ${key} to attack.`);
-      }
-      return;
-    }
-
-    this.moveTo(nx, ny);
-
-    // Check for traps
-    const tile = getTileAt(this.map, nx, ny);
-    if (tile.trap && !tile.trap.triggered) {
-      this.triggerTrap(tile);
-      if (this.character?.isDead) return;
-    }
-
-    // Notify about ground items
-    if (tile.items.length > 0) {
-      if (tile.items.length === 1) {
-        const groundItem = tile.items[0];
-        this.pushMessage(`You see ${groundItem ? displayName(groundItem) : 'an item'} on the ground. (G to pick up)`);
-      } else {
-        this.pushMessage(`You see ${tile.items.length} items on the ground. (G to pick up)`);
-      }
-    }
-
-    if (tile.feature === 'well') {
-      this.locationName = 'Village Well';
-      this.pushMessage('You pause by the village well. The water looks clean.');
-      this.runMonsterTurns();
-      return;
-    }
-
-    // Notify about stairs (but don't auto-trigger — use < or > keys)
-    if (tile.feature === 'stairs-down') {
-      this.pushMessage('You see stairs leading down. (> to descend)');
-    }
-    if (tile.feature === 'stairs-up') {
-      this.pushMessage('You see stairs leading up. (< to ascend)');
-    }
-
-    this.locationName = '';
-
-    this.runMonsterTurns();
-  }
-
-  private runInDirection(dx: number, dy: number): void {
-    for (let i = 0; i < 50; i++) {
-      const nx = this.pos.x + dx;
-      const ny = this.pos.y + dy;
-      // Stop if monster blocks the destination tile
-      if (this.monsters.some((m) => m.x === nx && m.y === ny)) break;
-      if (!isWalkable(this.map, nx, ny)) break;
-      if (exitAt(this.map, nx, ny)) break;
-      this.moveTo(nx, ny);
-      // Stop if items on ground
-      const tile = getTileAt(this.map, nx, ny);
-      if (tile.items.length > 0) break;
-      // Ranged monsters can interrupt the run if they have LOS
-      const interrupted = this.monsters.some((m) => {
-        const spec = monsterById(m.specId);
-        if (!spec?.specials) return false;
-        const hasRanged = spec.specials.some((s) => s.startsWith('ranged_') || s === 'breath_fire');
-        if (!hasRanged) return false;
-        return hasLineOfSight(this.map, m.x, m.y, this.pos.x, this.pos.y);
-      });
-      if (interrupted) {
-        this.pushMessage('A ranged attack interrupts your run!');
-        break;
-      }
-    }
-    this.runMonsterTurns();
-  }
-
-  private triggerExit(exit: MapExit): void {
-    if (exit.narrative !== undefined && exit.targetMap === undefined) {
-      if (!this.farmNarrativeShown) {
-        this.farmNarrativeShown = true;
-        this.showNarrative(exit.narrative);
-      } else {
-        this.pushMessage('There is nothing more to find in the ruins.');
-      }
-      return;
-    }
-    if (exit.targetMap !== undefined && exit.targetPosition !== undefined) {
-      if (exit.message) this.pushMessage(exit.message);
-      this.enterMap(exit.targetMap, exit.targetPosition);
-    }
-  }
-
-  private enterMap(id: MapId, position: Vec2): void {
-    // Generated dungeon floor: mine-N, fortress-N, castle-N, or legacy dungeon-N
-    const dungeonMatch = (id as string).match(/^(mine|fortress|castle|dungeon)-(\d+)$/);
-    if (dungeonMatch) {
-      const stageStr = dungeonMatch[1] ?? 'mine';
-      const level = parseInt(dungeonMatch[2] ?? '1', 10);
-      // Map legacy 'dungeon' prefix to mine stage; clear floors when stage changes
-      const newStage: GameStage = stageStr === 'dungeon' ? 'mine' : stageStr as GameStage;
-      if (newStage !== this.currentStage) {
-        this.world.dungeonFloors.clear();
-        this.currentStage = newStage;
-      }
-      // Don't use the exit's targetPosition for generated dungeons —
-      // the generator places stairs-up at the correct spawn point.
-      this.enterDungeonFloor(level);
-      return;
-    }
-    const staticMap = ALL_MAPS[id];
-    if (staticMap) {
-      this.map = staticMap;
-      this.moveTo(position.x, position.y);
-      this.monsters = [];
-      this.currentDungeonLevel = 0;
-      // New visit: reset shop prices and inventories
-      if (id === 'village') {
-        if (this.parchmentRead && !this.hamletDestroyed) {
-          this.hamletDestroyed = true;
-          destroyHamlet();
-          openPhaseTwo();
-          this.showNarrative(HAMLET_DESTROYED_NARRATIVE);
-        } else if (this.hamletDestroyed) {
-          this.pushMessage('The hamlet lies in ruins. There is nothing left for you here.');
-        }
-        resetVisitPrices();
-        this.shopStates.clear();
-      }
-    }
-    this.locationName = '';
-    this.overlay = 'none';
-    this.activeBuilding = null;
-    logger.info(`Entering map: ${id}`);
-  }
-
-  private enterDungeonFloor(level: number, position?: Vec2): void {
-    this.world.enterDungeonFloor(level, position);
-    this.syncFromWorld();
-    const stageLabel = this.currentStage === 'mine' ? 'Mine'
-      : this.currentStage === 'fortress' ? 'Fortress'
-      : 'Castle';
-    this.locationName = `${stageLabel} — Floor ${level}`;
-    this.overlay = 'none';
-    this.activeBuilding = null;
-    this.pushMessage(`You are on floor ${level} of the ${this.currentStage}.`);
-  }
-
-  private useStairs(direction: 'up' | 'down'): void {
-    if (direction === 'down') {
-      this.descendStairs();
-    } else {
-      this.ascendStairs();
-    }
-  }
-
-  /** Get a dungeon floor, generating it if this is the first visit. */
-  private ensureFloor(level: number): DungeonFloor {
-    return this.world.ensureFloor(level);
-  }
-
-  private descendStairs(): void {
-    this.world.pos = { ...this.pos };
-    this.world.map = this.map;
-    this.world.monsters = this.monsters; // sync before transition
-    const result = this.world.descend();
-    if (!result.success) {
-      this.pushMessage(result.message);
-      return;
-    }
-    this.pushMessage('You descend deeper…');
-    this.syncFromWorld();
-    const stageLabel = this.currentStage === 'mine' ? 'Mine'
-      : this.currentStage === 'fortress' ? 'Fortress'
-      : 'Castle';
-    this.locationName = `${stageLabel} — Floor ${this.currentDungeonLevel}`;
-    this.overlay = 'none';
-    this.activeBuilding = null;
-  }
-
-  private ascendStairs(): void {
-    this.world.pos = { ...this.pos };
-    this.world.map = this.map;
-    this.world.monsters = this.monsters; // sync before transition
-    const result = this.world.ascend();
-    if (!result.success) {
-      this.pushMessage(result.message);
-      return;
-    }
-    if (result.exitToSurface) {
-      this.pushMessage('You emerge from the mine into daylight.');
-      this.enterMap('farm-map', { x: 24, y: 2 });
-      // Nudge appears after map transition so it's the top message in the log
-      if (!this.parchmentRead) {
-        const allItems: Item[] = [
-          ...(this.character?.pack?.slots?.flatMap((s) => s.items) ?? []),
-          ...(this.character?.belt?.slots?.flatMap((s) => s.items) ?? []),
-          ...(this.character?.freeHand ? [this.character.freeHand] : []),
-        ];
-        if (allItems.some((it) => it.name === 'Scrap of Parchment')) {
-          this.pushMessage('As you step into the daylight, you feel a strange urge to examine the scrap of parchment you found in the mine. (Use… menu)');
-        }
-      }
-      return;
-    }
-    this.pushMessage('You ascend the stairs…');
-    this.syncFromWorld();
-    const stageLabel = this.currentStage === 'mine' ? 'Mine'
-      : this.currentStage === 'fortress' ? 'Fortress'
-      : 'Castle';
-    this.locationName = `${stageLabel} — Floor ${this.currentDungeonLevel}`;
-    this.overlay = 'none';
-    this.activeBuilding = null;
-  }
-
-  // ── Combat helpers ────────────────────────────────────────────────────────
-
-  /** Sum of AC from all worn equipment. */
-  private get playerAC(): number {
-    const c = this.character;
-    if (!c) return 0;
-    let ac = 0;
-    const catalogFor = (item: Item | null, specs: typeof ALL_EQUIPMENT_SPECS) => {
-      if (!item) return;
-      const spec = specs.find((s) => s.name === item.name);
-      if (spec) ac += Math.max(0, spec.ac + item.enchantment);
-    };
-    catalogFor(c.armor,     ARMOR_SPECS);
-    catalogFor(c.shield,    SHIELD_SPECS);
-    catalogFor(c.helm,      HELMET_SPECS);
-    catalogFor(c.gauntlets, GAUNTLET_SPECS);
-    catalogFor(c.bracers,   BRACER_SPECS);
-    return ac;
-  }
-
-  /** Player attacks a specific monster instance. */
-  private playerAttacks(target: MonsterInstance): void {
-    const c = this.character;
-    if (!c) return;
-    const spec = monsterById(target.specId);
-    if (!spec) return;
-
-    const carriedSlots = [
-      c.weapon, c.freeHand, c.armor, c.helm, c.shield, c.boots, c.cloak,
-      c.bracers, c.gauntlets, c.ringLeft, c.ringRight, c.amulet, c.belt, c.purse, c.pack,
-    ];
-    const totalCarryWeightGrams = carriedSlots.reduce(
-      (sum, slot) => sum + (slot ? reportedUnitWeight(slot) : 0), 0,
-    );
-    const result = playerMeleeAttack(c, c.weapon, spec, this.playerStatus, {
-      difficulty: difficultyToInt(c.difficulty),
-      equipmentAC: this.playerAC,
-    }, totalCarryWeightGrams);
-    this.pushMessage(result.message);
-
-    if (!result.dodged && result.damage > 0) {
-      const newHp = target.hp - result.damage;
-      if (newHp <= 0) {
-        this.pushMessage(`You defeat the ${spec.name}!`);
-        c.addExperience(spec.xp);
-        this.checkLevelUp();
-        this.autoSave();
-        this.monsters = this.monsters.filter((m) => m.instanceId !== target.instanceId);
-        // Drop loot on the monster's tile
-        const loot = rollMonsterLoot(spec, 1); // TODO: use actual dungeon level
-        for (const item of loot) {
-          dropItem(this.map, target.x, target.y, item);
-        }
-        if (loot.length > 0) {
-          const firstLoot = loot[0];
-          this.pushMessage(`The ${spec.name} drops ${loot.length === 1 && firstLoot ? displayName(firstLoot) : `${loot.length} items`}.`);
-        }
-      } else {
-        const desc = healthDescription(newHp, target.maxHp);
-        this.pushMessage(`The ${spec.name} is ${desc}.`);
-        this.monsters = this.monsters.map((m) =>
-          m.instanceId === target.instanceId ? { ...m, hp: newHp } : m,
-        );
-      }
-    }
-  }
-
-  // ── Combat effect display ─────────────────────────────────────────────────
-
-  /**
-   * Enqueue a combat effect to display after the current action resolves.
-   * Silently dropped during rest/sleep loops to prevent visual spam.
-   * Queue is capped at 4 entries so rest-adjacent combat doesn't linger.
-   */
   private queueEffect(effect: CombatEffect): void {
     if (this.inRestLoop) return;
     if (this.effectQueue.length < 4) this.effectQueue.push(effect);
   }
 
-  /**
-   * Start sequential playback of the effect queue (if not already running).
-   * Each effect shows for ~380 ms, then a brief null state ensures the DOM
-   * element is removed and recreated before the next (which restarts the
-   * CSS fade-out animation cleanly).
-   */
   private runEffectQueue(): void {
-    if (this.effectTimer !== null) return;  // already playing
+    if (this.effectTimer !== null) return;
     this.stepEffect();
   }
 
   private stepEffect(): void {
     this.effectTimer = null;
-    if (this.effectQueue.length === 0) {
-      this.combatEffect = null;
-      return;
-    }
-    const next = this.effectQueue.shift()!;
-    // Clear first — two rAF cycles let Lit remove the old DOM element so the
-    // animation restarts cleanly when the new element appears.
+    const next = this.effectQueue.shift();
+    if (!next) { this.combatEffect = null; return; }
     this.combatEffect = null;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -963,192 +285,216 @@ export class GameWorld extends LitElement {
     });
   }
 
-  /** Run all monsters' turns after the player acts. */
-  private runMonsterTurns(): void {
-    const c = this.character;
-    if (!c || this.map.id === 'village' || this.map.id === 'farm-map') return;
+  // ── Input ─────────────────────────────────────────────────────────────────
 
-    const updatedMonsters = [...this.monsters];
-    let updatedStatus = { ...this.playerStatus };
-    let charChanged = false;
-    // Per-turn swarm counter: increments by 10 each time a monster attempts
-    // a melee attack this turn.  Resets here at the start of the player's
-    // monster phase.  Mirrors `DAT_0x4D28` in the EXE
-    // (REPORT_PHASE10_COMBAT.md §3).
-    let swarmCounter = 0;
+  private readonly onKeyDown = (e: KeyboardEvent): void => {
+    if (e.key === 'Backspace') { e.preventDefault(); return; }
+    if (this.dead) { e.preventDefault(); return; }
 
-    for (let i = 0; i < updatedMonsters.length; i++) {
-      const m = updatedMonsters[i];
-      if (!m) continue;
-      const spec = monsterById(m.specId);
-      if (!spec || m.hp <= 0) continue;
-
-      const dx0 = this.pos.x - m.x;
-      const dy0 = this.pos.y - m.y;
-      const dist = Math.abs(dx0) + Math.abs(dy0);
-
-      // Alert when player is within 10 tiles AND has line of sight
-      const canSeePlayer = dist <= 10 && hasLineOfSight(this.map, m.x, m.y, this.pos.x, this.pos.y);
-      const alerted = m.alerted || canSeePlayer;
-      if (alerted !== m.alerted) {
-        updatedMonsters[i] = { ...m, alerted };
+    if (this.narrative !== null) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
+        e.preventDefault();
+        if (this.narrativeScrolled) this.narrative = null;
       }
-
-      if (!alerted) {
-        // Unalerted monsters wander randomly (25% chance each turn)
-        if (Math.random() < 0.25) {
-          const dirs: [number, number][] = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
-          const shuffled = dirs.sort(() => Math.random() - 0.5);
-          for (const [wx, wy] of shuffled) {
-            const nx = m.x + wx, ny = m.y + wy;
-            const blocked = updatedMonsters.some((o, j) => j !== i && o.x === nx && o.y === ny);
-            if (!blocked && isWalkable(this.map, nx, ny)) {
-              updatedMonsters[i] = { ...m, x: nx, y: ny };
-              break;
-            }
-          }
-        }
-        continue;
-      }
-
-      // Adjacent to player → attack
-      if (dist === 1 || (Math.abs(dx0) <= 1 && Math.abs(dy0) <= 1 && dist <= 2)) {
-        const result = monsterMeleeAttack(spec, 0, c, updatedStatus, {
-          difficulty: difficultyToInt(c.difficulty),
-          equipmentAC: this.playerAC,
-          swarmCounter,
-        });
-        swarmCounter += 10;
-        const dir = monsterDirectionLabel(dx0, dy0);
-        const keyHint = diagonalKeyHint(dx0, dy0);
-        const dirSuffix = dir
-          ? keyHint
-            ? ` (from the ${dir} — press ${keyHint})`
-            : ` (from the ${dir})`
-          : '';
-        this.pushMessage(result.message + dirSuffix);
-
-        if (!result.dodged && result.damage > 0) {
-          c.takeDamage(result.damage);
-          charChanged = true;
-
-          // Check for death
-          if (c.isDead) {
-            this.dead = { killedBy: spec.name };
-            return;
-          }
-
-          // Special attack processing
-          if (result.specialTriggered === 'poison' && !updatedStatus.poisoned) {
-            updatedStatus = { ...updatedStatus, poisoned: true, poisonStrength: 1 };
-          } else if (result.specialTriggered) {
-            const drainResult = applyDrainAttack(result.specialTriggered, updatedStatus);
-            updatedStatus = drainResult.status;
-            if (drainResult.message) this.pushMessage(drainResult.message);
-          }
-        }
-        continue;
-      }
-
-      // Ranged attack: not adjacent, has LOS, and within the safe ceiling distance
-      const rangedSpecial = spec.specials?.find((s) => RANGED_SPECIALS.has(s));
-      if (rangedSpecial && canSeePlayer && dist <= RANGED_MAX_DIST) {
-        const result = monsterRangedAttack(spec, rangedSpecial, c, updatedStatus, {
-          difficulty: difficultyToInt(c.difficulty),
-          equipmentAC: this.playerAC,
-          swarmCounter,
-        });
-        swarmCounter += 10;
-        // Queue visual — projectile travels from monster (m.x, m.y) to player
-        const fx = makeMonsterRangedEffect(rangedSpecial, m.x, m.y, this.pos.x, this.pos.y);
-        if (fx) this.queueEffect(fx);
-        this.pushMessage(result.message);
-        if (!result.dodged && result.damage > 0) {
-          c.takeDamage(result.damage);
-          charChanged = true;
-          if (c.isDead) {
-            this.dead = { killedBy: spec.name };
-            return;
-          }
-          if (result.specialTriggered === 'poison' && !updatedStatus.poisoned) {
-            updatedStatus = { ...updatedStatus, poisoned: true, poisonStrength: 1 };
-          } else if (result.specialTriggered) {
-            const drainResult = applyDrainAttack(result.specialTriggered, updatedStatus);
-            updatedStatus = drainResult.status;
-            if (drainResult.message) this.pushMessage(drainResult.message);
-          }
-        }
-        continue; // fired ranged — don't also move this turn
-      }
-
-      // Move toward player
-      const stepX = dx0 === 0 ? 0 : dx0 > 0 ? 1 : -1;
-      const stepY = dy0 === 0 ? 0 : dy0 > 0 ? 1 : -1;
-
-      // Try diagonal, then cardinal directions
-      const moves: [number, number][] = [
-        [stepX, stepY],
-        [stepX, 0],
-        [0, stepY],
-      ];
-
-      for (const [mx, my] of moves) {
-        if (mx === 0 && my === 0) continue;
-        const nx = m.x + mx;
-        const ny = m.y + my;
-        const blocked = updatedMonsters.some(
-          (other, j) => j !== i && other.x === nx && other.y === ny,
-        );
-        if (!blocked && isWalkable(this.map, nx, ny)) {
-          updatedMonsters[i] = { ...m, x: nx, y: ny };
-          break;
-        }
-      }
+      return;
     }
 
-    // Poison tick
-    const poisonDmg = poisonTick(updatedStatus);
-    if (poisonDmg > 0) {
-      this.pushMessage(`Poison burns through you. (−${poisonDmg} HP)`);
-      c.takeDamage(poisonDmg);
-      charChanged = true;
+    if (e.key === 'F1') { e.preventDefault(); this.toggleOverlay('game-menu'); return; }
+
+    if (this.overlay === 'game-menu') {
+      e.preventDefault();
+      const menuActions: Record<string, () => void> = {
+        g: () => { this.doPickup(); }, G: () => { this.doPickup(); },
+        s: () => { this.doSearch(); }, S: () => { this.doSearch(); },
+        r: () => { this.doRest(); }, R: () => { this.doRest(); },
+        z: () => { this.doSleep(); }, Z: () => { this.doSleep(); },
+        m: () => { this.mapMode = !this.mapMode; }, M: () => { this.mapMode = !this.mapMode; },
+        i: () => { this.toggleOverlay('inventory'); }, I: () => { this.toggleOverlay('inventory'); },
+        p: () => { this.toggleOverlay('spells'); }, P: () => { this.toggleOverlay('spells'); },
+        '<': () => { this.doStairs('up'); }, ',': () => { this.doStairs('up'); },
+        '>': () => { this.doStairs('down'); }, '.': () => { this.doStairs('down'); },
+        '?': () => { this.toggleOverlay('story'); },
+      };
+      const fn = menuActions[e.key];
+      if (fn) { this.overlay = 'none'; fn(); }
+      else if (e.key === 'Escape' || e.key === 'Enter') { this.overlay = 'none'; }
+      return;
     }
 
-    this.monsters = updatedMonsters;
-    this.playerStatus = updatedStatus;
-    if (charChanged) {
-      this.autoSave();
+    if (this.overlay !== 'none') {
+      if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.overlay = 'none';
+        this.activeBuilding = null;
+      }
+      return;
     }
-    // Start playing any queued visual effects (non-blocking; safe to call every turn)
-    this.runEffectQueue();
+
+    if (e.key === 'i' || e.key === 'I') { e.preventDefault(); this.toggleOverlay('inventory'); return; }
+    if (e.key === 'p' || e.key === 'P') { e.preventDefault(); this.toggleOverlay('spells'); return; }
+    if (e.key === '?') { e.preventDefault(); this.toggleOverlay('story'); return; }
+    if ((e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void this.manualSave(); return; }
+    if ((e.key === 'l' || e.key === 'L') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void this.manualLoad(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); this.castingSpell = null; this.disarmMode = false; return; }
+
+    if (this.disarmMode) { e.preventDefault(); this.disarmMode = false; this.pushMessage('Disarm cancelled.'); return; }
+
+    if (this.castingSpell) {
+      const delta = KEY_TO_DELTA[e.key];
+      if (delta) {
+        e.preventDefault();
+        const spellId = this.castingSpell;
+        this.castingSpell = null;
+        this.applyEvents(this.session.castDirectional(spellId, delta.dx, delta.dy));
+      }
+      return;
+    }
+
+    if (e.key === 'g' || e.key === 'G') { e.preventDefault(); this.doPickup(); return; }
+    if (e.key === 'f' || e.key === 'F') { e.preventDefault(); this.toggleOverlay('inventory'); return; }
+    if (e.key === 's') { e.preventDefault(); this.doSearch(); return; }
+    if (e.key === 'm' || e.key === 'M') { e.preventDefault(); this.mapMode = !this.mapMode; return; }
+    if (e.key === 'r' && !e.shiftKey) { e.preventDefault(); this.doRest(); return; }
+    if ((e.key === 'R' && e.shiftKey) || e.key === 'z' || e.key === 'Z') { e.preventDefault(); this.doSleep(); return; }
+    if (e.key === '>' || e.key === '.') { e.preventDefault(); this.doStairs('down'); return; }
+    if (e.key === '<' || e.key === ',') { e.preventDefault(); this.doStairs('up'); return; }
+    if ((e.key === 'd' || e.key === 'D') && this.session.currentDungeonLevel > 0) {
+      e.preventDefault();
+      this.disarmMode = true;
+      this.pushMessage('Disarm — click an adjacent trap (Esc to cancel).');
+      return;
+    }
+
+    const delta = KEY_TO_DELTA[e.key];
+    if (delta) {
+      e.preventDefault();
+      if (e.shiftKey) this.applyEvents(this.session.runDirection(delta.dx, delta.dy));
+      else this.applyEvents(this.session.tryMove(delta.dx, delta.dy));
+    }
+  };
+
+  // ── Action dispatchers ────────────────────────────────────────────────────────
+
+  private doPickup(): void { this.applyEvents(this.session.pickup()); }
+  private doSearch(): void { this.applyEvents(this.session.search()); }
+  private doStairs(dir: 'up' | 'down'): void { this.applyEvents(this.session.useStairs(dir)); }
+
+  private doRest(): void {
+    this.inRestLoop = true;
+    this.applyEvents(this.session.rest(), { suppressEffects: true });
+    this.inRestLoop = false;
   }
 
-  private pushMessage(text: string): void {
-    this.messages = [
-      ...this.messages.map((m) => ({ ...m, fresh: false })).slice(-9),
-      { text, fresh: true },
-    ];
+  private doSleep(): void {
+    this.inRestLoop = true;
+    this.applyEvents(this.session.sleep(), { suppressEffects: true });
+    this.inRestLoop = false;
+  }
+
+  /** Begin casting a spell; enters targeting mode if the spell is directional. */
+  private beginCast(spellId: string): void {
+    this.overlay = 'none';
+    const intent = this.session.beginCast(spellId);
+    if (intent.needsDirection) {
+      this.castingSpell = spellId;
+      this.pushMessage('Choose a direction to cast… (arrow keys / numpad)');
+      this.requestUpdate();
+    } else {
+      this.applyEvents(intent.result);
+    }
+  }
+
+  private onContextAction(action: ContextAction): void {
+    this.overlay = 'none';
+    this.applyEvents(this.session.contextAction(action));
+  }
+
+  // ── Building / shop event handlers ────────────────────────────────────────────
+
+  private onShopBuy(e: CustomEvent<ShopBuyDetail>): void {
+    this.session.character = CharacterModel.fromJSON(e.detail.updatedCharacter);
+    const b = this.activeBuilding;
+    if (b) {
+      const stState = this.session.shopStates.get(b.name);
+      if (stState) this.session.shopStates.set(b.name, { ...stState, inventory: e.detail.updatedInventory });
+    }
+    this.autoSave();
+    this.sync();
+  }
+
+  private onShopSell(e: CustomEvent<ShopSellDetail>): void {
+    this.session.character = CharacterModel.fromJSON(e.detail.updatedCharacter);
+    this.pushMessage(e.detail.message);
+    this.autoSave();
+    this.sync();
+  }
+
+  private onBuildingAction(e: CustomEvent<BuildingActionDetail>): void {
+    const { message, soldItemId } = e.detail;
+    this.pushMessage(message);
+    if (soldItemId) {
+      const c = this.session.character;
+      if (c.pack) {
+        for (const slot of c.pack.slots ?? []) {
+          const idx = slot.items.findIndex((i) => i.id === soldItemId);
+          if (idx !== -1) { slot.items.splice(idx, 1); break; }
+        }
+      }
+      if (c.belt) {
+        for (const slot of c.belt.slots ?? []) {
+          const idx = slot.items.findIndex((i) => i.id === soldItemId);
+          if (idx !== -1) { slot.items.splice(idx, 1); break; }
+        }
+      }
+      const tile = getTileAt(this.session.map, this.pos.x, this.pos.y);
+      const gIdx = tile.items.findIndex((i) => i.id === soldItemId);
+      if (gIdx !== -1) tile.items.splice(gIdx, 1);
+    }
+    this.autoSave();
+    this.sync();
+  }
+
+  private onMenuAction(action: MenuAction): void {
+    switch (action) {
+      case 'save': void this.manualSave(); break;
+      case 'load': void this.manualLoad(); break;
+      case 'story': this.toggleOverlay('story'); break;
+      case 'inventory': this.toggleOverlay('inventory'); break;
+      case 'spells': this.toggleOverlay('spells'); break;
+      case 'map': this.mapMode = !this.mapMode; break;
+      case 'get': this.doPickup(); break;
+      case 'search': this.doSearch(); break;
+      case 'rest': this.doRest(); break;
+      case 'sleep': this.doSleep(); break;
+      case 'up': this.doStairs('up'); break;
+      case 'down': this.doStairs('down'); break;
+    }
+  }
+
+  private onLearnSpell(spellId: string): void {
+    const c = this.session.character;
+    if (!c.spells.includes(spellId)) c.spells.push(spellId);
+    this.pendingSpellLearn = false;
+    this.overlay = 'none';
+    const sp = c.spells.includes(spellId) ? spellId : '';
+    this.pushMessage(`You learn ${sp || spellId}!`);
+    this.autoSave();
+    this.sync();
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
-
 
   private renderBuildingOverlay(): TemplateResult {
     const b = this.activeBuilding;
     const c = this.character;
     if (!b || !c) return html``;
-
     const shop = SHOPS[b.name] ?? null;
     const close = () => { this.overlay = 'none'; this.activeBuilding = null; };
     const packItems: Item[] = c.pack?.slots?.flatMap((s) => s.items) ?? [];
-    const groundItems = getTileAt(this.map, this.pos.x, this.pos.y).items;
+    const groundItems = getTileAt(this.session.map, this.pos.x, this.pos.y).items;
 
-    // Trade shops → <shop-screen> component
     if (shop?.type === 'trade') {
-      if (!this.shopStates.has(b.name)) {
-        this.shopStates.set(b.name, makeShopState(shop));
-      }
-      const shopState = this.shopStates.get(b.name) ?? makeShopState(shop);
+      const shopState = this.session.shopStateFor(b.name);
       return html`<shop-screen
         .shopState=${shopState}
         .character=${c}
@@ -1158,7 +504,6 @@ export class GameWorld extends LitElement {
       ></shop-screen>`;
     }
 
-    // All other buildings (plain, sage, temple, bank, junkyard) → <building-overlay>
     return html`<building-overlay
       .building=${b}
       .character=${c}
@@ -1170,1132 +515,96 @@ export class GameWorld extends LitElement {
     ></building-overlay>`;
   }
 
-  // ── Building / shop event handlers ───────────────────────────────────────
-
-  /** shop-screen fired a successful purchase. */
-  private onShopBuy(e: CustomEvent<ShopBuyDetail>): void {
-    this.character = CharacterModel.fromJSON(e.detail.updatedCharacter);
-    const b = this.activeBuilding;
-    if (b) {
-      const state = this.shopStates.get(b.name);
-      if (state) this.shopStates.set(b.name, { ...state, inventory: e.detail.updatedInventory });
+  private renderOverlay(): TemplateResult | string {
+    if (this.dead) {
+      return html`<death-overlay
+        .character=${this.character}
+        .killedBy=${this.dead.killedBy}
+        @return-to-title=${() => { window.location.href = '/'; }}
+      ></death-overlay>`;
     }
-    this.autoSave();
-  }
-
-  /** shop-screen fired a successful sale. */
-  private onShopSell(e: CustomEvent<ShopSellDetail>): void {
-    this.character = CharacterModel.fromJSON(e.detail.updatedCharacter);
-    this.pushMessage(e.detail.message);
-    this.autoSave();
-  }
-
-  /**
-   * building-overlay completed a transaction (sage identify, temple heal/uncurse,
-   * bank deposit/withdraw, or junkyard sell).
-   * The character object has already been mutated in place by the mutable shop
-   * functions; we just need to push the message, remove any sold item from the
-   * world, and save.
-   */
-  private onBuildingAction(e: CustomEvent<BuildingActionDetail>): void {
-    const { message, soldItemId } = e.detail;
-    this.pushMessage(message);
-    if (soldItemId) {
-      // Remove the sold item from pack, belt, or ground tile
-      const c = this.character;
-      if (c?.pack) {
-        for (const slot of c.pack.slots ?? []) {
-          const idx = slot.items.findIndex((i) => i.id === soldItemId);
-          if (idx !== -1) { slot.items.splice(idx, 1); break; }
-        }
-      }
-      if (c?.belt) {
-        for (const slot of c.belt.slots ?? []) {
-          const idx = slot.items.findIndex((i) => i.id === soldItemId);
-          if (idx !== -1) { slot.items.splice(idx, 1); break; }
-        }
-      }
-      const tile = getTileAt(this.map, this.pos.x, this.pos.y);
-      const gIdx = tile.items.findIndex((i) => i.id === soldItemId);
-      if (gIdx !== -1) tile.items.splice(gIdx, 1);
+    if (this.narrative !== null) {
+      return html`<narrative-overlay
+        .text=${this.narrative}
+        .scrolled=${this.narrativeScrolled}
+        @scrolled-bottom=${() => { this.narrativeScrolled = true; }}
+        @dismiss=${() => { this.narrative = null; }}
+      ></narrative-overlay>`;
     }
-    this.autoSave();
-    this.requestUpdate();
-  }
-  /** Show a narrative overlay and record the segment in the story log. */
-  private showNarrative(text: string): void {
-    this.narrativeScrolled = false;
-    this.narrative = text;
-    // Find the segment ID by matching text and record it
-    const seg = Object.values(STORY_SEGMENTS).find((s) => s.text === text);
-    if (seg && !this.storyLog.includes(seg.id)) {
-      this.storyLog.push(seg.id);
+    switch (this.overlay) {
+      case 'building':
+        return this.renderBuildingOverlay();
+      case 'inventory':
+        return html`<div class="overlay" @click=${() => { this.overlay = 'none'; }}>
+          <player-inventory
+            .character=${this.character}
+            .groundItems=${getTileAt(this.session.map, this.pos.x, this.pos.y).items}
+            .map=${this.session.map}
+            .pos=${this.pos}
+            @inventory-changed=${() => { this.autoSave(); this.sync(); }}
+            @inventory-message=${(e: CustomEvent<string>) => { this.pushMessage(e.detail); }}
+          ></player-inventory>
+        </div>`;
+      case 'game-menu':
+        return html`<game-menu-overlay
+          @close=${() => { this.overlay = 'none'; }}
+          @menu-action=${(e: CustomEvent<{ action: MenuAction }>) => { this.onMenuAction(e.detail.action); }}
+        ></game-menu-overlay>`;
+      case 'spells':
+        return html`<spells-overlay
+          .character=${this.character}
+          @close=${() => { this.overlay = 'none'; }}
+          @cast-spell=${(e: CustomEvent<{ spellId: string }>) => { this.beginCast(e.detail.spellId); }}
+        ></spells-overlay>`;
+      case 'spell-learn':
+        return html`<spell-learn-overlay
+          .character=${this.character}
+          @close=${() => { this.pendingSpellLearn = false; this.overlay = 'none'; }}
+          @learn-spell=${(e: CustomEvent<{ spellId: string }>) => { this.onLearnSpell(e.detail.spellId); }}
+        ></spell-learn-overlay>`;
+      case 'story':
+        return html`<story-overlay
+          .storyLog=${this.session.storyLog}
+          @close=${() => { this.overlay = 'none'; }}
+        ></story-overlay>`;
+      case 'customize-spells':
+        return html`<customize-spells-overlay
+          .character=${this.character}
+          .quickSpells=${this.session.quickSpells}
+          @close=${() => { this.overlay = 'none'; }}
+          @quickspells-changed=${(e: CustomEvent<{ quickSpells: (string | null)[] }>) => {
+            this.session.quickSpells = e.detail.quickSpells;
+            this.autoSave();
+            this.requestUpdate();
+          }}
+        ></customize-spells-overlay>`;
+      default:
+        return '';
     }
-  }
-
-
-  // ── Spell casting ──────────────────────────────────────────────────────────
-
-  private checkLevelUp(): void {
-    if (!this.character) return;
-    while (this.character.canLevelUp) {
-      const { hpGain, mpGain } = this.character.levelUp();
-      this.pushMessage(`*** Level up! You are now level ${this.character.level}! ***`);
-      this.pushMessage(`HP: ${this.character.maxHitPoints} (+${hpGain})  Mana: ${this.character.maxMana} (+${mpGain})`);
-      // Check if new spells are available.  We use the EXE-derived
-      // per-character-level grant table from binary-data/spell-grants.ts
-      // (see REPORT_PHASE16 §3) rather than maxSpellLevelAt — the EXE's
-      // availability isn't strictly by spell-level tier but by a fixed
-      // per-spell threshold at char level 2/4/6/8/10.
-      const char = this.character;
-      const exeAvailable = spellIdsAvailableAtLevel(this.character.level);
-      const available = LEARNABLE_SPELLS.filter(
-        (s) => exeAvailable.has(s.id) && !char.spells.includes(s.id),
-      );
-      if (available.length > 0) {
-        this.pendingSpellLearn = true;
-        this.overlay = 'spell-learn';
-      }
-    }
-  }
-
-  private tryCastSpell(spellId: string): void {
-    const c = this.character;
-    if (!c) return;
-    this.overlay = 'none';
-
-    const kind = spellTargetKind(spellId);
-    if (kind === 'directional') {
-      this.castingSpell = spellId;
-      this.pushMessage('Choose a direction to cast… (arrow keys / numpad)');
-      return;
-    }
-    // Self-targeted: cast immediately
-    this.executeCast(spellId, {});
-  }
-
-  private fireDirectionalSpell(spellId: string, dx: number, dy: number): void {
-    // Trace a ray from player toward (dx, dy) using Bresenham's line algorithm.
-    // Supports arbitrary angles, not just 8 cardinal directions.
-    //
-    // Bolt spells stop at the first solid wall (line of fire).
-    // Ball spells arc over obstacles — walls never stop them; only a monster in
-    // the path (the detonation target) or the range limit ends the trace.
-    const isBall = isBallSpell(spellId);
-    let target: SpellTarget = { dx: Math.sign(dx), dy: Math.sign(dy) };
-    const px = this.pos.x;
-    const py = this.pos.y;
-
-    const adx = Math.abs(dx);
-    const ady = Math.abs(dy);
-    const sx = Math.sign(dx);
-    const sy = Math.sign(dy);
-    const steps = Math.max(adx, ady, 1);
-
-    // For a click-targeted ball spell (steps > 1) cap the loop at the exact
-    // clicked tile so the blast lands where the player aimed, not beyond it.
-    // For key-press targeting (steps === 1) the loop still runs 20 iterations
-    // so the spell travels its full range in the given direction.
-    const maxI = isBall && steps > 1 ? steps : 20;
-
-    // Track the last reachable tile for the visual effect even when no monster
-    // is hit (bolt hits a wall, ball reaches max range or aimed tile).
-    let effectTargetX = px + sx;
-    let effectTargetY = py + sy;
-
-    for (let i = 1; i <= maxI; i++) {
-      // Bresenham: project the i-th step along the line from (0,0) to (dx,dy)
-      const tx = px + Math.round((dx * i) / steps);
-      const ty = py + Math.round((dy * i) / steps);
-
-      // Don't re-check the player's tile
-      if (tx === px && ty === py) continue;
-
-      // Bolt spells stop at the first monster hit; ball spells arc past monsters
-      // and detonate at the aimed tile — creatures are caught by the area blast.
-      if (!isBall) {
-        const m = this.monsters.find((mon) => mon.x === tx && mon.y === ty);
-        if (m) {
-          const dist = Math.max(Math.abs(tx - px), Math.abs(ty - py));
-          target = { dx: sx, dy: sy, monster: m, distance: dist };
-          effectTargetX = tx;
-          effectTargetY = ty;
-          break;
-        }
-      }
-
-      // Both spell types stop at solid walls and closed doors
-      if (!isWalkable(this.map, tx, ty)) break;
-
-      effectTargetX = tx;
-      effectTargetY = ty;
-    }
-
-    // Ball spells always carry an explicit explosion tile so castAttack can
-    // compute the full 3×3 AOE even when nothing occupies the centre tile.
-    if (isBall) {
-      target = { ...target, explodeTile: { x: effectTargetX, y: effectTargetY } };
-    }
-
-    // Queue the visual before the spell resolves (effect travels from player to target)
-    const spellFx = makeSpellEffect(spellId, px, py, effectTargetX, effectTargetY);
-    if (spellFx) this.queueEffect(spellFx);
-
-    this.executeCast(spellId, target);
-  }
-
-  private executeCast(spellId: string, target: SpellTarget): void {
-    const c = this.character;
-    if (!c) return;
-
-    // Phase Door: teleport 5-10 tiles to a random walkable spot
-    if (spellId === 'phase_door') {
-      const spell = spellById(spellId);
-      if (!spell) return;
-      if (c.mana < spell.baseMana) { this.pushMessage('Not enough mana!'); return; }
-      c.spendMana(spell.baseMana);
-      // Try random directions to find a walkable landing spot
-      for (let attempt = 0; attempt < 50; attempt++) {
-        const angle = Math.random() * Math.PI * 2;
-        const dist = 5 + Math.floor(Math.random() * 6); // 5-10
-        const tx = this.pos.x + Math.round(Math.cos(angle) * dist);
-        const ty = this.pos.y + Math.round(Math.sin(angle) * dist);
-        if (isWalkable(this.map, tx, ty) && !this.monsters.some((m) => m.x === tx && m.y === ty)) {
-          this.moveTo(tx, ty);
-          this.pushMessage(`You cast ${spell.name}. You teleport!`);
-          this.autoSave();
-          this.runMonsterTurns();
-          this.requestUpdate();
-          return;
-        }
-      }
-      this.pushMessage(`You cast ${spell.name}. Nothing happens.`);
-      this.autoSave();
-      this.runMonsterTurns();
-      this.requestUpdate();
-      return;
-    }
-
-    // Teleport: random walkable tile at least 10 squares away
-    if (spellId === 'teleport') {
-      const spell = spellById(spellId);
-      if (!spell) return;
-      if (c.mana < spell.baseMana) { this.pushMessage('Not enough mana!'); return; }
-      c.spendMana(spell.baseMana);
-      for (let attempt = 0; attempt < 100; attempt++) {
-        const tx = Math.floor(Math.random() * this.map.width);
-        const ty = Math.floor(Math.random() * this.map.height);
-        const dist = Math.abs(tx - this.pos.x) + Math.abs(ty - this.pos.y);
-        if (dist >= 10 && isWalkable(this.map, tx, ty) && !this.monsters.some((m) => m.x === tx && m.y === ty)) {
-          this.moveTo(tx, ty);
-          this.pushMessage(`You cast ${spell.name}. You teleport far away!`);
-          this.autoSave();
-          this.runMonsterTurns();
-          this.requestUpdate();
-          return;
-        }
-      }
-      this.pushMessage(`You cast ${spell.name}. Nothing happens.`);
-      this.autoSave();
-      this.runMonsterTurns();
-      this.requestUpdate();
-      return;
-    }
-
-    // Rune of Return: surface ↔ deepest visited dungeon floor
-    if (spellId === 'rune_of_return') {
-      const spell = spellById(spellId);
-      if (!spell) return;
-      if (c.mana < spell.baseMana) { this.pushMessage('Not enough mana!'); return; }
-      c.spendMana(spell.baseMana);
-      if (this.currentDungeonLevel > 0) {
-        // In dungeon: return to surface
-        this.pushMessage(`You cast ${spell.name}. You are whisked to the surface!`);
-        this.enterMap('farm-map', { x: 24, y: 2 });
-      } else {
-        // On surface: go to deepest visited floor
-        const deepest = Math.max(0, ...this.world.dungeonFloors.keys());
-        if (deepest > 0) {
-          this.pushMessage(`You cast ${spell.name}. You return to the depths!`);
-          this.enterDungeonFloor(deepest);
-        } else {
-          this.pushMessage(`You cast ${spell.name}. You have nowhere to return to.`);
-        }
-      }
-      this.autoSave();
-      this.requestUpdate();
-      return;
-    }
-
-    const result = castSpell(c, spellId, target, this.monsters, this.playerStatus);
-    for (const msg of result.messages) this.pushMessage(msg);
-    // Apply mana change from spell engine
-    c.mana = result.character.mana;
-
-    if (result.monsterDamage) {
-      const { instanceId, damage } = result.monsterDamage;
-      const m = this.monsters.find((mon) => mon.instanceId === instanceId);
-      if (m) {
-        const newHp = m.hp - damage;
-        if (newHp <= 0) {
-          const spec = monsterById(m.specId);
-          if (spec) {
-            this.pushMessage(`You defeat the ${spec.name}!`);
-            c.addExperience(spec.xp);
-            this.checkLevelUp();
-            const loot = rollMonsterLoot(spec, 1);
-            for (const item of loot) dropItem(this.map, m.x, m.y, item);
-            if (loot.length > 0) {
-              const firstDrop = loot[0];
-              this.pushMessage(`The ${spec.name} drops ${loot.length === 1 && firstDrop ? displayName(firstDrop) : `${loot.length} items`}.`);
-            }
-          }
-          this.monsters = this.monsters.filter((mon) => mon.instanceId !== instanceId);
-        } else {
-          const spec = monsterById(m.specId);
-          if (spec) this.pushMessage(`The ${spec.name} is ${healthDescription(newHp, m.maxHp)}.`);
-          this.monsters = this.monsters.map((mon) =>
-            mon.instanceId === instanceId ? { ...mon, hp: newHp } : mon,
-          );
-        }
-      }
-    }
-
-    // AOE ball spell: apply damage to every monster in the blast radius.
-    // Monsters that die are removed in sequence; the damage messages were
-    // already pushed from the spell engine result above.
-    if (result.monsterDamages && result.monsterDamages.length > 0) {
-      let survivors = this.monsters;
-      for (const { instanceId, damage } of result.monsterDamages) {
-        const m = survivors.find((mon) => mon.instanceId === instanceId);
-        if (!m) continue;
-        const newHp = m.hp - damage;
-        if (newHp <= 0) {
-          const spec = monsterById(m.specId);
-          if (spec) {
-            this.pushMessage(`You defeat the ${spec.name}!`);
-            c.addExperience(spec.xp);
-            this.checkLevelUp();
-            const loot = rollMonsterLoot(spec, 1);
-            for (const item of loot) dropItem(this.map, m.x, m.y, item);
-            if (loot.length > 0) {
-              const firstDrop = loot[0];
-              this.pushMessage(`The ${spec.name} drops ${loot.length === 1 && firstDrop ? displayName(firstDrop) : `${loot.length} items`}.`);
-            }
-          }
-          survivors = survivors.filter((mon) => mon.instanceId !== instanceId);
-        } else {
-          survivors = survivors.map((mon) =>
-            mon.instanceId === instanceId ? { ...mon, hp: newHp } : mon,
-          );
-        }
-      }
-      this.monsters = survivors;
-    }
-
-    if (result.statusChanges) {
-      this.playerStatus = { ...this.playerStatus, ...result.statusChanges };
-    }
-
-    this.autoSave();
-    this.runMonsterTurns();
-  }
-
-  // ── Rest & Sleep ───────────────────────────────────────────────────────────
-
-  private doRest(): void {
-    const c = this.character;
-    if (!c) return;
-    if (c.hitPoints >= c.maxHitPoints) {
-      this.pushMessage('You are already fully healed.');
-      return;
-    }
-    // Rest: recover HP over multiple turns. Each turn has a chance of monster interrupt.
-    const turnsNeeded = Math.ceil((c.maxHitPoints - c.hitPoints) / 2);
-    let interrupted = false;
-    this.inRestLoop = true;
-    for (let t = 0; t < turnsNeeded; t++) {
-      // 5% chance per turn of being interrupted by a monster with line of sight
-      const nearby = this.monsters.some((m) =>
-        hasLineOfSight(this.map, this.pos.x, this.pos.y, m.x, m.y));
-      if (nearby && Math.random() < 0.05) {
-        interrupted = true;
-        this.pushMessage('Your rest is interrupted!');
-        break;
-      }
-      (this.character as CharacterModel).heal(2);
-      this.runMonsterTurns();
-      if (this.dead) return;
-    }
-    this.inRestLoop = false;
-    if (!interrupted) {
-      const ch = this.character as Character;
-      this.pushMessage(`You rest until healed. HP: ${ch.hitPoints}/${ch.maxHitPoints}`);
-    }
-    this.autoSave();
-    this.requestUpdate();
-  }
-
-  private doSleep(): void {
-    const c = this.character;
-    if (!c) return;
-    if (c.hitPoints >= c.maxHitPoints && c.mana >= c.maxMana) {
-      this.pushMessage('You are already fully restored.');
-      return;
-    }
-    // Sleep: recover HP and Mana. Takes longer, higher interrupt risk.
-    const hpNeeded = c.maxHitPoints - c.hitPoints;
-    const mpNeeded = c.maxMana - c.mana;
-    const turnsNeeded = Math.ceil(Math.max(hpNeeded / 2, mpNeeded));
-    let interrupted = false;
-    this.inRestLoop = true;
-    for (let t = 0; t < turnsNeeded; t++) {
-      // 10% chance per turn of interrupt by a monster with line of sight
-      const nearby = this.monsters.some((m) =>
-        hasLineOfSight(this.map, this.pos.x, this.pos.y, m.x, m.y));
-      if (nearby && Math.random() < 0.10) {
-        interrupted = true;
-        this.pushMessage('Your sleep is interrupted by a noise!');
-        break;
-      }
-      const cur = this.character as CharacterModel;
-      cur.heal(2);
-      cur.restoreMana(1);
-      // 10% chance per turn that sleep cures poison
-      if (this.playerStatus.poisoned && Math.random() < 0.10) {
-        this.playerStatus = { ...this.playerStatus, poisoned: false, poisonStrength: 0 };
-        this.pushMessage('The poison fades from your body as you sleep.');
-      }
-      this.runMonsterTurns();
-      if (this.dead) return;
-    }
-    this.inRestLoop = false;
-    if (!interrupted) {
-      const ch = this.character as Character;
-      this.pushMessage(`You sleep until restored. HP: ${ch.hitPoints}/${ch.maxHitPoints}, Mana: ${ch.mana}/${ch.maxMana}`);
-    }
-    this.autoSave();
-    this.requestUpdate();
-  }
-
-  private doSearch(): void {
-    let found = false;
-    let trapsFound = 0;
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const tile = getTileAt(this.map, this.pos.x + dx, this.pos.y + dy);
-        if (dx === 0 && dy === 0) {
-          // Check current tile for traps
-          if (tile.trap && !tile.trap.detected) {
-            tile.trap.detected = true;
-            found = true;
-            trapsFound++;
-          }
-          continue;
-        }
-        if (tile.feature === 'secret-door') {
-          tile.feature = 'door';
-          tile.walkable = true;
-          found = true;
-        }
-        if (tile.trap && !tile.trap.detected) {
-          tile.trap.detected = true;
-          found = true;
-          trapsFound++;
-        }
-      }
-    }
-    this.pushMessage(found ? 'You find something hidden!' : 'You search but find nothing.');
-
-    // Searching uses game time: advance one turn (monsters act, regen 1 HP).
-    const c = this.character;
-    if (c) {
-      c.heal(1);
-      if (trapsFound > 0) {
-        // Award XP for each disarmed trap; scales with difficulty (easy=1 … expert=4).
-        const xpPerTrap = difficultyToInt(c.difficulty) + 1;
-        c.addExperience(xpPerTrap * trapsFound);
-        this.checkLevelUp();
-      }
-    }
-    this.runMonsterTurns();
-
-    if (found) {
-      // Tile mutation doesn't change the map reference, so dungeon-map's
-      // @property dirty-check would skip a re-render. A shallow copy gives it
-      // a new reference while keeping all the mutated tile data intact.
-      this.map = { ...this.map };
-    }
-    this.requestUpdate();
-  }
-
-  private triggerTrap(tile: Tile): void {
-    const trap = tile.trap;
-    if (!trap || !this.character) return;
-    // DEX-based avoidance: higher DEX = better chance to avoid
-    const dex = this.character.stats.dexterity;
-    const avoidChance = Math.min(80, Math.max(5, (dex - 30) * 2));
-    if (Math.random() * 100 < avoidChance && trap.detected) {
-      this.pushMessage('You carefully step over a trap.');
-      return;  // trap stays armed — only an explicit disarm removes it permanently
-    }
-    trap.detected = true; // triggering reveals it
-    // Glyph traps are one-shot; everything else can fire again.
-    if (trap.kind === 'glyph') trap.triggered = true;
-    const damage = rollTrapDamage(trap.kind);
-    const trapName = trap.kind.replace(/([a-z])([A-Z])/g, '$1 $2');
-    if (trap.kind === 'teleport') {
-      this.pushMessage(`You trigger a teleport trap!`);
-      // Random teleport on current floor
-      for (let attempt = 0; attempt < 50; attempt++) {
-        const tx = Math.floor(Math.random() * this.map.width);
-        const ty = Math.floor(Math.random() * this.map.height);
-        if (isWalkable(this.map, tx, ty) && !this.monsters.some((m) => m.x === tx && m.y === ty)) {
-          this.moveTo(tx, ty);
-          break;
-        }
-      }
-    } else if (trap.kind === 'dart') {
-      this.pushMessage(`A poison dart hits you! (${damage} damage)`);
-      this.character.takeDamage(damage);
-      this.playerStatus = { ...this.playerStatus, poisoned: true, poisonStrength: 1 };
-    } else if (trap.kind === 'gas') {
-      this.pushMessage(`Poison gas fills the air! (${damage} damage)`);
-      this.character.takeDamage(damage);
-      this.playerStatus = { ...this.playerStatus, poisoned: true, poisonStrength: 2 };
-    } else {
-      this.pushMessage(`You trigger a ${trapName} trap! (${damage} damage)`);
-      this.character.takeDamage(damage);
-    }
-    if (this.character.isDead) {
-      this.dead = { killedBy: `${trapName} trap` };
-    }
-    // Force map re-render so the trap icon updates (disappears for one-shot glyphs,
-    // persists for everything else).
-    this.map = { ...this.map };
-    this.autoSave();
-    this.requestUpdate();
-  }
-
-  /**
-   * Attempt to disarm the trap at (tx, ty).
-   *
-   * Must be within Chebyshev distance 1.  Three outcomes, weighted by DEX:
-   *   • Success  — trap removed; XP awarded as for search-detection.
-   *   • Failure  — trap stays armed; nothing else happens.
-   *   • Fumble   — trap triggers on the player (same as stepping on it).
-   *
-   * Disarming uses one turn of game time regardless of outcome.
-   */
-  private doDisarm(tx: number, ty: number): void {
-    const c = this.character;
-    if (!c) return;
-
-    // Must be within reach (Chebyshev ≤ 1)
-    if (Math.max(Math.abs(tx - this.pos.x), Math.abs(ty - this.pos.y)) > 1) {
-      this.pushMessage('That tile is out of reach — must be adjacent.');
-      this.runMonsterTurns();
-      return;
-    }
-
-    const tile = getTileAt(this.map, tx, ty);
-    const trap = tile.trap;
-
-    if (!trap || trap.triggered) {
-      this.pushMessage('There is no trap there to disarm.');
-      this.runMonsterTurns();
-      return;
-    }
-
-    if (!trap.detected) {
-      // Undetected traps can still be targeted blind; auto-detect first but
-      // increase fumble risk (no prior knowledge).
-      trap.detected = true;
-    }
-
-    // DEX-based probabilities:
-    //   disarm  40–80 %   (rises with DEX)
-    //   fumble   5–25 %   (falls with DEX)
-    //   fail    remainder (nothing happens)
-    const dex = c.stats.dexterity;
-    const disarmChance = Math.min(80, Math.max(40, (dex - 30) * 0.8));
-    const fumbleChance = Math.min(25, Math.max(5,  (70 - dex) * 0.4));
-    const roll = Math.random() * 100;
-    const trapName = trap.kind.replace(/([a-z])([A-Z])/g, '$1 $2');
-
-    if (roll < disarmChance) {
-      // ── Success ───────────────────────────────────────────────────────────
-      trap.triggered = true;  // neutralised in place
-      this.map = { ...this.map }; // force re-render (trap icon disappears)
-      this.pushMessage(`You carefully disarm the ${trapName} trap.`);
-      const xp = difficultyToInt(c.difficulty) + 1;
-      c.addExperience(xp);
-      this.checkLevelUp();
-    } else if (roll < disarmChance + fumbleChance) {
-      // ── Fumble — trap fires ───────────────────────────────────────────────
-      this.pushMessage(`You fumble and trigger the ${trapName} trap!`);
-      this.triggerTrap(tile);
-      if (this.dead) return;
-    } else {
-      // ── Fail — nothing happens ────────────────────────────────────────────
-      this.pushMessage(`You fail to disarm the ${trapName} trap.`);
-    }
-
-    this.runMonsterTurns();
-    this.autoSave();
-    this.requestUpdate();
-  }
-
-  private pickupGround(): void {
-    const c = this.character;
-    if (!c) return;
-    const tile = getTileAt(this.map, this.pos.x, this.pos.y);
-    if (tile.items.length === 0) {
-      this.pushMessage('Nothing here to pick up.');
-      return;
-    }
-    const remaining: Item[] = [];
-    for (const item of tile.items) {
-      if (item.kind === 'coin' && item.coinKind && c.purse) {
-        // Coins go directly to purse
-        addCoins(c.purse, item.coinKind, item.quantity);
-        this.pushMessage(`Picked up ${item.quantity} ${item.coinKind} coins.`);
-      } else if (c.pack && addToContainer(c.pack, item)) {
-        this.pushMessage(`Picked up ${displayName(item)}.`);
-      } else {
-        remaining.push(item);
-        this.pushMessage(`Pack full — cannot pick up ${displayName(item)}.`);
-      }
-    }
-    tile.items.length = 0;
-    tile.items.push(...remaining);
-    this.autoSave();
-    this.requestUpdate();
-  }
-
-  private executeContextAction(action: ContextAction): void {
-    if (!this.character) return;
-    if (action.id === 'well-drink') {
-      this.pushMessage('You drink from the well. The water is refreshing.');
-      this.character.heal(5);
-      this.autoSave();
-      this.requestUpdate();
-      return;
-    }
-    if (action.item) {
-      const item = action.item;
-      if (item.name === 'Scrap of Parchment') {
-        // Remove from inventory — the parchment burns after reading
-        if (!this.character!.removeFromPack(item.id)) {
-          this.character!.removeFromBelt(item.id);
-        }
-        this.showNarrative(PARCHMENT_TEXT);
-        this.parchmentRead = true;
-        return;
-      }
-      if (item.kind === 'scroll') {
-        // Use scroll: cast the spell, consume the scroll
-        const spellId = item.charges ? item.name.replace('Scroll of ', '').toLowerCase().replace(/ /g, '_') : undefined;
-        if (spellId) {
-          if (!this.character.removeFromPack(item.id)) this.character.removeFromBelt(item.id);
-          this.pushMessage(`You read the ${displayName(item)}. It crumbles to dust.`);
-          this.tryCastSpell(spellId);
-        }
-        this.autoSave();
-        this.requestUpdate();
-        return;
-      }
-      if (item.kind === 'potion') {
-        // Use potion: apply effect, consume
-        if (!this.character.removeFromPack(item.id)) this.character.removeFromBelt(item.id);
-        const name = item.name.toLowerCase();
-        if (name.includes('healing') || name.includes('heal')) {
-          const healed = Math.min(20, this.character.maxHitPoints - this.character.hitPoints);
-          this.character.heal(healed);
-          this.pushMessage(`You drink the ${displayName(item)}. Restored ${healed} HP.`);
-        } else if (name.includes('neutralize poison')) {
-          this.playerStatus = { ...this.playerStatus, poisoned: false, poisonStrength: 0 };
-          this.pushMessage(`You drink the ${displayName(item)}. The poison fades.`);
-        } else if (name.includes('water')) {
-          this.pushMessage(`You drink the ${displayName(item)}. It's just water.`);
-        } else {
-          this.pushMessage(`You drink the ${displayName(item)}.`);
-        }
-        this.autoSave();
-        this.requestUpdate();
-        return;
-      }
-    }
-  }
-
-
-  private renderSpellsOverlay(): TemplateResult {
-    const c = this.character;
-    if (!c) return html``;
-    const known = c.spells;
-
-    return html`
-      <div class="overlay" @click=${() => { this.overlay = 'none'; }}>
-        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
-          <p class="overlay-title">Spells Known</p>
-          <div class="divider"></div>
-
-          ${known.length === 0
-            ? html`<div class="inv-empty">No spells learned.</div>`
-            : known.map((id) => {
-                const sp = spellById(id);
-                if (!sp) return html``;
-                const canCast = c.mana >= sp.baseMana;
-                return html`
-                  <div class="spell-row ${canCast ? 'castable' : 'no-mana'}" @click=${canCast ? () => { this.tryCastSpell(sp.id); } : undefined} style="${canCast ? 'cursor:pointer' : 'opacity:0.5'}">
-                    <span class="spell-row-name">${sp.name}</span>
-                    <span class="spell-row-cost">${sp.baseMana} mp</span>
-                  </div>
-                `;
-              })}
-
-          <span
-            class="overlay-close"
-            @click=${() => { this.overlay = 'none'; }}
-          >[ P / Esc to close ]</span>
-        </div>
-      </div>
-    `;
-  }
-
-
-  private renderSpellLearnOverlay(): TemplateResult {
-    const c = this.character;
-    if (!c) return html``;
-    const exeAvailable = spellIdsAvailableAtLevel(c.level);
-    const available = LEARNABLE_SPELLS.filter(
-      (s) => exeAvailable.has(s.id) && !c.spells.includes(s.id),
-    );
-    if (available.length === 0) {
-      this.pendingSpellLearn = false;
-      this.overlay = 'none';
-      return html``;
-    }
-    return html`
-      <div class="overlay">
-        <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
-          <p class="overlay-title">Level ${c.level}! Choose a new spell:</p>
-          <div class="divider"></div>
-          ${available.map((sp) => html`
-            <div class="spell-row castable" style="cursor:pointer" @click=${() => {
-              c.spells.push(sp.id);
-              this.pendingSpellLearn = false;
-              this.overlay = 'none';
-              this.pushMessage(`You learn ${sp.name}!`);
-              this.autoSave();
-              this.requestUpdate();
-            }}>
-              <span class="spell-row-name">${sp.name}</span>
-              <span class="spell-row-cost">${sp.baseMana} mp</span>
-            </div>
-          `)}
-        </div>
-      </div>
-    `;
-  }
-
-  private renderDeathOverlay(): TemplateResult {
-    const c = this.character;
-    const d = this.dead;
-    if (!c || !d) return html``;
-    const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    return html`
-      <div class="overlay" style="background:var(--game-overlay-panel)">
-        <div style="
-          display:flex;flex-direction:column;align-items:center;gap:1rem;
-          padding:2rem 3rem;
-          border:2px solid var(--game-border-strong);
-          background:var(--game-bg-base);
-          max-width:360px;
-          text-align:center;
-          font-family:'Courier New',monospace;
-          color:var(--game-text-body);
-        ">
-          <div style="font-size:2rem;color:var(--game-text-muted)">⚰</div>
-          <div style="font-size:1.4rem;color:var(--game-text-accent);letter-spacing:0.15em">REST IN PEACE</div>
-          <div style="width:100%;height:1px;background:var(--game-bg-raised)"></div>
-          <div style="font-size:1.1rem;color:var(--game-text-bright)">${c.name}</div>
-          <div style="font-size:0.8rem;color:var(--game-text-muted)">Level ${c.level} Adventurer</div>
-          <div style="font-size:0.75rem;color:var(--game-status-danger);margin-top:0.5rem">
-            Slain by ${d.killedBy}
-          </div>
-          <div style="font-size:0.7rem;color:var(--game-text-muted)">${date}</div>
-          <div style="width:100%;height:1px;background:var(--game-bg-raised);margin-top:0.5rem"></div>
-          <button style="
-            background:transparent;border:1px solid var(--game-border-strong);color:var(--game-text-body);
-            font-family:inherit;font-size:0.8rem;padding:0.5rem 1.5rem;
-            cursor:pointer;letter-spacing:0.1em;
-          " @click=${() => { window.location.href = '/'; }}>
-            Return to Title
-          </button>
-        </div>
-      </div>
-    `;
-  }
-
-  private renderNarrativeOverlay(): TemplateResult {
-    if (this.narrative === null) return html``;
-    const dismiss = () => { if (this.narrativeScrolled) this.narrative = null; };
-    const onScroll = (e: Event) => {
-      const el = e.target as HTMLElement;
-      this.narrativeScrolled = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
-    };
-    return html`
-      <div class="overlay" @click=${dismiss}>
-        <div class="narrative-scroll" @click=${(e: Event) => { e.stopPropagation(); }}
-             @scroll=${onScroll}>
-          <p class="overlay-text">${this.narrative}</p>
-          <span class="overlay-close ${this.narrativeScrolled ? '' : 'disabled'}"
-                @click=${dismiss}>
-            ${this.narrativeScrolled
-              ? '[ Enter / Space to continue ]'
-              : '↓ Scroll to continue ↓'}
-          </span>
-        </div>
-      </div>
-    `;
-  }
-
-  private renderStoryOverlay(): TemplateResult {
-    const close = () => { this.overlay = 'none'; };
-    const segments = this.storyLog
-      .map((id) => STORY_SEGMENTS[id])
-      .filter((s): s is NonNullable<typeof s> => s !== undefined);
-    return html`
-      <div class="overlay" @click=${close}>
-        <div class="narrative-scroll" @click=${(e: Event) => { e.stopPropagation(); }}>
-          <p class="overlay-title">Review Story</p>
-          ${segments.length === 0
-            ? html`<p class="overlay-text" style="color:var(--game-text-muted)">No story events yet.</p>`
-            : segments.map((seg) => html`
-              <div class="story-entry">
-                <p class="overlay-subtitle">${seg.title}</p>
-                <p class="overlay-text">${seg.text}</p>
-              </div>
-            `)}
-          <span class="overlay-close" @click=${close}>[ Esc to close ]</span>
-        </div>
-      </div>
-    `;
-  }
-
-  private renderStatusEffects(): TemplateResult {
-    const s = this.playerStatus;
-    const effects: Array<{ label: string; color: string }> = [];
-    if (s.poisoned)       effects.push({ label: 'Poisoned',       color: 'var(--game-effect-poison)' });
-    if (s.shielded)       effects.push({ label: 'Shielded',       color: 'var(--game-effect-shield)' });
-    if (s.levitating)     effects.push({ label: 'Levitating',     color: 'var(--game-effect-levitate)' });
-    if (s.detectMonsters) effects.push({ label: 'Detect Monsters',color: 'var(--game-effect-detect)' });
-    if (s.detectObjects)  effects.push({ label: 'Detect Objects', color: 'var(--game-effect-detect)' });
-    if (s.detectTraps)    effects.push({ label: 'Detect Traps',   color: 'var(--game-effect-detect)' });
-    if ((s.resistFire ?? 0) > 0)      effects.push({ label: `Resist Fire ×${s.resistFire}`,      color: 'var(--game-effect-fire)' });
-    if ((s.resistCold ?? 0) > 0)      effects.push({ label: `Resist Cold ×${s.resistCold}`,      color: 'var(--game-effect-cold)' });
-    if ((s.resistLightning ?? 0) > 0) effects.push({ label: `Resist Lightning ×${s.resistLightning}`, color: 'var(--game-effect-lightning)' });
-    if ((s.drainedStr ?? 0) > 0)  effects.push({ label: `STR drained −${s.drainedStr}`, color: 'var(--game-status-danger)' });
-    if ((s.drainedDex ?? 0) > 0)  effects.push({ label: `DEX drained −${s.drainedDex}`, color: 'var(--game-status-danger)' });
-    if ((s.drainedCon ?? 0) > 0)  effects.push({ label: `CON drained −${s.drainedCon}`, color: 'var(--game-effect-drain)' });
-    if ((s.drainedInt ?? 0) > 0)  effects.push({ label: `INT drained −${s.drainedInt}`, color: 'var(--game-effect-drain)' });
-    if ((s.drainedMana ?? 0) > 0) effects.push({ label: `Mana drained −${s.drainedMana}`, color: 'var(--game-effect-mana-drain)' });
-    if ((s.drainedMaxHp ?? 0) > 0) effects.push({ label: `Max HP drained −${s.drainedMaxHp}`, color: 'var(--game-effect-drain)' });
-    if (effects.length === 0) return html``;
-    return html`
-      <div class="divider"></div>
-      <div class="stat-block">
-        <span class="stat-label">Status</span>
-        ${effects.map((e) => html`
-          <span class="stat-value" style="color:${e.color};font-size:0.68rem">${e.label}</span>
-        `)}
-      </div>
-    `;
-  }
-
-  private renderGameMenu(): TemplateResult {
-    const close = () => { this.overlay = 'none'; };
-    const act = (fn: () => void) => () => { close(); fn(); };
-    const item = (label: string, key: string, fn: () => void) => html`
-      <div class="menu-item" @click=${act(fn)}>
-        <span>${label}</span>
-        ${key ? html`<span class="menu-item-key">${key}</span>` : ''}
-      </div>`;
-    return html`
-      <div class="overlay" @click=${close}>
-        <div class="overlay-box game-menu-box" @click=${(e: Event) => { e.stopPropagation(); }}>
-          <p class="overlay-title">Menu</p>
-          <div class="divider"></div>
-
-          <div class="menu-section">
-            <div class="menu-section-title">Game</div>
-            ${item('Save Game',     '',  () => { this.manualSave(); })}
-            ${item('Load Game…',   '',  () => { this.manualLoad(); })}
-            ${item('Review Story', '?', () => { this.toggleOverlay('story'); })}
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="menu-section">
-            <div class="menu-section-title">Character</div>
-            ${item('Inventory',          'I', () => { this.toggleOverlay('inventory'); })}
-            ${item('Spells &amp; Quickbar', 'P', () => { this.toggleOverlay('spells'); })}
-            ${item('Map View',           'M', () => { this.mapMode = !this.mapMode; })}
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="menu-section">
-            <div class="menu-section-title">Actions</div>
-            ${item('Get Items',               'G', () => { this.pickupGround(); })}
-            ${item('Search',                  'S', () => { this.doSearch(); })}
-            ${item('Rest Until Healed',       'R', () => { this.doRest(); })}
-            ${item('Sleep Until Restored',    'Z', () => { this.doSleep(); })}
-            ${item('Climb Up Stairs',         '<', () => { this.useStairs('up'); })}
-            ${item('Climb Down Stairs',       '>', () => { this.useStairs('down'); })}
-          </div>
-
-          <span class="overlay-close" @click=${close}>[ Esc to close ]</span>
-        </div>
-      </div>
-    `;
-  }
-
-  private renderSpellBar(): TemplateResult {
-    const c = this.character;
-    if (!c) return html``;
-    return html`
-      <div class="spell-bar">
-        <div class="spell-bar-actions">
-          <button class="spell-bar-btn ${this.overlay === 'game-menu' ? 'active' : ''}"
-            @click=${() => { this.toggleOverlay('game-menu'); }} title="Game menu">☰ Menu</button>
-          <button class="spell-bar-btn" @click=${() => { this.pickupGround(); }}>Get</button>
-          <button class="spell-bar-btn" @click=${() => { this.doRest(); }}>Rest</button>
-          <button class="spell-bar-btn ${this.overlay === 'inventory' ? 'active' : ''}" @click=${() => { this.toggleOverlay('inventory'); }}>Inventory</button>
-          <button class="spell-bar-btn ${this.overlay === 'spells' ? 'active' : ''}" @click=${() => { this.toggleOverlay('spells'); }}>Spells</button>
-          ${this.character ? (() => {
-            const actions = gatherContextActions(this.character!, this.map, this.pos);
-            if (actions.length === 0) return '';
-            return html`
-              <div class="verbs-wrap">
-                <button class="spell-bar-btn ${this.overlay === 'verbs' ? 'active' : ''}"
-                  @click=${() => { this.toggleOverlay('verbs'); }}>Use…</button>
-                ${this.overlay === 'verbs' ? html`
-                  <div class="verbs-menu">
-                    ${actions.map((a) => html`
-                      <button class="verbs-item" @click=${() => {
-                        this.overlay = 'none';
-                        this.executeContextAction(a);
-                      }}>${a.label}</button>
-                    `)}
-                  </div>` : ''}
-              </div>`;
-          })() : ''}
-        </div>
-        <div class="spell-slots">
-          ${this.quickSpells.map((spellId, i) => {
-            if (!spellId) {
-              return html`<div class="spell-slot" title="Slot ${i + 1} — empty (right-click to customize)">
-                <span class="spell-slot-num">${i + 1}</span>
-              </div>`;
-            }
-            const sp = spellById(spellId);
-            if (!sp) return html`<div class="spell-slot"><span class="spell-slot-num">${i + 1}</span></div>`;
-            const canCast = c.mana >= sp.baseMana;
-            return html`<div
-              class="spell-slot ${canCast ? 'castable' : 'no-mana'}"
-              title="${sp.name} (${sp.baseMana} mp)${canCast ? '' : ' — not enough mana'}"
-              @click=${canCast ? () => { this.tryCastSpell(sp.id); } : undefined}
-            >
-              <span class="spell-slot-num">${i + 1}</span>
-              <span class="spell-slot-name">${sp.name}</span>
-              <span class="spell-slot-cost">${sp.baseMana}mp</span>
-            </div>`;
-          })}
-        </div>
-        <button
-          class="spell-bar-btn"
-          title="Customize spell bar"
-          @click=${() => { this.customizingSlot = null; this.overlay = 'customize-spells'; }}
-        >⚙ Customize</button>
-      </div>
-    `;
-  }
-
-  private renderCustomizeSpellsOverlay(): TemplateResult {
-    const c = this.character;
-    if (!c) return html``;
-    const close = () => { this.overlay = 'none'; this.customizingSlot = null; };
-    return html`
-      <div class="overlay" @click=${close}>
-        <div class="overlay-box" style="min-width:340px" @click=${(e: Event) => { e.stopPropagation(); }}>
-          <p class="overlay-title">Customize Spell Bar</p>
-          <div class="divider"></div>
-          <p style="font-size:0.68rem;color:var(--game-text-secondary);margin:0 0 0.5rem">
-            Click a slot, then click a spell to assign it. Click a slot again to clear it.
-          </p>
-
-          <div style="display:flex;gap:1rem">
-            <!-- Slots column -->
-            <div style="display:flex;flex-direction:column;gap:3px;min-width:140px">
-              <span style="font-size:0.6rem;color:var(--game-text-muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2px">Slots</span>
-              ${this.quickSpells.map((spellId, i) => {
-                const sp = spellId ? spellById(spellId) : null;
-                const isSelected = this.customizingSlot === i;
-                return html`<div
-                  class="spell-row castable"
-                  style="cursor:pointer;${isSelected ? 'background:var(--game-bg-elevated);border-color:var(--game-border-accent);' : ''}"
-                  @click=${() => {
-                    if (this.customizingSlot === i) {
-                      // Second click on same slot = clear it
-                      this.quickSpells = this.quickSpells.map((s, j) => j === i ? null : s);
-                      this.customizingSlot = null;
-                      this.autoSave();
-                    } else {
-                      this.customizingSlot = i;
-                    }
-                  }}
-                >
-                  <span class="spell-row-name" style="min-width:1.2rem;color:var(--game-text-muted)">${i + 1}.</span>
-                  <span class="spell-row-name">${sp ? sp.name : '—'}</span>
-                  ${isSelected ? html`<span style="font-size:0.58rem;color:var(--game-text-bright);margin-left:auto">← pick</span>` : ''}
-                </div>`;
-              })}
-            </div>
-
-            <!-- Known spells column -->
-            <div style="display:flex;flex-direction:column;gap:3px;flex:1">
-              <span style="font-size:0.6rem;color:var(--game-text-muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2px">Known Spells</span>
-              ${c.spells.length === 0
-                ? html`<div class="inv-empty">No spells learned.</div>`
-                : c.spells.map((id) => {
-                    const sp = spellById(id);
-                    if (!sp) return html``;
-                    const alreadySlotted = this.quickSpells.indexOf(id);
-                    return html`<div
-                      class="spell-row ${this.customizingSlot !== null ? 'castable' : ''}"
-                      style="${this.customizingSlot !== null ? 'cursor:pointer' : ''}"
-                      @click=${this.customizingSlot !== null ? () => {
-                        const slot = this.customizingSlot;
-                        if (slot === null) return;
-                        this.quickSpells = this.quickSpells.map((s, j) => j === slot ? id : s);
-                        this.customizingSlot = null;
-                        this.autoSave();
-                      } : undefined}
-                    >
-                      <span class="spell-row-name">${sp.name}</span>
-                      <span class="spell-row-cost" style="${alreadySlotted >= 0 ? 'color:var(--game-border-accent)' : ''}">${alreadySlotted >= 0 ? `slot ${alreadySlotted + 1}` : `${sp.baseMana} mp`}</span>
-                    </div>`;
-                  })}
-            </div>
-          </div>
-
-          <span class="overlay-close" @click=${close}>[ Esc to close ]</span>
-        </div>
-      </div>
-    `;
-  }
-
-  private renderSidebar(): TemplateResult {
-    const c = this.character;
-    if (!c) return html``;
-    const hpPct = Math.round((c.hitPoints / c.maxHitPoints) * 100);
-    const hpClass = hpPct <= 20 ? 'crit' : hpPct <= 40 ? 'low' : '';
-    const mpPct = c.maxMana > 0 ? Math.round((c.mana / c.maxMana) * 100) : 0;
-    const mapLabels: Record<string, string> = {
-      village: 'Village',
-      'farm-map': 'Countryside',
-    };
-    const stageNames: Record<GameStage, string> = { mine: 'Mine', fortress: 'Fortress', castle: 'Castle' };
-    const mapLabel = mapLabels[this.map.id] ?? (this.currentDungeonLevel > 0
-      ? `${stageNames[this.currentStage]} — Floor ${this.currentDungeonLevel}`
-      : this.map.id);
-    const known = c.spells;
-
-    return html`
-      <aside class="sidebar">
-        <div class="stat-block">
-          <span class="stat-label">${c.name}</span>
-          <span class="stat-value">Lv ${c.level} · ${c.difficulty}</span>
-        </div>
-
-        <div class="stat-block">
-          <span class="stat-label">${mapLabel}</span>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="stat-block">
-          <span class="stat-label">Hit Points</span>
-          <span class="stat-value">${c.hitPoints} / ${c.maxHitPoints}</span>
-          <div class="bar-track">
-            <div class="bar-fill ${hpClass}" style="width:${hpPct}%"></div>
-          </div>
-        </div>
-
-        <div class="stat-block">
-          <span class="stat-label">Mana</span>
-          <span class="stat-value">${c.mana} / ${c.maxMana}</span>
-          <div class="bar-track">
-            <div class="bar-fill mana" style="width:${mpPct}%"></div>
-          </div>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="stat-block">
-          <span class="stat-label">Attributes</span>
-          <div class="attrs-grid">
-            <span class="stat-value">STR ${c.stats.strength}</span>
-            <span class="stat-value">INT ${c.stats.intelligence}</span>
-            <span class="stat-value">CON ${c.stats.constitution}</span>
-            <span class="stat-value">DEX ${c.stats.dexterity}</span>
-          </div>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="stat-block">
-          <span class="stat-label">Spells (${known.length})</span>
-          <div class="spell-list">
-            ${known.map((id) => {
-              const sp = spellById(id);
-              return sp ? html`
-                <div class="spell-entry">
-                  <span class="spell-entry-name">${sp.name}</span>
-                  <span class="spell-cost">${sp.baseMana}mp</span>
-                </div>
-              ` : html``;
-            })}
-          </div>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="stat-block">
-          <span class="stat-label">Experience</span>
-          <span class="stat-value">${c.experience} / ${xpForLevel(c.level + 1, c.difficulty)} xp</span>
-        </div>
-
-        ${this.renderStatusEffects()}
-
-        <div class="divider"></div>
-
-        <div class="msg-log">
-          ${this.messages.map((m) => html`
-            <div class="msg ${m.fresh ? 'fresh' : ''}">${m.text}</div>
-          `)}
-        </div>
-      </aside>
-    `;
   }
 
   override render(): TemplateResult {
-    if (!this.character) return html``;
+    const c = this.character;
+    if (!c || !this.map) return html``;
+    const contextActions = gatherContextActions(c, this.session.map, this.pos);
     return html`
       <div class="layout" tabindex="0" @keydown=${this.onKeyDown}>
-        ${this.renderSpellBar()}
+        <spell-bar
+          .character=${c}
+          .quickSpells=${this.session.quickSpells}
+          .activeOverlay=${this.overlay}
+          .verbsOpen=${this.overlay === 'verbs'}
+          .contextActions=${contextActions}
+          @menu-toggle=${() => { this.toggleOverlay('game-menu'); }}
+          @pickup=${() => { this.doPickup(); }}
+          @rest=${() => { this.doRest(); }}
+          @open-inventory=${() => { this.toggleOverlay('inventory'); }}
+          @open-spells=${() => { this.toggleOverlay('spells'); }}
+          @toggle-verbs=${() => { this.toggleOverlay('verbs'); }}
+          @open-customize=${() => { this.overlay = 'customize-spells'; }}
+          @cast-spell=${(e: CustomEvent<{ spellId: string }>) => { this.beginCast(e.detail.spellId); }}
+          @context-action=${(e: CustomEvent<{ action: ContextAction }>) => { this.onContextAction(e.detail.action); }}
+        ></spell-bar>
         <div class="game-row">
           <div class="map-panel">
             <dungeon-map
@@ -2304,22 +613,22 @@ export class GameWorld extends LitElement {
               .monsters=${this.monsters}
               .playerStatus=${this.playerStatus}
               .combatEffect=${this.combatEffect}
-              .heroGender=${this.character.gender}
-              ?inDungeon=${this.currentDungeonLevel > 0}
+              .heroGender=${c.gender}
+              ?inDungeon=${this.session.currentDungeonLevel > 0}
               ?minimap=${this.mapMode}
               ?crosshair=${this.disarmMode}
               @map-click=${(e: CustomEvent<{dx: number; dy: number; tileX: number; tileY: number}>) => {
                 if (this.castingSpell) {
-                  // Fire along the actual angle to the clicked tile (Bresenham ray trace handles walls)
                   const rawDx = e.detail.tileX - this.pos.x;
                   const rawDy = e.detail.tileY - this.pos.y;
-                  this.fireDirectionalSpell(this.castingSpell, rawDx, rawDy);
+                  const spellId = this.castingSpell;
                   this.castingSpell = null;
+                  this.applyEvents(this.session.castDirectional(spellId, rawDx, rawDy));
                 } else if (this.disarmMode) {
                   this.disarmMode = false;
-                  this.doDisarm(e.detail.tileX, e.detail.tileY);
+                  this.applyEvents(this.session.disarm(e.detail.tileX, e.detail.tileY));
                 } else {
-                  this.tryMove(e.detail.dx, e.detail.dy);
+                  this.applyEvents(this.session.tryMove(e.detail.dx, e.detail.dy));
                 }
               }}
             ></dungeon-map>
@@ -2332,75 +641,29 @@ export class GameWorld extends LitElement {
               ? html`<div class="location-banner">${this.locationName}</div>`
               : ''}
 
-            ${this.dead
-              ? this.renderDeathOverlay()
-              : this.narrative !== null
-              ? this.renderNarrativeOverlay()
-              : this.overlay === 'building'
-                ? this.renderBuildingOverlay()
-                : this.overlay === 'inventory'
-                  ? html`<div class="overlay" @click=${() => { this.overlay = 'none'; }}>
-                      <player-inventory
-                        .character=${this.character}
-                        .groundItems=${getTileAt(this.map, this.pos.x, this.pos.y).items}
-                        .map=${this.map}
-                        .pos=${this.pos}
-                        @inventory-changed=${() => { this.autoSave(); this.requestUpdate(); }}
-                        @inventory-message=${(e: CustomEvent<string>) => { this.pushMessage(e.detail); }}
-                      ></player-inventory>
-                    </div>`
-                  : this.overlay === 'game-menu'
-                    ? this.renderGameMenu()
-                    : this.overlay === 'spells'
-                      ? this.renderSpellsOverlay()
-                      : this.overlay === 'spell-learn'
-                        ? this.renderSpellLearnOverlay()
-                        : this.overlay === 'story'
-                          ? this.renderStoryOverlay()
-                          : this.overlay === 'customize-spells'
-                            ? this.renderCustomizeSpellsOverlay()
-                            : ''}
+            ${this.renderOverlay()}
           </div>
-          ${this.renderSidebar()}
+          <game-sidebar
+            .character=${c}
+            .playerStatus=${this.playerStatus}
+            .map=${this.map}
+            .currentStage=${this.session.currentStage}
+            .currentDungeonLevel=${this.session.currentDungeonLevel}
+            .messages=${this.messages}
+          ></game-sidebar>
         </div>
       </div>
     `;
   }
 }
 
-// ── Direction helpers ─────────────────────────────────────────────────────────
-
-/**
- * dx0 = player.x − monster.x, dy0 = player.y − monster.y.
- * Returns a compass label for the direction FROM THE PLAYER toward the monster.
- */
-function monsterDirectionLabel(dx0: number, dy0: number): string {
-  const h = dx0 > 0 ? 'west' : dx0 < 0 ? 'east' : '';
-  const v = dy0 > 0 ? 'north' : dy0 < 0 ? 'south' : '';
-  return v && h ? `${v}${h}` : v || h;
-}
-
-/**
- * For diagonal attacks, returns the numpad/vi key(s) the player should press.
- * Returns empty string for cardinal attacks (arrow keys are self-evident).
- */
-function diagonalKeyHint(dx0: number, dy0: number): string {
-  if (dx0 === 0 || dy0 === 0) return '';
-  if (dx0 > 0 && dy0 > 0) return '7/y';  // northwest
-  if (dx0 < 0 && dy0 > 0) return '9/u';  // northeast
-  if (dx0 > 0 && dy0 < 0) return '1/b';  // southwest
-  return '3/n';                            // southeast
-}
-
 // ── Key map ───────────────────────────────────────────────────────────────────
 
 const KEY_TO_DELTA: Record<string, { dx: number; dy: number }> = {
-  // Cardinal — arrows
   ArrowUp:    { dx:  0, dy: -1 },
   ArrowDown:  { dx:  0, dy:  1 },
   ArrowLeft:  { dx: -1, dy:  0 },
   ArrowRight: { dx:  1, dy:  0 },
-  // Vi-keys (original Castle of the Winds alphabetic movement)
   k: { dx:  0, dy: -1 },
   j: { dx:  0, dy:  1 },
   h: { dx: -1, dy:  0 },
@@ -2409,11 +672,9 @@ const KEY_TO_DELTA: Record<string, { dx: number; dy: number }> = {
   u: { dx:  1, dy: -1 },
   b: { dx: -1, dy:  1 },
   n: { dx:  1, dy:  1 },
-  // Numpad (roguelike standard)
   '7': { dx: -1, dy: -1 }, '8': { dx:  0, dy: -1 }, '9': { dx:  1, dy: -1 },
   '4': { dx: -1, dy:  0 },                            '6': { dx:  1, dy:  0 },
   '1': { dx: -1, dy:  1 }, '2': { dx:  0, dy:  1 }, '3': { dx:  1, dy:  1 },
-  // Home/End/PgUp/PgDn diagonal keys
   Home:     { dx: -1, dy: -1 },
   End:      { dx: -1, dy:  1 },
   PageUp:   { dx:  1, dy: -1 },
@@ -2425,3 +686,5 @@ declare global {
     'game-world': GameWorld;
   }
 }
+
+void logger;

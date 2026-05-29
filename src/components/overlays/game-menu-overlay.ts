@@ -30,7 +30,7 @@ export class GameMenuOverlay extends LitElement {
 
   private item(label: string, key: string, a: MenuAction): TemplateResult {
     return html`
-      <div class="menu-item" @click=${() => this.action(a)}>
+      <div class="menu-item" @click=${() => { this.action(a); }}>
         <span>${label}</span>
         ${key ? html`<span class="menu-item-key">${key}</span>` : ''}
       </div>`;

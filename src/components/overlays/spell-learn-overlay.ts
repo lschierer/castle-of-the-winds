@@ -8,7 +8,7 @@
 import { LitElement, html, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { gameWorldStyles } from '../game-world.styles.ts';
-import { spellById, LEARNABLE_SPELLS } from '../../data/spells.ts';
+import { LEARNABLE_SPELLS } from '../../data/spells.ts';
 import { spellIdsAvailableAtLevel } from '../../data/binary-data/spell-grants.ts';
 import type { CharacterModel } from '../../model/Character.ts';
 
@@ -38,7 +38,7 @@ export class SpellLearnOverlay extends LitElement {
           <div class="divider"></div>
           ${available.map((sp) => html`
             <div class="spell-row castable" style="cursor:pointer"
-              @click=${() => this.emit('learn-spell', { spellId: sp.id })}>
+              @click=${() => { this.emit('learn-spell', { spellId: sp.id }); }}>
               <span class="spell-row-name">${sp.name}</span>
               <span class="spell-row-cost">${sp.baseMana} mp</span>
             </div>

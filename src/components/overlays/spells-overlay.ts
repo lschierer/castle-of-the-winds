@@ -24,7 +24,7 @@ export class SpellsOverlay extends LitElement {
     const c = this.character;
     if (!c) return html``;
     const known = c.spells;
-    const close = () => this.emit('close');
+    const close = () => { this.emit('close'); };
     return html`
       <div class="overlay" @click=${close}>
         <div class="overlay-box" @click=${(e: Event) => { e.stopPropagation(); }}>
@@ -38,7 +38,7 @@ export class SpellsOverlay extends LitElement {
                 const canCast = c.mana >= sp.baseMana;
                 return html`
                   <div class="spell-row ${canCast ? 'castable' : 'no-mana'}"
-                    @click=${canCast ? () => this.emit('cast-spell', { spellId: sp.id }) : undefined}
+                    @click=${canCast ? () => { this.emit('cast-spell', { spellId: sp.id }); } : undefined}
                     style="${canCast ? 'cursor:pointer' : 'opacity:0.5'}">
                     <span class="spell-row-name">${sp.name}</span>
                     <span class="spell-row-cost">${sp.baseMana} mp</span>
