@@ -253,29 +253,51 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
 
   // ── Stairs down ───────────────────────────────────────────────────────────────
   //
-  // Primary stairs-down: last room — takes the player to stairsUp on the next floor.
-  // Secondary stairs-down: mid room — takes the player to stairsUp2 on the next floor.
-  // Both require ≥ 4 rooms so that room indices don't collide with the stairs-up rooms.
+  // Primary stairs-down: the room whose center is farthest from stairsUp.
+  // This guarantees the player must explore the floor to find them, regardless
+  // of which room happens to be last in the generator's array (which is now
+  // fill-loop-dependent and can land close to stairsUp).
+  //
+  // Secondary stairs-down: the room closest to the midpoint distance between
+  // stairsUp and stairsDown — gives a second exit roughly halfway across the floor.
 
   let stairsDown: Vec2 | undefined;
   let stairsDown2: Vec2 | undefined;
   if (dungeonLevel < totalFloors && rooms.length > 1) {
-    const lastRoom = rooms[rooms.length - 1];
-    if (lastRoom) {
-      stairsDown = roomCenter(lastRoom);
-      setTile(grid, stairsDown.x, stairsDown.y, { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] });
+    // Skip rooms already used for stairs-up when ranking by distance.
+    const stairUpRooms = new Set([rooms[0], rooms[1]]);
+    const candidateRooms = rooms.filter((r) => !stairUpRooms.has(r));
 
-      // Secondary stairway down in the middle room (canonical CotW has two exits per floor).
-      // Requires ≥ 4 rooms so the mid index doesn't overlap rooms 0, 1, or last.
-      if (rooms.length >= 4) {
-        const midRoom = rooms[Math.floor(rooms.length / 2)];
-        if (midRoom) {
-          const mid = roomCenter(midRoom);
-          const existing = getTile(grid, mid.x, mid.y);
-          if (existing && existing.feature === undefined) {
-            stairsDown2 = mid;
-            setTile(grid, mid.x, mid.y, { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] });
-          }
+    const dist = (c: Vec2) => Math.abs(c.x - stairsUp.x) + Math.abs(c.y - stairsUp.y);
+
+    // Farthest room → primary stairs-down.
+    const downRoom = candidateRooms.reduce<RotRoom | null>((best, r) => {
+      if (!best) return r;
+      return dist(roomCenter(r)) > dist(roomCenter(best)) ? r : best;
+    }, null) ?? rooms[rooms.length - 1]!;
+
+    stairsDown = roomCenter(downRoom);
+    setTile(grid, stairsDown.x, stairsDown.y, { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] });
+
+    // Secondary stairway down: room whose distance to stairsUp is closest to
+    // half the total stairsUp→stairsDown distance. Requires ≥ 4 rooms total so
+    // there are meaningful candidates distinct from both staircase-up rooms and
+    // the primary staircase-down room.
+    if (rooms.length >= 4) {
+      const halfDist = dist(stairsDown) / 2;
+      const midRoom = candidateRooms
+        .filter((r) => r !== downRoom)
+        .reduce<RotRoom | null>((best, r) => {
+          if (!best) return r;
+          return Math.abs(dist(roomCenter(r)) - halfDist) < Math.abs(dist(roomCenter(best)) - halfDist)
+            ? r : best;
+        }, null);
+      if (midRoom) {
+        const mid = roomCenter(midRoom);
+        const existing = getTile(grid, mid.x, mid.y);
+        if (existing && existing.feature === undefined) {
+          stairsDown2 = mid;
+          setTile(grid, mid.x, mid.y, { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] });
         }
       }
     }
