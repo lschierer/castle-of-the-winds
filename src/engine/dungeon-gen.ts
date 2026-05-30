@@ -6,7 +6,7 @@
  *
  * Dungeon structure (Castle of the Winds canon):
  *   Mine     — 4 floors  (floor 1 fixed spawn; floors 1-3 no upstairs)
- *                          Scrap of Parchment on floor 4 (deepest)
+ *                          Scrap of Parchment on floor 8 (deepest)
  *   Fortress — 11 floors (floor 1 fixed spawn; Hrungnir + ogre guards on floor 11)
  *   Castle   — 25 floors (boss encounters at floors 16, 18, 20, 22, 25)
  *
@@ -253,29 +253,51 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
 
   // ── Stairs down ───────────────────────────────────────────────────────────────
   //
-  // Primary stairs-down: last room — takes the player to stairsUp on the next floor.
-  // Secondary stairs-down: mid room — takes the player to stairsUp2 on the next floor.
-  // Both require ≥ 4 rooms so that room indices don't collide with the stairs-up rooms.
+  // Primary stairs-down: the room whose center is farthest from stairsUp.
+  // This guarantees the player must explore the floor to find them, regardless
+  // of which room happens to be last in the generator's array (which is now
+  // fill-loop-dependent and can land close to stairsUp).
+  //
+  // Secondary stairs-down: the room closest to the midpoint distance between
+  // stairsUp and stairsDown — gives a second exit roughly halfway across the floor.
 
   let stairsDown: Vec2 | undefined;
   let stairsDown2: Vec2 | undefined;
   if (dungeonLevel < totalFloors && rooms.length > 1) {
-    const lastRoom = rooms[rooms.length - 1];
-    if (lastRoom) {
-      stairsDown = roomCenter(lastRoom);
-      setTile(grid, stairsDown.x, stairsDown.y, { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] });
+    // Skip rooms already used for stairs-up when ranking by distance.
+    const stairUpRooms = new Set([rooms[0], rooms[1]]);
+    const candidateRooms = rooms.filter((r) => !stairUpRooms.has(r));
 
-      // Secondary stairway down in the middle room (canonical CotW has two exits per floor).
-      // Requires ≥ 4 rooms so the mid index doesn't overlap rooms 0, 1, or last.
-      if (rooms.length >= 4) {
-        const midRoom = rooms[Math.floor(rooms.length / 2)];
-        if (midRoom) {
-          const mid = roomCenter(midRoom);
-          const existing = getTile(grid, mid.x, mid.y);
-          if (existing && existing.feature === undefined) {
-            stairsDown2 = mid;
-            setTile(grid, mid.x, mid.y, { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] });
-          }
+    const dist = (c: Vec2) => Math.abs(c.x - stairsUp.x) + Math.abs(c.y - stairsUp.y);
+
+    // Farthest room → primary stairs-down.
+    const downRoom = candidateRooms.reduce<RotRoom | null>((best, r) => {
+      if (!best) return r;
+      return dist(roomCenter(r)) > dist(roomCenter(best)) ? r : best;
+    }, null) ?? rooms[rooms.length - 1]!;
+
+    stairsDown = roomCenter(downRoom);
+    setTile(grid, stairsDown.x, stairsDown.y, { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] });
+
+    // Secondary stairway down: room whose distance to stairsUp is closest to
+    // half the total stairsUp→stairsDown distance. Requires ≥ 4 rooms total so
+    // there are meaningful candidates distinct from both staircase-up rooms and
+    // the primary staircase-down room.
+    if (rooms.length >= 4) {
+      const halfDist = dist(stairsDown) / 2;
+      const midRoom = candidateRooms
+        .filter((r) => r !== downRoom)
+        .reduce<RotRoom | null>((best, r) => {
+          if (!best) return r;
+          return Math.abs(dist(roomCenter(r)) - halfDist) < Math.abs(dist(roomCenter(best)) - halfDist)
+            ? r : best;
+        }, null);
+      if (midRoom) {
+        const mid = roomCenter(midRoom);
+        const existing = getTile(grid, mid.x, mid.y);
+        if (existing && existing.feature === undefined) {
+          stairsDown2 = mid;
+          setTile(grid, mid.x, mid.y, { terrain: 'floor', walkable: true, feature: 'stairs-down', items: [] });
         }
       }
     }
@@ -297,7 +319,7 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
   }
 
   if (stage === 'mine' && dungeonLevel === MINE_PARCHMENT_FLOOR) {
-    placeScrapOfParchment(grid, rooms, stairsUp);
+    placeScrapOfParchment(grid, rooms, stairsUp, monsters, diff);
   }
 
   if (stage === 'fortress' && dungeonLevel === FORTRESS_BOSS_FLOOR) {
@@ -498,39 +520,118 @@ function placeGuaranteedMineSpawns(
 }
 
 // ── Mine floor 8: Scrap of Parchment ─────────────────────────────────────────
+//
+// The parchment room always contains:
+//   - 5 kobolds + 1 ogre guarding it
+//   - 4 straw pallets (icon_62.png) as furniture
+//   - The Scrap of Parchment itself
+//   - Must be one of the larger rooms and must NOT contain stairs-up
 
 function placeScrapOfParchment(
   grid: Tile[][],
   rooms: RotRoom[],
   stairsUp: Vec2,
+  monsters: MonsterInstance[],
+  difficulty: number,
 ): void {
-  const farthest = rooms
-    .map((r) => ({ ...roomCenter(r) }))
-    .reduce<Vec2 | null>((best, pos) => {
-      const d = Math.abs(pos.x - stairsUp.x) + Math.abs(pos.y - stairsUp.y);
-      if (!best) return pos;
-      const db = Math.abs(best.x - stairsUp.x) + Math.abs(best.y - stairsUp.y);
-      return d > db ? pos : best;
+  const roomArea = (r: RotRoom) => (r._x2 - r._x1 + 1) * (r._y2 - r._y1 + 1);
+  const stairsUpRoomId = getTile(grid, stairsUp.x, stairsUp.y)?.roomId;
+
+  // Pick the largest room that doesn't contain stairs-up
+  const candidate = rooms
+    .filter((r) => r._x1 !== undefined)
+    .filter((r) => {
+      const c = roomCenter(r);
+      const t = getTile(grid, c.x, c.y);
+      return t?.roomId !== stairsUpRoomId;
+    })
+    .reduce<RotRoom | null>((best, r) => {
+      if (!best) return r;
+      return roomArea(r) > roomArea(best) ? r : best;
     }, null);
 
-  if (!farthest) return;
-  const t = getTile(grid, farthest.x, farthest.y);
-  if (!t || !t.walkable) return;
+  if (!candidate) return;
 
-  const parchment: Item = {
-    id: Math.random().toString(36).slice(2, 10),
-    kind: 'scroll',
-    name: 'Scrap of Parchment',
-    icon: 'scroll.png',
-    weight: 10,
-    bulk: 1,
-    quantity: 1,
-    identified: true,
-    cursed: false,
-    broken: false,
-    enchantment: 0,
+  // Collect walkable floor tiles in the room for placement
+  const floorTiles: Vec2[] = [];
+  for (let y = candidate._y1; y <= candidate._y2; y++) {
+    for (let x = candidate._x1; x <= candidate._x2; x++) {
+      const t = getTile(grid, x, y);
+      if (t?.walkable && !t.feature) floorTiles.push({ x, y });
+    }
+  }
+  if (floorTiles.length < 6) return; // room too small after all
+
+  // Shuffle for random placement
+  for (let i = floorTiles.length - 1; i > 0; i--) {
+    const j = rand(i + 1);
+    [floorTiles[i], floorTiles[j]] = [floorTiles[j]!, floorTiles[i]!];
+  }
+
+  const used = new Set<string>();
+  const take = (): Vec2 | undefined => {
+    for (const pos of floorTiles) {
+      const k = `${pos.x},${pos.y}`;
+      if (!used.has(k)) { used.add(k); return pos; }
+    }
+    return undefined;
   };
-  t.items.push(parchment);
+
+  // ── Place the parchment ──────────────────────────────────────────────────────
+  const parchmentPos = take();
+  if (!parchmentPos) return;
+  const pt = getTile(grid, parchmentPos.x, parchmentPos.y);
+  if (pt) {
+    pt.items.push({
+      id: Math.random().toString(36).slice(2, 10),
+      kind: 'misc',
+      name: 'Scrap of Parchment',
+      icon: '/assets/sprites/icons/Items/icon_321.png',
+      weight: 10, bulk: 1, quantity: 1,
+      identified: true, cursed: false, broken: false, enchantment: 0,
+    });
+  }
+
+  // ── Place 4 straw pallets ───────────────────────────────────────────────────
+  const PALLET_ICON = '/assets/sprites/icons/Items/icon_62.png';
+  for (let i = 0; i < 4; i++) {
+    const pos = take();
+    if (!pos) break;
+    const t = getTile(grid, pos.x, pos.y);
+    if (t) {
+      t.items.push({
+        id: Math.random().toString(36).slice(2, 10),
+        kind: 'misc', name: 'Straw Pallet',
+        icon: PALLET_ICON,
+        weight: 5000, bulk: 50000, quantity: 1,
+        identified: true, cursed: false, broken: false, enchantment: 0,
+      });
+    }
+  }
+
+  // ── Place 5 kobolds + 1 ogre as room guards ─────────────────────────────────
+  const hpBonus = 5 * difficulty;
+  const guardSpecs: Array<{ id: string; hp: number }> = [
+    { id: 'kobold', hp: 5 },
+    { id: 'kobold', hp: 5 },
+    { id: 'kobold', hp: 5 },
+    { id: 'kobold', hp: 5 },
+    { id: 'kobold', hp: 5 },
+    { id: 'ogre',   hp: 65 },
+  ];
+  for (const spec of guardSpecs) {
+    const pos = take();
+    if (!pos) break;
+    const hp = spec.hp + hpBonus;
+    monsters.push({
+      specId: spec.id,
+      instanceId: `m${monsterSeq++}`,
+      hp, maxHp: hp,
+      x: pos.x, y: pos.y,
+      alerted: true, // they're guarding — already aware
+      status: {},
+    });
+  }
 }
 
 // ── Fortress floor 11: Hrungnir boss encounter ────────────────────────────────

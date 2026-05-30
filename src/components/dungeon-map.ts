@@ -19,15 +19,18 @@ import type { Gender } from '../data/character.ts';
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const TILE_PX = 32;
-const SIDEBAR_PX = 280;
 
-function viewportSize(): { cols: number; rows: number } {
-  const availW = window.innerWidth - SIDEBAR_PX - 16;
-  const availH = window.innerHeight - 80;
-  return {
-    cols: Math.max(7, Math.floor(availW / TILE_PX) | 1),
-    rows: Math.max(7, Math.floor(availH / TILE_PX) | 1),
-  };
+/**
+ * Smallest odd number of tiles that fully *covers* `px` (at least 7).
+ *
+ * We round UP and let the host's `overflow: hidden` clip the partial tiles at
+ * the edges, so the grid fills the panel edge-to-edge with no dead margin. Odd
+ * so the hero sits in the exact centre cell and the half-tile overflow is split
+ * evenly on opposite sides.
+ */
+function oddTileCover(px: number): number {
+  const c = Math.ceil(px / TILE_PX);
+  return Math.max(7, c % 2 === 0 ? c + 1 : c);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -35,7 +38,14 @@ function viewportSize(): { cols: number; rows: number } {
 @customElement('dungeon-map')
 export class DungeonMap extends LitElement {
   static styles = css`
-    :host { display: block; width: 100%; height: 100%; }
+    :host {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
     .map-wrap { position: relative; display: inline-block; }
     .map-grid {
       display: grid;
@@ -70,7 +80,43 @@ export class DungeonMap extends LitElement {
   @property({ type: Boolean }) inDungeon = false;
   @property({ type: Boolean }) minimap = false;
 
-  @state() private sidebarPx = SIDEBAR_PX;
+  /** Measured pixel size of the host (the map panel it fills). */
+  @state() private availW = 0;
+  @state() private availH = 0;
+  private resizeObserver: ResizeObserver | undefined;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.resizeObserver = new ResizeObserver(() => { this.measure(); });
+    this.resizeObserver.observe(this);
+    // First measurement once the flex layout has assigned the host its box.
+    requestAnimationFrame(() => { this.measure(); });
+  }
+
+  override disconnectedCallback(): void {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = undefined;
+    super.disconnectedCallback();
+  }
+
+  private measure(): void {
+    const w = this.clientWidth;
+    const h = this.clientHeight;
+    if (w !== this.availW || h !== this.availH) {
+      this.availW = w;
+      this.availH = h;
+    }
+  }
+
+  /**
+   * Tile viewport sized to the host's *actual* box. Falls back to a window-based
+   * estimate only until the first measurement lands (avoids a 0×0 first paint).
+   */
+  private viewport(): { cols: number; rows: number } {
+    const w = this.availW || (window.innerWidth - 212);
+    const h = this.availH || (window.innerHeight - 48);
+    return { cols: oddTileCover(w), rows: oddTileCover(h) };
+  }
 
   protected render(): TemplateResult {
     return this.minimap ? this.renderMiniMap() : this.renderTileGrid();
@@ -98,7 +144,7 @@ export class DungeonMap extends LitElement {
       });
     }
 
-    const vp = viewportSize();
+    const vp = this.viewport();
     const halfX = (vp.cols - 1) / 2;
     const halfY = (vp.rows - 1) / 2;
 
@@ -258,8 +304,8 @@ export class DungeonMap extends LitElement {
     const { map, pos } = this;
     const { width: mw, height: mh } = map;
 
-    const panelW = Math.max(400, window.innerWidth - this.sidebarPx - 40);
-    const panelH = Math.max(300, window.innerHeight - 40);
+    const panelW = Math.max(400, this.availW || (window.innerWidth - 212));
+    const panelH = Math.max(300, this.availH || (window.innerHeight - 48));
     const cellSize = Math.max(2, Math.min(Math.floor(panelW / mw), Math.floor(panelH / mh)));
 
     const cells: TemplateResult[] = [];

@@ -607,7 +607,7 @@ export function makeScroll(spellId: string, spellName: string): Item {
     cursed: false,
     broken: false,
     enchantment: 0,
-    icon: '/assets/sprites/icons/Items/icon_141.png',
+    icon: '/assets/sprites/icons/scroll.png',
     charges: 1,
   };
 }
@@ -646,7 +646,7 @@ export function makePotion(name: string): Item {
     cursed: false,
     broken: false,
     enchantment: 0,
-    icon: '/assets/sprites/icons/Items/icon_145.png',
+    icon: '/assets/sprites/icons/Items/icon_142.png',
   };
 }
 
@@ -717,6 +717,11 @@ export function displayName(item: Item): string {
       const spec = PACK_SPECS.find((s) => s.name === item.name);
       if (spec?.unidentifiedName) return spec.unidentifiedName;
     }
+    // Consumables: real name is hidden until identified
+    if (item.kind === 'potion') return 'a Potion';
+    if (item.kind === 'scroll') return 'a Scroll';
+    if (item.kind === 'wand')   return 'a Wand';
+    if (item.kind === 'staff')  return 'a Staff';
     return item.name;
   }
 

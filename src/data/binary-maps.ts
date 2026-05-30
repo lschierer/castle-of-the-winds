@@ -72,7 +72,7 @@ export const BINARY_MAP_DISPATCH_STATE: Record<number, number> = {
   26: 7,
 };
 
-// JSON imports — Greenwood / Vite serve these as static assets.
+// JSON imports — Vite resolves these natively at build/dev time.
 // We declare them as untyped here and validate at the boundary.
 import seg25Json from '../../data/binary-maps/seg25_map.json' with { type: 'json' };
 import seg26Json from '../../data/binary-maps/seg26_map.json' with { type: 'json' };

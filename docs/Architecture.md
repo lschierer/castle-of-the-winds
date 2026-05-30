@@ -23,7 +23,11 @@
 │   │   ├── binary-map-overlay.ts # Overlays binary terrain onto maps
 │   │   └── binary-data/  # RE-extracted data tables from the 1993 EXE
 │   │
-│   ├── engine/           # Stateless transforms — pure functions, no state
+│   ├── engine/           # Stateless transforms + the headless game controller
+│   │   ├── game-session.ts # GameSession: the turn loop / orchestrator (no DOM)
+│   │   ├── game-events.ts  # GameEvent union + ActionResult (engine→view contract)
+│   │   ├── monster-ai.ts   # Pure runMonsterPhase() — monster turns, returns events
+│   │   ├── direction.ts    # Direction/difficulty helpers (shared)
 │   │   ├── combat.ts     # Attack resolution (to-hit, damage, NdM rolls)
 │   │   ├── dungeon-gen.ts # Procedural floor generation
 │   │   ├── loot.ts       # Loot table rolls (scrolls, potions, equipment)
@@ -37,8 +41,11 @@
 │   │   ├── Character.ts  # CharacterModel class (stats, inventory, equip, level-up)
 │   │   └── World.ts      # WorldModel class (map, position, floor cache, stairs)
 │   │
-│   ├── components/       # Lit custom elements — UI layer
-│   │   ├── game-world.ts # Orchestrator: input, turns, combat, overlays
+│   ├── components/       # Lit custom elements — view layer (no game logic)
+│   │   ├── game-world.ts # View shell: owns GameSession, replays events, input
+│   │   ├── spell-bar.ts  # Top action bar + quick-cast slots + Verbs menu
+│   │   ├── game-sidebar.ts # Vitals/attributes/spells panel + message log
+│   │   ├── message-log.ts  # Scrolling event feed
 │   │   ├── dungeon-map.ts # Tile grid viewport + minimap rendering
 │   │   ├── player-inventory.ts # Paperdoll, pack, belt, action menus, drag-drop
 │   │   ├── context-actions.ts  # Dynamic "Verbs" menu (use potion, read scroll)
@@ -46,24 +53,28 @@
 │   │   ├── shop-screen.ts     # Shop buy/sell UI
 │   │   ├── character-creation.ts # Character creation wizard
 │   │   ├── landing-page.ts    # Title screen
-│   │   └── game-world.styles.ts # Shared CSS for game-world
-│   │
-│   ├── pages/            # HTML entry points (Greenwood pages)
-│   │   ├── index.html    # Landing page
-│   │   ├── create.html   # Character creation
-│   │   └── game.html     # Game world
+│   │   ├── game-world.styles.ts # Shared CSS (used across the view components)
+│   │   └── overlays/     # Modal overlays (spells, spell-learn, story, death,
+│   │       │             #   game-menu, customize-spells)
+│   │       └── *.ts
 │   │
 │   └── styles/           # Global CSS
 │       └── theme.css     # Design tokens and base styles
 │
+├── index.html            # Entry: landing page (/)
+├── create/index.html     # Entry: character creation (/create/)
+├── game/index.html       # Entry: game world (/game/)
+├── public/               # Static assets served at site root
+│   └── assets/sprites/   # Tile/icon PNGs (referenced at runtime as /assets/…)
+├── data/binary-maps/     # RE-extracted map JSON (imported at build time)
 ├── src-tauri/            # Tauri v2 native shell (Rust)
 │   ├── src/main.rs       # Tauri commands: logging to filesystem
 │   ├── Cargo.toml        # Rust dependencies
-│   ├── tauri.conf.json   # Tauri app configuration
+│   ├── tauri.conf.json   # Tauri app configuration (frontendDist → ../dist)
 │   └── capabilities/     # Tauri v2 permission capabilities
 ├── mise.toml             # Tool versions + task runner
 ├── package.json          # Root package
-├── greenwood.config.ts   # Greenwood framework configuration
+├── vite.config.ts        # Vite bundler/dev-server configuration (MPA)
 └── tsconfig.json         # TypeScript configuration
 ```
 
@@ -78,14 +89,42 @@ components/ → model/ → data/
 ```
 
 - **`data/`** has no dependencies on other src layers (only external libs like rot-js)
-- **`engine/`** depends on `data/` only (reads specs, produces results)
+- **`engine/`** depends on `data/` and `model/`; this is also where the **headless
+  game controller** (`GameSession`) lives — see below
 - **`model/`** depends on `data/` and `engine/` (uses specs, calls engine functions)
-- **`components/`** depends on all layers (renders model state, calls engine/model)
+- **`components/`** depends on all layers, but holds **no game logic** — it owns a
+  `GameSession`, renders its state, and replays the events it returns
 
 This means:
 - You can test engine functions in isolation (pass in data, check output)
 - Model classes can be instantiated without a DOM
-- Components are thin views that delegate logic downward
+- The whole turn loop (`GameSession`) runs headless — no DOM, no timers — so it is
+  unit-testable and reusable across any view shell
+- Components are genuinely thin: input → call a session method → replay events
+
+### Game session + event flow (the engine↔view seam)
+
+Game logic does **not** live in components. The turn loop is `engine/game-session.ts`:
+
+- `GameSession` owns the authoritative state (`WorldModel`, `CharacterModel`,
+  player status, story flags, shop inventories) and exposes action methods —
+  `tryMove`, `useStairs`, `castDirectional`, `rest`, `pickup`, `contextAction`, etc.
+- Each action **returns an `ActionResult`** (`{ events: GameEvent[] }`) and **never**
+  touches the DOM, timers, or component state. A `GameEvent` is a discriminated union:
+  `message`, `effect`, `death`, `narrative`, `level-up`, `map-changed`, `location`,
+  `open-overlay`, `begin-cast`, `request-save`.
+- `<game-world>` is the **view shell**: it holds the session, mirrors session state
+  into Lit `@state`, and in `applyEvents()` replays each event into UI side-effects
+  (push a message, queue a combat-effect animation, open an overlay, autosave, …).
+  Things that are inherently view concerns — keyboard handling, the effect-playback
+  timer queue, the save-file picker, overlay routing — stay here.
+- The other components (`spell-bar`, `game-sidebar`, `message-log`, `dungeon-map`,
+  the `overlays/*`) are presentational: **properties down, custom events up**. They
+  emit intents (`cast-spell`, `menu-action`, `map-click`) that `<game-world>`
+  translates into session calls.
+
+This is why "second village / surface map / dungeon set" is mostly **data** work
+(new `MapSpec`s + a progression-table entry), not new component code.
 
 ## Technology Choices
 
@@ -98,32 +137,55 @@ commands that the frontend calls with `invoke()`.
 
 Initial target is macOS, with future growth to Android and ChromeOS.
 
-### Frontend Build: Greenwood
+### Frontend Build: Vite
 
-Greenwood is a lightweight full-stack web framework built on web standards.  It
-provides directory-based routing (`src/pages/create/` → `/create/`), native Lit
-web component support, and handles TypeScript transpilation via `tsc`.
+The app is a client-side SPA (one long-lived game session, custom tile render
+loop), so the build tooling it needs is a **bundler + dev server**, not a content
+meta-framework. Vite fills that role: fast HMR in dev, an esbuild/Rollup build for
+production, native TypeScript + Lit (decorators) support, and native JSON/asset
+handling.
 
-During development, Tauri launches Greenwood's dev server on `localhost:1984`
-(via `beforeDevCommand`).  For production builds, `greenwood build` outputs
-static assets to `public/` which Tauri embeds in the native binary.
+> Historical note: the project started on the Greenwood meta-framework. It was
+> migrated to Vite once it became clear the game is an SPA and Greenwood's value
+> (pages/SSR/routing) didn't apply — in fact all three Greenwood custom plugins
+> existed to patch behaviour Vite provides by default. See
+> `docs/vite-migration-spike.md`.
+
+- **Multi-page entry points.** Three HTML files in a directory layout give clean
+  URLs with no routing library: `index.html` → `/`, `create/index.html` →
+  `/create/`, `game/index.html` → `/game/`. Listed as `build.rollupOptions.input`.
+- **Dev:** Tauri launches `vite` on `localhost:1984` (via `beforeDevCommand`).
+- **Build:** `vite build` emits static assets to `dist/`, which Tauri embeds in the
+  native binary (`frontendDist: ../dist`). Vite is a build-time tool only — the
+  shipped app contains static files in a webview, no Node and no Vite at runtime.
+- **Static assets** live in `public/` and are served at the site root, so runtime
+  URLs like `/assets/sprites/foo.png` resolve unchanged in dev and in the bundle.
 
 ### UI: Lit Web Components
 
-Lit custom elements provide the game UI.  Each screen is a separate element
-loaded by its own HTML entry point.  Navigation between screens uses
-`window.location.href`.
+Lit custom elements provide the game UI. Three screens (landing / create / game)
+are separate HTML entry points; navigation between them uses `window.location.href`
+(`/`, `/create/`, `/game/?new=1`). *Within* the game, everything is one running
+`<game-world>` instance — maps are states, not pages.
 
 Key components:
-- `<game-world>` — the main orchestrator (input handling, turn loop, overlay routing)
+- `<game-world>` — the **view shell**: owns the `GameSession`, mirrors its state,
+  replays events, handles input/effect-timers/save/overlay routing
+- `<spell-bar>` — action buttons, quick-cast slots, the "Verbs" (Use…) menu
+- `<game-sidebar>` / `<message-log>` — vitals/spells panel and the event feed
 - `<dungeon-map>` — tile grid rendering with FOV and minimap
 - `<player-inventory>` — full inventory management UI
-- `<shop-screen>` — shop buy/sell interface
-- `<building-overlay>` — building entry and service routing
+- `<shop-screen>` / `<building-overlay>` — shop and building service UI
+- `overlays/*` — modal overlays (spells, spell-learn, story, death, game-menu,
+  customize-spells)
 
 Components communicate via:
 - **Properties** (parent → child): pass model objects and state
-- **Custom events** (child → parent): emit intents like `'inventory-changed'`, `'map-click'`
+- **Custom events** (child → parent): emit intents like `'cast-spell'`,
+  `'menu-action'`, `'map-click'`, `'inventory-changed'`
+
+Game-logic lives in `GameSession` (engine), not in these components — see
+"Game session + event flow" above.
 
 ### Domain Model (OO)
 
@@ -133,8 +195,11 @@ free functions.  This keeps related state and behavior together:
 - `CharacterModel` owns stats, inventory, equipment, level-up logic
 - `WorldModel` owns the current map, position, floor cache, stair transitions
 
-Components hold references to model instances and call their methods directly.
-After mutations, components call `this.requestUpdate()` to trigger re-renders.
+`GameSession` (engine) composes these and is the single owner of mutable game
+state. The view doesn't mutate the model directly — it calls a `GameSession`
+action method, then `applyEvents()` mirrors the new session state into Lit
+`@state` and replays the returned events. (`<game-world>.sync()` copies
+`session.map`/`pos`/`monsters`/`character`/`status` into reactive fields each turn.)
 
 ### Combat System
 
@@ -148,8 +213,10 @@ Combat formulas are ported from the 1993 binary (see `docs/re-findings/`):
 ### TypeScript / ES Modules
 
 Browser-facing code targets `ESNext` modules with
-`moduleResolution: "bundler"` so imports work with Greenwood's Rollup bundler
-and with native browser ES modules.
+`moduleResolution: "bundler"` and `allowImportingTsExtensions` (imports carry
+explicit `.ts` extensions), which Vite/esbuild resolve directly. Lit's TC39
+decorators are handled by esbuild via `experimentalDecorators` +
+`useDefineForClassFields: false` in `tsconfig.json`.
 
 ### Logging: loglevel + Rust filesystem backend
 
@@ -174,8 +241,9 @@ The `GameState` interface in `src/engine/save.ts` defines the save format.
 
 ### Deployment
 
-`mise run build` produces a native `.app` bundle for macOS.  Greenwood builds
-the static frontend to `public/`, which Tauri embeds in the binary.  No server
+`mise run build` produces a native `.app` bundle for macOS. `vite build` emits the
+static frontend to `dist/`, which Tauri embeds in the binary. No server
 infrastructure is required.
 
-`mise run web` runs the game in a browser without Tauri for development.
+`mise run web` runs the game in a browser without Tauri for development (Vite dev
+server on `localhost:1984`).

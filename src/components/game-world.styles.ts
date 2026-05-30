@@ -71,6 +71,44 @@ export const gameWorldStyles = css`
       color: var(--game-text-bright);
     }
 
+    .verbs-wrap {
+      position: relative;
+    }
+
+    .verbs-menu {
+      position: absolute;
+      top: calc(100% + 2px);
+      left: 0;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      background: var(--game-bg-elevated);
+      border: 1px solid var(--game-border-accent);
+      min-width: 160px;
+    }
+
+    .verbs-item {
+      padding: 4px 10px;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--game-border-subtle);
+      color: var(--game-text-body);
+      font-family: inherit;
+      font-size: 0.65rem;
+      text-align: left;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .verbs-item:last-child {
+      border-bottom: none;
+    }
+
+    .verbs-item:hover {
+      background: var(--game-bg-raised);
+      color: var(--game-text-bright);
+    }
+
     .spell-slots {
       display: flex;
       gap: 2px;

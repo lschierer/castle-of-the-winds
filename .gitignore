@@ -13,6 +13,7 @@ build/
 blib/
 dist/
 .greenwood/
+.vite/
 
 # Tauri / Rust
 src-tauri/target/
@@ -34,6 +35,5 @@ logs/
 
 # TypeScript
 *.tsbuildinfo
-public
 
 .claude

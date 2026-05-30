@@ -10,7 +10,10 @@ The goal is to redevelop this as a single unified game available via a web exper
 * The project should use pnpm
 * Development should be done in Typescript
 	* set up the project to use ES6 modules
-* [Greenwood](https://greenwoodjs.dev/) should be used as the stack framework
+* [Vite](https://vite.dev/) is used as the bundler / dev server.
+	* Originally specified [Greenwood](https://greenwoodjs.dev/), but the app is a
+	  client-side SPA, not a content site — it was migrated to Vite. See
+	  `docs/vite-migration-spike.md` and `docs/Architecture.md`.
 * [Lit](https://lit.dev/) Elements should be used
 * The project should be fully type safe, passing checks with [ESlint](https://eslint.org/).  I have provided an eslint.config.mts that I have used before in the project root. 
 * Documentation about decisions made should be in the docs directory, in Markdown format. 

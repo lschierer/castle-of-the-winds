@@ -8,7 +8,7 @@ yq = "latest"
 
 [tasks.web]
 run = "pnpm dev"
-description = "Start Greenwood dev server (web-only, no native window)"
+description = "Start Vite dev server (web-only, no native window)"
 
 [tasks.dev]
 run = "pnpm tauri dev"
@@ -29,3 +29,12 @@ description = "Run TypeScript type checking"
 [tasks.download-sprites]
 run = "bash scripts/download-sprites.sh"
 description = "Download original Castle of the Winds sprites from castleofthewinds.com into assets/sprites/"
+
+[tasks.clean]
+run = """
+rm -rf src-tauri/target
+rm -rf build blib 
+rm -rf .vite
+
+"""
+description = "Remove generated files"

@@ -22,7 +22,12 @@ src/
 │   ├── world-map.ts   Static village/farm map definitions
 │   └── binary-data/   RE-extracted binary data tables
 │
-├── engine/            Stateless transforms (pure functions, no state)
+├── engine/            Stateless transforms + the headless game controller
+│   ├── game-session.ts The turn loop / orchestrator. Owns game state; every
+│   │                   action returns events. No DOM, no timers.
+│   ├── game-events.ts  GameEvent union + ActionResult (engine→view contract)
+│   ├── monster-ai.ts   Pure runMonsterPhase() — monster turns, returns events
+│   ├── direction.ts    Direction/difficulty helpers
 │   ├── combat.ts      Attack resolution formulas (to-hit, damage)
 │   ├── dungeon-gen.ts Floor generation (rooms, corridors, stairs, loot)
 │   ├── loot.ts        Loot table rolls (scrolls, potions, equipment)
@@ -36,24 +41,34 @@ src/
 │   ├── Character.ts   CharacterModel class (stats, inventory, equip)
 │   └── World.ts       WorldModel class (map, position, floors)
 │
-├── components/        Lit web components (UI layer)
-│   ├── game-world.ts  Orchestrator — input, turns, overlays (~2000 lines)
+├── components/        Lit web components (VIEW layer — no game logic)
+│   ├── game-world.ts  View shell — owns GameSession, replays events, input (~690 lines)
+│   ├── spell-bar.ts   Action bar, quick-cast slots, Verbs (Use…) menu
+│   ├── game-sidebar.ts Vitals/attributes/spells panel + message log
+│   ├── message-log.ts Scrolling event feed
 │   ├── dungeon-map.ts Tile grid viewport + minimap rendering
 │   ├── player-inventory.ts  Paperdoll, pack, belt, action menus, drag-drop
 │   ├── context-actions.ts   Dynamic "Verbs" menu (use potion, read scroll)
 │   ├── building-overlay.ts  Building/shop entry routing
 │   ├── shop-screen.ts       Shop buy/sell UI
 │   ├── character-creation.ts Character creation wizard
-│   └── landing-page.ts      Title screen
+│   ├── landing-page.ts      Title screen
+│   └── overlays/            Modal overlays (spells, story, death, game-menu, …)
 │
-└── pages/             HTML entry points
+└── (entry HTML at repo root)  index.html, create/index.html, game/index.html
 ```
 
 **Key design principles:**
 - `data/` files are pure catalogs — import them for type definitions and static arrays
-- `engine/` files are stateless — they take inputs and return outputs, never store state
-- `model/` classes own mutable game state — components call their methods to change things
-- `components/` render state and emit events — they don't contain game logic
+- `engine/` files are stateless — they take inputs and return outputs. The one
+  stateful exception is `GameSession`, the headless turn loop: it owns game state
+  and every action method returns a list of events instead of touching the DOM.
+- `model/` classes own mutable domain state (`CharacterModel`, `WorldModel`);
+  `GameSession` composes them
+- `components/` render state and emit events — they contain **no game logic**.
+  `<game-world>` calls a `GameSession` method, then replays the returned events into
+  UI (messages, animations, overlays). Other components are properties-down,
+  events-up. To change a game *rule*, edit the engine, not a component.
 
 ---
 
@@ -72,7 +87,10 @@ composition of smaller sprite pieces.
 
 **Key files to study:**
 - `src/components/dungeon-map.ts` — the `<dungeon-map>` component that renders
-  the tile viewport. Look at `TILE_PX`, `viewportSize()`, and `renderTileGrid()`
+  the tile viewport. Look at `TILE_PX`, `oddTileCover()`, the `viewport()` method
+  (sizes the grid to the measured panel via a `ResizeObserver`), and
+  `renderTileGrid()`. Note the grid overfills and is centred + clipped by
+  `:host { overflow: hidden }`, so it covers the panel edge-to-edge.
 - `src/components/game-world.styles.ts` — shared CSS styles
 - `src/engine/sprites.ts` — `getTileStyle()` returns CSS background properties per
   tile. Look at how `DIAGONAL_ROAD` and `BINARY_BYTE_SPRITE` work.

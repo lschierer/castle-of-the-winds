@@ -544,6 +544,113 @@ const FARM_MAP_SPEC: MapSpec = {
   ],
 };
 
+// ── Mountain pass (phase 2 overworld) ────────────────────────────────────────
+//
+// A narrow mountain corridor connecting the hamlet area (east) to Bjarnarhaven
+// (north).  Fixed layout from the original binary — exactly one trap (never
+// teleport) at the bend in the path inside the mountain.
+//
+// Layout (28 wide × 44 tall):
+//   Entry: east edge at x=27, y=19-21  ← from farm-map west exit
+//   South corridor: x=24-26, y=5-21   (south leg, 3 tiles wide)
+//   Turn/corner:    x=7-26,  y=19-21  (east-west section, trap at x=17, y=20)
+//   North corridor: x=7-9,   y=1-19   (north leg, 3 tiles wide)
+//   Bjarnarhaven:   north end x=7-9, y=0  (exit to bjarnarhaven map)
+
+const FORT = '/assets/sprites/icons/Fort';
+
+const MOUNTAIN_PASS_SPEC: MapSpec = {
+  id: 'mountain-pass',
+  width: 28,
+  height: 44,
+  entryPosition: { x: 26, y: 20 },  // arrive from east (farm-map)
+
+  layers: [
+    // ── Base: solid mountain ─────────────────────────────────────────────
+    { kind: 'fill', x: 0, y: 0, w: 28, h: 44, terrain: 'mountain', walkable: false },
+
+    // ── South corridor (x=24-26, y=5-21) — enters from east ──────────────
+    { kind: 'road', x1: 24, y1: 5,  x2: 26, y2: 21 },
+    // Widen the entry point at the east edge so it's clearly accessible
+    { kind: 'road', x1: 24, y1: 19, x2: 27, y2: 21 },
+
+    // ── East-west turn (x=7-26, y=19-21) ─────────────────────────────────
+    { kind: 'road', x1: 7,  y1: 19, x2: 26, y2: 21 },
+
+    // ── North corridor (x=7-9, y=1-21) ───────────────────────────────────
+    { kind: 'road', x1: 7,  y1: 1,  x2: 9,  y2: 21 },
+
+    // ── Fixed trap at the bend (x=17, y=20 — middle of east-west section) ─
+    // Placed as a feature here; game-world movement code triggers it normally.
+    // (trap data is set directly on the tile after buildMap, see openPhaseTwo)
+
+    // ── Bjarnarhaven gate (north end) ─────────────────────────────────────
+    { kind: 'building', id: 'bjarnarhaven-gate', x: 7, y: 0, cols: 3, rows: 1,
+      sprite: `${FORT}/wdgaten.png`,
+      doors: [{ x: 8, y: 1, info: { position: { x: 8, y: 1 }, name: 'Bjarnarhaven', description: 'The wooden palisade of the town of Bjarnarhaven.' } }] },
+
+    // ── Exits ─────────────────────────────────────────────────────────────
+    // East exits — return to farm-map (same y-band the player entered from)
+    { kind: 'exit', x: 27, y: 19, exit: { position: { x: 27, y: 19 }, targetMap: 'farm-map', targetPosition: { x: 1, y: 15 }, message: 'You emerge from the mountain pass onto the open road.' } },
+    { kind: 'exit', x: 27, y: 20, exit: { position: { x: 27, y: 20 }, targetMap: 'farm-map', targetPosition: { x: 1, y: 15 }, message: 'You emerge from the mountain pass onto the open road.' } },
+    { kind: 'exit', x: 27, y: 21, exit: { position: { x: 27, y: 21 }, targetMap: 'farm-map', targetPosition: { x: 1, y: 16 }, message: 'You emerge from the mountain pass onto the open road.' } },
+
+    // Bjarnarhaven entrance (door tile at x=8, y=1)
+    { kind: 'exit', x: 8, y: 1, exit: { position: { x: 8, y: 1 }, targetMap: 'bjarnarhaven', targetPosition: { x: 12, y: 24 }, message: 'You enter the town of Bjarnarhaven.' } },
+  ],
+};
+
+// ── Bjarnarhaven (phase 2 town — stub) ───────────────────────────────────────
+// Full layout TBD when all fort-wall assets are available.
+
+const BJARNARHAVEN_SPEC: MapSpec = {
+  id: 'bjarnarhaven',
+  width: 28,
+  height: 28,
+  entryPosition: { x: 12, y: 24 },
+
+  layers: [
+    { kind: 'fill', x: 0, y: 0, w: 28, h: 28, terrain: 'grass', walkable: true },
+    // Palisade walls (outer ring, 3-tile thick mountain stand-in until full fort assets)
+    { kind: 'fill', x: 0, y: 0, w: 28, h: 2,  terrain: 'mountain', walkable: false },
+    { kind: 'fill', x: 0, y: 26, w: 28, h: 2, terrain: 'mountain', walkable: false },
+    { kind: 'fill', x: 0, y: 2, w: 2, h: 24,  terrain: 'mountain', walkable: false },
+    { kind: 'fill', x: 26, y: 2, w: 2, h: 24, terrain: 'mountain', walkable: false },
+    // South gate road
+    { kind: 'road', x1: 11, y1: 24, x2: 13, y2: 27 },
+    // South exit back to mountain pass
+    { kind: 'exit', x: 11, y: 27, exit: { position: { x: 11, y: 27 }, targetMap: 'mountain-pass', targetPosition: { x: 8, y: 2 }, message: 'You leave Bjarnarhaven.' } },
+    { kind: 'exit', x: 12, y: 27, exit: { position: { x: 12, y: 27 }, targetMap: 'mountain-pass', targetPosition: { x: 8, y: 2 }, message: 'You leave Bjarnarhaven.' } },
+    { kind: 'exit', x: 13, y: 27, exit: { position: { x: 13, y: 27 }, targetMap: 'mountain-pass', targetPosition: { x: 8, y: 2 }, message: 'You leave Bjarnarhaven.' } },
+  ],
+};
+
+// ── Phase-two unlock ──────────────────────────────────────────────────────────
+
+/**
+ * Open the westward farm-map exits to the mountain pass.
+ * Called when the hamlet is first destroyed (parchment read + village entered).
+ * Also called on save-load when hamletDestroyed is already true.
+ */
+export function openPhaseTwo(): void {
+  const exitW: MapExit = {
+    position: { x: 0, y: 15 },
+    targetMap: 'mountain-pass',
+    targetPosition: { x: 26, y: 20 },
+    message: 'You follow the road west into the mountain pass.',
+  };
+  const t15 = FARM_MAP.tiles[15]?.[0];
+  const t16 = FARM_MAP.tiles[16]?.[0];
+  if (t15) t15.exit = exitW;
+  if (t16) t16.exit = { ...exitW, position: { x: 0, y: 16 } };
+
+  // Place the fixed trap at the bend in the mountain pass
+  const trapTile = MOUNTAIN_PASS_MAP.tiles[20]?.[17];
+  if (trapTile && !trapTile.trap) {
+    trapTile.trap = { kind: 'deadfall', detected: false, triggered: false };
+  }
+}
+
 // ── Constructed maps ──────────────────────────────────────────────────────────
 //
 // The terrain layer comes from CASTLE1.EXE seg25 (alive hamlet) and seg28
@@ -556,6 +663,8 @@ import { overlayBinaryTerrain } from './binary-map-overlay.ts';
 
 export const VILLAGE_MAP: TileMap = overlayBinaryTerrain(buildMap(VILLAGE_SPEC), 'hamlet-alive');
 export const FARM_MAP:    TileMap = overlayBinaryTerrain(buildMap(FARM_MAP_SPEC), 'burned-farm');
+export const MOUNTAIN_PASS_MAP: TileMap = buildMap(MOUNTAIN_PASS_SPEC);
+export const BJARNARHAVEN_MAP:  TileMap = buildMap(BJARNARHAVEN_SPEC);
 
 // Dungeon maps are generated procedurally by dungeon-gen.ts.
 // DUNGEON_1_MAP is a static fallback kept for save-state backward compat.
@@ -567,7 +676,9 @@ export const DUNGEON_1_MAP: TileMap = (() => {
 })();
 
 export const ALL_MAPS: Record<MapId, TileMap> = {
-  'village':   VILLAGE_MAP,
-  'farm-map':  FARM_MAP,
-  'dungeon-1': DUNGEON_1_MAP,
+  'village':        VILLAGE_MAP,
+  'farm-map':       FARM_MAP,
+  'mountain-pass':  MOUNTAIN_PASS_MAP,
+  'bjarnarhaven':   BJARNARHAVEN_MAP,
+  'dungeon-1':      DUNGEON_1_MAP,
 };
