@@ -35,6 +35,6 @@ run = """
 rm -rf src-tauri/target
 rm -rf build blib 
 rm -rf .vite
-
+find public/ \\( -iname '*.js' -o -iname '*.js.map' \\) -delete
 """
 description = "Remove generated files"
