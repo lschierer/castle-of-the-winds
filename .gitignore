@@ -9,11 +9,9 @@ node_modules/
 .pnp.js
 
 # Build artifacts
-build/
-blib/
 dist/
-.greenwood/
 .vite/
+.greenwood/
 
 # Tauri / Rust
 src-tauri/target/
@@ -36,4 +34,13 @@ logs/
 # TypeScript
 *.tsbuildinfo
 
+# AI assistant
 .claude
+
+# Vite build output that may land in public/ by mistake
+public/*.js
+public/*.js.map
+public/*.css
+public/graph.json
+public/manifest.json
+public/resources.json
