@@ -563,7 +563,7 @@ const MOUNTAIN_PASS_SPEC: MapSpec = {
   id: 'mountain-pass',
   width: 28,
   height: 44,
-  entryPosition: { x: 26, y: 20 },  // arrive from east (farm-map)
+  entryPosition: { x: 8, y: 42 },  // arrive from south (Bjarnarhaven)
 
   layers: [
     // ── Base: solid mountain ─────────────────────────────────────────────
@@ -590,13 +590,15 @@ const MOUNTAIN_PASS_SPEC: MapSpec = {
       doors: [{ x: 8, y: 1, info: { position: { x: 8, y: 1 }, name: 'Bjarnarhaven', description: 'The wooden palisade of the town of Bjarnarhaven.' } }] },
 
     // ── Exits ─────────────────────────────────────────────────────────────
-    // East exits — return to farm-map (same y-band the player entered from)
-    { kind: 'exit', x: 27, y: 19, exit: { position: { x: 27, y: 19 }, targetMap: 'farm-map', targetPosition: { x: 1, y: 15 }, message: 'You emerge from the mountain pass onto the open road.' } },
-    { kind: 'exit', x: 27, y: 20, exit: { position: { x: 27, y: 20 }, targetMap: 'farm-map', targetPosition: { x: 1, y: 15 }, message: 'You emerge from the mountain pass onto the open road.' } },
-    { kind: 'exit', x: 27, y: 21, exit: { position: { x: 27, y: 21 }, targetMap: 'farm-map', targetPosition: { x: 1, y: 16 }, message: 'You emerge from the mountain pass onto the open road.' } },
+    // South exits — return to Bjarnarhaven
+    { kind: 'exit', x: 7, y: 43, exit: { position: { x: 7, y: 43 }, targetMap: 'bjarnarhaven', targetPosition: { x: 12, y: 1 }, message: 'You return to Bjarnarhaven.' } },
+    { kind: 'exit', x: 8, y: 43, exit: { position: { x: 8, y: 43 }, targetMap: 'bjarnarhaven', targetPosition: { x: 12, y: 1 }, message: 'You return to Bjarnarhaven.' } },
+    { kind: 'exit', x: 9, y: 43, exit: { position: { x: 9, y: 43 }, targetMap: 'bjarnarhaven', targetPosition: { x: 12, y: 1 }, message: 'You return to Bjarnarhaven.' } },
 
-    // Bjarnarhaven entrance (door tile at x=8, y=1)
-    { kind: 'exit', x: 8, y: 1, exit: { position: { x: 8, y: 1 }, targetMap: 'bjarnarhaven', targetPosition: { x: 12, y: 24 }, message: 'You enter the town of Bjarnarhaven.' } },
+    // North exit — fortress entrance (enters fortress dungeon floor 1)
+    { kind: 'exit', x: 7, y: 0, exit: { position: { x: 7, y: 0 }, targetMap: 'fortress-1' as MapId, targetPosition: { x: 5, y: 5 }, message: 'You enter the fortress.' } },
+    { kind: 'exit', x: 8, y: 0, exit: { position: { x: 8, y: 0 }, targetMap: 'fortress-1' as MapId, targetPosition: { x: 5, y: 5 }, message: 'You enter the fortress.' } },
+    { kind: 'exit', x: 9, y: 0, exit: { position: { x: 9, y: 0 }, targetMap: 'fortress-1' as MapId, targetPosition: { x: 5, y: 5 }, message: 'You enter the fortress.' } },
   ],
 };
 
@@ -618,10 +620,16 @@ const BJARNARHAVEN_SPEC: MapSpec = {
     { kind: 'fill', x: 26, y: 2, w: 2, h: 24, terrain: 'mountain', walkable: false },
     // South gate road
     { kind: 'road', x1: 11, y1: 24, x2: 13, y2: 27 },
-    // South exit back to mountain pass
-    { kind: 'exit', x: 11, y: 27, exit: { position: { x: 11, y: 27 }, targetMap: 'mountain-pass', targetPosition: { x: 8, y: 2 }, message: 'You leave Bjarnarhaven.' } },
-    { kind: 'exit', x: 12, y: 27, exit: { position: { x: 12, y: 27 }, targetMap: 'mountain-pass', targetPosition: { x: 8, y: 2 }, message: 'You leave Bjarnarhaven.' } },
-    { kind: 'exit', x: 13, y: 27, exit: { position: { x: 13, y: 27 }, targetMap: 'mountain-pass', targetPosition: { x: 8, y: 2 }, message: 'You leave Bjarnarhaven.' } },
+    // South exit back to farm-map (highway west)
+    { kind: 'exit', x: 11, y: 27, exit: { position: { x: 11, y: 27 }, targetMap: 'farm-map', targetPosition: { x: 1, y: 15 }, message: 'You journey east along the highway back toward the hamlet.' } },
+    { kind: 'exit', x: 12, y: 27, exit: { position: { x: 12, y: 27 }, targetMap: 'farm-map', targetPosition: { x: 1, y: 15 }, message: 'You journey east along the highway back toward the hamlet.' } },
+    { kind: 'exit', x: 13, y: 27, exit: { position: { x: 13, y: 27 }, targetMap: 'farm-map', targetPosition: { x: 1, y: 15 }, message: 'You journey east along the highway back toward the hamlet.' } },
+    // North gate road
+    { kind: 'road', x1: 11, y1: 0, x2: 13, y2: 3 },
+    // North exit to mountain pass (toward fortress)
+    { kind: 'exit', x: 11, y: 0, exit: { position: { x: 11, y: 0 }, targetMap: 'mountain-pass', targetPosition: { x: 8, y: 42 }, message: 'You head north into the mountain pass toward the fortress.' } },
+    { kind: 'exit', x: 12, y: 0, exit: { position: { x: 12, y: 0 }, targetMap: 'mountain-pass', targetPosition: { x: 8, y: 42 }, message: 'You head north into the mountain pass toward the fortress.' } },
+    { kind: 'exit', x: 13, y: 0, exit: { position: { x: 13, y: 0 }, targetMap: 'mountain-pass', targetPosition: { x: 8, y: 42 }, message: 'You head north into the mountain pass toward the fortress.' } },
   ],
 };
 
@@ -635,9 +643,9 @@ const BJARNARHAVEN_SPEC: MapSpec = {
 export function openPhaseTwo(): void {
   const exitW: MapExit = {
     position: { x: 0, y: 15 },
-    targetMap: 'mountain-pass',
-    targetPosition: { x: 26, y: 20 },
-    message: 'You follow the road west into the mountain pass.',
+    targetMap: 'bjarnarhaven',
+    targetPosition: { x: 12, y: 24 },
+    message: 'You journey along the highway for a full day, and reach the village of Bjarnarhaven.',
   };
   const t15 = FARM_MAP.tiles[15]?.[0];
   const t16 = FARM_MAP.tiles[16]?.[0];
