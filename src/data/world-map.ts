@@ -613,11 +613,41 @@ const BJARNARHAVEN_SPEC: MapSpec = {
 
   layers: [
     { kind: 'fill', x: 0, y: 0, w: 28, h: 28, terrain: 'grass', walkable: true },
-    // Palisade walls (outer ring, 3-tile thick mountain stand-in until full fort assets)
+    // Palisade walls (outer ring)
     { kind: 'fill', x: 0, y: 0, w: 28, h: 2,  terrain: 'mountain', walkable: false },
     { kind: 'fill', x: 0, y: 26, w: 28, h: 2, terrain: 'mountain', walkable: false },
     { kind: 'fill', x: 0, y: 2, w: 2, h: 24,  terrain: 'mountain', walkable: false },
     { kind: 'fill', x: 26, y: 2, w: 2, h: 24, terrain: 'mountain', walkable: false },
+
+    // Main road (north-south through center)
+    { kind: 'road', x1: 11, y1: 2, x2: 13, y2: 25 },
+
+    // ── Buildings (west side) ─────────────────────────────────────────────
+    { kind: 'building', id: "Bjorn's Smithy", x: 4, y: 4, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchrt.png`,
+      doors: [{ x: 6, y: 5, info: { position: { x: 6, y: 5 }, name: "Bjorn's Smithy", description: 'A blacksmith who buys and sells weapons.' } }] },
+    { kind: 'building', id: "Sverting's Armor", x: 4, y: 9, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchlf.png`,
+      doors: [{ x: 6, y: 10, info: { position: { x: 6, y: 10 }, name: "Sverting's Armor", description: 'An armorer selling shields, helms, and body armor.' } }] },
+    { kind: 'building', id: "Olaf's Junk Store", x: 4, y: 14, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchrt.png`,
+      doors: [{ x: 6, y: 15, info: { position: { x: 6, y: 15 }, name: "Olaf's Junk Store", description: 'Buys anything, even cursed items. Pays 25 copper max.' } }] },
+    { kind: 'building', id: 'Shrine of Odin', x: 4, y: 19, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchlf.png`,
+      doors: [{ x: 6, y: 20, info: { position: { x: 6, y: 20 }, name: 'Shrine of Odin', description: 'A shrine where you can be healed and restored.' } }] },
+
+    // ── Buildings (east side) ─────────────────────────────────────────────
+    { kind: 'building', id: "Rognvald's Outfitters", x: 18, y: 4, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchlf.png`,
+      doors: [{ x: 18, y: 5, info: { position: { x: 18, y: 5 }, name: "Rognvald's Outfitters", description: 'Sells cloaks, boots, scrolls, potions, and packs.' } }] },
+    { kind: 'building', id: "Snorri the Sage", x: 18, y: 9, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchrt.png`,
+      doors: [{ x: 18, y: 10, info: { position: { x: 18, y: 10 }, name: "Snorri the Sage", description: 'Identifies unknown items for a fee.' } }] },
+    { kind: 'building', id: 'First Bank', x: 18, y: 14, cols: 3, rows: 3,
+      sprite: `${BITMAPS}/bldhchlf.png`,
+      doors: [{ x: 18, y: 15, info: { position: { x: 18, y: 15 }, name: 'First Bank', description: 'Deposit money safely. Your balance is available everywhere.' } }] },
+
+    // ── Gates ─────────────────────────────────────────────────────────────
     // South gate road
     { kind: 'road', x1: 11, y1: 24, x2: 13, y2: 27 },
     // South exit back to farm-map (highway west)

@@ -96,6 +96,11 @@ export function generateFloor(opts: GenerateFloorOptions): DungeonFloor {
     stage = 'mine',
   } = opts;
 
+  // Fortress floor 1: fixed layout with hidden stairs (requires searching)
+  if (stage === 'fortress' && dungeonLevel === 1) {
+    return generateFortressFloor1();
+  }
+
   const totalFloors = totalFloorsForStage(stage);
 
   // Grow map size with depth within each stage, capping at the original game's 64×64 grid.
@@ -686,4 +691,87 @@ function placeHrungnirBoss(
       });
     }
   }
+}
+
+// ── Fortress floor 1: fixed layout ───────────────────────────────────────────
+//
+// A small fortress entry hall. The stairs down are hidden behind a secret door
+// on the north wall — the player must Search to find them. This is the first
+// time the game requires the Search command.
+//
+// Layout (20×16):
+//   Entry room (south): 4×4 open area with stairs-up at center
+//   Main hall (center): 12×6 open area
+//   North wall: solid, with a secret-door at center leading to stairs-down alcove
+
+function generateFortressFloor1(): DungeonFloor {
+  const w = 20;
+  const h = 16;
+
+  // Fill with walls
+  const grid: Tile[][] = [];
+  for (let y = 0; y < h; y++) {
+    const row: Tile[] = [];
+    for (let x = 0; x < w; x++) {
+      row.push({ terrain: 'floor', walkable: false, items: [] });
+    }
+    grid.push(row);
+  }
+
+  // Carve the main hall (x=4..15, y=4..11)
+  for (let y = 4; y <= 11; y++) {
+    for (let x = 4; x <= 15; x++) {
+      const t = grid[y]?.[x];
+      if (t) { t.walkable = true; t.roomId = 0; }
+    }
+  }
+
+  // Carve entry corridor from south (x=9..10, y=12..14)
+  for (let y = 12; y <= 14; y++) {
+    for (let x = 9; x <= 10; x++) {
+      const t = grid[y]?.[x];
+      if (t) { t.walkable = true; }
+    }
+  }
+
+  // Carve the hidden alcove behind the north wall (x=9..10, y=2..3)
+  for (let y = 2; y <= 3; y++) {
+    for (let x = 9; x <= 10; x++) {
+      const t = grid[y]?.[x];
+      if (t) { t.walkable = true; t.roomId = 1; }
+    }
+  }
+
+  // Place secret door on north wall (x=9, y=3 — connects main hall to alcove)
+  const secretDoor = grid[3]?.[9];
+  if (secretDoor) { secretDoor.walkable = false; secretDoor.feature = 'secret-door'; }
+  const secretDoor2 = grid[3]?.[10];
+  if (secretDoor2) { secretDoor2.walkable = false; secretDoor2.feature = 'secret-door'; }
+
+  // Stairs up at entry (x=9, y=13)
+  const stairsUpTile = grid[13]?.[9];
+  if (stairsUpTile) { stairsUpTile.feature = 'stairs-up'; }
+  const stairsUp: Vec2 = { x: 9, y: 13 };
+
+  // Stairs down in the hidden alcove (x=9, y=2)
+  const stairsDownTile = grid[2]?.[9];
+  if (stairsDownTile) { stairsDownTile.feature = 'stairs-down'; }
+  const stairsDown: Vec2 = { x: 9, y: 2 };
+
+  // A few guards in the main hall
+  const monsters: MonsterInstance[] = [
+    { specId: 'goblin_fighter', instanceId: `m${monsterSeq++}`, hp: 12, maxHp: 12, x: 6, y: 6, alerted: true, status: {} },
+    { specId: 'goblin_fighter', instanceId: `m${monsterSeq++}`, hp: 12, maxHp: 12, x: 13, y: 6, alerted: true, status: {} },
+    { specId: 'hobgoblin', instanceId: `m${monsterSeq++}`, hp: 10, maxHp: 10, x: 10, y: 8, alerted: false, status: {} },
+  ];
+
+  const map: TileMap = {
+    id: 'fortress-1',
+    width: w,
+    height: h,
+    tiles: grid,
+    entryPosition: stairsUp,
+  };
+
+  return { map, monsters, stairsUp, stairsDown };
 }
