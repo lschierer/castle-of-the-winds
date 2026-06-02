@@ -193,3 +193,69 @@ export function runMonsterPhase(input: MonsterPhaseInput): MonsterPhaseResult {
 
   return { monsters: updatedMonsters, playerStatus: updatedStatus, charChanged, died: false, events };
 }
+
+// ── Wandering monster respawn ─────────────────────────────────────────────────
+
+import { monstersForDepth } from '../data/monsters.ts';
+import type { GameStage } from '../data/progression.ts';
+
+let respawnSeq = 9000;
+
+/**
+ * Possibly spawn a wandering monster on the current floor.
+ * Called once per player turn. Very low probability (~2% per turn).
+ * Monster spawns far from the player (at least 10 tiles away).
+ *
+ * Per the original game: monsters slowly respawn on cleared floors,
+ * making backtracking slightly dangerous and preventing infinite safe resting.
+ */
+export function tryWanderingMonster(
+  monsters: MonsterInstance[],
+  map: TileMap,
+  pos: Vec2,
+  stage: GameStage,
+  dungeonLevel: number,
+  difficulty: number,
+): MonsterInstance[] {
+  // ~2% chance per turn, slightly higher at harder difficulties
+  const chance = 0.02 + 0.005 * difficulty;
+  if (Math.random() >= chance) return monsters;
+
+  // Find a walkable tile far from the player
+  const candidates: Vec2[] = [];
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const dist = Math.abs(x - pos.x) + Math.abs(y - pos.y);
+      if (dist < 10) continue;
+      const row = map.tiles[y];
+      if (!row) continue;
+      const t = row[x];
+      if (!t || !t.walkable || t.feature) continue;
+      if (monsters.some((m) => m.x === x && m.y === y)) continue;
+      candidates.push({ x, y });
+    }
+  }
+  if (candidates.length === 0) return monsters;
+
+  const pool = monstersForDepth(stage, dungeonLevel);
+  if (pool.length === 0) return monsters;
+
+  const spawnPos = candidates[Math.floor(Math.random() * candidates.length)];
+  const spec = pool[Math.floor(Math.random() * pool.length)];
+  if (!spawnPos || !spec) return monsters;
+
+  const hpBonus = 5 * difficulty;
+  const hp = spec.hp + hpBonus;
+  const newMonster: MonsterInstance = {
+    specId: spec.id,
+    instanceId: `w${respawnSeq++}`,
+    hp,
+    maxHp: hp,
+    x: spawnPos.x,
+    y: spawnPos.y,
+    alerted: false,
+    status: {},
+  };
+
+  return [...monsters, newMonster];
+}

@@ -48,7 +48,7 @@ import { SHOPS, resetVisitPrices, makeShopState, type ShopState } from './shop.t
 import type { ContextAction } from '../components/context-actions.ts';
 import type { GameState } from './save.ts';
 import { type GameEvent, type ActionResult, ev } from './game-events.ts';
-import { runMonsterPhase } from './monster-ai.ts';
+import { runMonsterPhase, tryWanderingMonster } from './monster-ai.ts';
 import { monsterDirectionLabel, diagonalKeyHint, difficultyToInt } from './direction.ts';
 import { getLogger } from './logging.ts';
 
@@ -145,7 +145,11 @@ export class GameSession {
       difficulty: this.difficultyInt,
       playerAC: this.playerAC,
     });
-    this.world.monsters = r.monsters;
+    // Wandering monster respawn (low chance per turn)
+    const withRespawn = this.currentDungeonLevel > 0
+      ? tryWanderingMonster(r.monsters, this.map, this.pos, this.currentStage, this.currentDungeonLevel, this.difficultyInt)
+      : r.monsters;
+    this.world.monsters = withRespawn;
     this.playerStatus = r.playerStatus;
     events.push(...r.events);
     if (r.died) this.deadFlag = true;
