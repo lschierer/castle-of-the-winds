@@ -72,136 +72,165 @@ src/
 
 ---
 
-## Project 1: Sub-Tile Rendering
+## Project 1: Sub-Tile Rendering — Implement the Subgrid Engine
 
-**Goal:** Make the tile renderer support finer-grained "pixels" so diagonal
-elements (roads, mountain edges) display correctly instead of occupying a full
-32×32 tile.
+**Goal:** Implement the body of the sub-tile layout engine and wire the
+`<tile-cell>` component into the renderer, so diagonal terrain transitions
+render as smooth diagonals instead of ugly staircase steps.
 
-**Why this matters:** The original game uses diagonal road sprites (like
-`URROCKRD.png`, `LLROCKRD.png`) that visually cut across a tile at an angle.
-Right now each tile is rendered as a single 32×32 CSS grid cell. Surface maps
-need tiles that can show partial terrain — e.g., half grass / half road on a
-diagonal. The original game solved this by having each "tile" actually be a
-composition of smaller sprite pieces.
+**Why this matters:** The original 1993 game rendered diagonal paths by
+compositing terrain into sub-cells within a tile — it did NOT have pre-baked
+diagonal sprites for every case. Our current renderer draws each tile as a
+single 32×32 div, so diagonal corridors (in dungeons) and diagonal roads (on
+surface maps) look like blocky staircases. The architecture to fix this is
+already designed and stubbed out — your job is to fill in the implementations.
+
+**Background:**
+
+The approach (Approach C from the original design exploration) uses a 2×2
+sub-cell grid within each logical tile. Each 32×32 tile can be split into
+four 16×16 quadrants, each painted with potentially different terrain. This
+lets a tile that sits on a diagonal boundary show (for example) grass in its
+NW corners and road in its SE corners, creating a visual diagonal line.
+
+Key constraint: characters, monsters, and items still move and render at the
+full tile scale (32×32). Only the *terrain background* uses the subgrid.
+Overlays (hero sprite, monster sprite, item icons, doors, stairs) are drawn
+on top at full tile size.
+
+**Skeleton files already provided:**
+
+Three files exist with full type signatures, doc comments, and algorithm
+outlines — but their method bodies just `throw new Error('Not implemented')`.
+Your job is to replace those throws with working code.
+
+| File | Layer | What to implement |
+|------|-------|-------------------|
+| `src/data/sub-tile.ts` | data | Already complete — just read and understand the types |
+| `src/engine/sub-tile-layout.ts` | engine | `resolveSubGrid()` — the core algorithm |
+| `src/components/tile-cell.ts` | components | `renderSimpleTile()`, `renderSubgridTile()`, `renderOverlays()` |
 
 **Key files to study:**
-- `src/components/dungeon-map.ts` — the `<dungeon-map>` component that renders
-  the tile viewport. Look at `TILE_PX`, `oddTileCover()`, the `viewport()` method
-  (sizes the grid to the measured panel via a `ResizeObserver`), and
-  `renderTileGrid()`. Note the grid overfills and is centred + clipped by
-  `:host { overflow: hidden }`, so it covers the panel edge-to-edge.
-- `src/components/game-world.styles.ts` — shared CSS styles
-- `src/engine/sprites.ts` — `getTileStyle()` returns CSS background properties per
-  tile. Look at how `DIAGONAL_ROAD` and `BINARY_BYTE_SPRITE` work.
-- `src/data/tile-map.ts` — the `Tile` interface and `Direction` type
+- `src/data/sub-tile.ts` — read this FIRST. Understand `SubCell`, `SubGrid`,
+  and `TileRenderData`. This is the data contract between the engine and view.
+- `src/engine/sub-tile-layout.ts` — read the algorithm outline in the comments
+  of `resolveSubGrid()`. This describes step-by-step what needs to happen.
+- `src/components/tile-cell.ts` — read the component structure, CSS, and the
+  comments describing what each render method should do.
+- `src/engine/sprites.ts` — understand `getTileStyle()` (the current system)
+  and the `terrainBase()` helper. You'll write a simpler `getSubCellStyle()`
+  based on the same pattern.
+- `src/components/dungeon-map.ts` — understand `renderTileGrid()` (the current
+  renderer). You'll modify it to emit `<tile-cell>` elements.
+- `src/data/tile-map.ts` — the `Tile` interface, `getTileAt()`, terrain types.
+- `docs/plan-subtile-rendering.md` — the full design plan with rationale.
 
-**Research starting points:**
+**Step-by-step approach:**
 
-Before writing code, spend time understanding three possible approaches. You
-don't need to master all three — the goal is to understand the tradeoffs well
-enough to pick one.
+*Step 1: Understand the data flow (reading only, no code changes)*
 
-*Approach A: CSS multiple backgrounds (easiest to start with)*
+1. Run the game (`mise run web`) and open the farm-map in the browser.
+2. Open DevTools → Elements. Find a tile div and look at its computed style.
+3. Read `getTileStyle()` in `sprites.ts` end-to-end. Trace how a tile's
+   `terrain` field becomes CSS `background-image` properties.
+4. Read the `SubCell`, `SubGrid`, and `TileRenderData` types in
+   `src/data/sub-tile.ts`. Understand what data the tile-cell component expects.
 
-The current code already uses CSS `background-image` with multiple layers.
-Open browser DevTools, inspect a tile `<div>`, and look at its computed style.
-Each tile can have multiple background images stacked (comma-separated in CSS).
+*Step 2: Implement `getNeighbourhood()` in sub-tile-layout.ts*
 
-Key concepts to research:
-- MDN: "Using multiple backgrounds" — https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_backgrounds_and_borders/Using_multiple_backgrounds
-- MDN: `background-position` — you can position a sprite at pixel offsets
-- MDN: `background-size` — `cover`, `contain`, or exact pixel dimensions
-- The diagonal road PNGs (`src/assets/sprites/bitmaps/URROCKRD.png` etc.) are
-  already 32×32 images with transparency. Open them in Preview/an image viewer.
-  They already ARE the correct diagonal visual — the question is whether the
-  current rendering pipeline displays them correctly or clips/stretches them.
+This is a simple helper — call `getTileAt()` 9 times and return the struct.
+Test it with `console.log` on a known farm-map tile.
 
-Try this experiment first: In DevTools, find a tile that should show a diagonal
-road. Manually set its `background-image` to the diagonal PNG and see what
-happens. Does it look right? If so, the problem might just be in how
-`getTileStyle()` selects and layers sprites, not in the grid structure itself.
+*Step 3: Implement `isDiagonalTransition()`*
 
-*Approach B: HTML5 Canvas (most flexible, more code)*
+Decide which terrain pairs represent a real visual diagonal. Key pairs:
+- `grass` ↔ `road` (surface map diagonal roads)
+- `grass` ↔ `floor` (outdoor-to-indoor transitions)
+- `floor` ↔ `void` should NOT trigger (handled by walls)
+- Same terrain → always false
 
-Instead of CSS Grid with `<div>` per tile, you draw everything onto a single
-`<canvas>` element using JavaScript.
+*Step 4: Implement `shouldBleedCorner()`*
 
-Key concepts to research:
-- MDN: Canvas tutorial — https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial
-- Specifically: `drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh)` — this one
-  function call can draw a sub-rectangle of a source image onto any position on
-  the canvas. This is how most 2D game engines work.
-- `OffscreenCanvas` and `requestAnimationFrame` for performance
+This is the core logic. A corner "bleeds" when a diagonal neighbour's
+terrain should appear in the center tile's corner. The rule: bleed happens
+when at least one of the two shared cardinal neighbours matches the diagonal
+neighbour's terrain (creating a continuous path). If both cardinals match the
+center, the diagonal is isolated and shouldn't bleed.
 
-Tradeoffs: Canvas gives you pixel-perfect control and is fast for many tiles,
-but you lose CSS styling, DOM events per tile (click/hover), and accessibility.
-The current code uses DOM events on tiles for mouse interaction (clicking to
-move, hovering for tooltips). You'd need to reimplement that with coordinate
-math on canvas click events.
+*Step 5: Implement `resolveSubGrid()`*
 
-A good tutorial for tile-based canvas rendering:
-https://developer.mozilla.org/en-US/docs/Games/Techniques/Tilemaps
+Follow the algorithm outline in the comments. Check each diagonal direction,
+apply bleed logic, build the SubGrid or return null.
 
-*Approach C: Sub-grid (middle ground)*
+Test: add a temporary `console.log` in dungeon-map's render loop that calls
+`resolveSubGrid()` and logs non-null results. You should see them on
+farm-map diagonal road tiles.
 
-Keep the CSS Grid approach but make each logical tile a 2×2 or 4×4 grid of
-smaller cells. A 32px tile becomes four 16×16 cells or sixteen 8×8 cells.
+*Step 6: Add `getSubCellStyle()` to sprites.ts*
 
-Key concepts to research:
-- CSS `display: grid` with `grid-template-columns: repeat(2, 16px)` nested
-  inside each tile
-- Or: make the entire viewport grid finer (e.g., 16px cells) and have each
-  game tile span 2 cells in each direction using `grid-column: span 2`
-- CSS `subgrid` — https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Subgrid
+Write a function that takes a `SubCell` and returns a `TileStyle`. This is
+simpler than `getTileStyle()` — just resolve the terrain to its 16×16 base
+sprite. No features, no overlays, no building regions.
 
-Tradeoffs: More DOM elements (4× or 16× more divs), which could hurt
-performance. But it keeps the existing CSS-based approach and DOM events
-working. Test with a full viewport of tiles and check if scrolling is smooth.
+*Step 7: Implement the three render methods in tile-cell.ts*
 
-**How to decide:**
+- `renderSimpleTile()`: Apply `fullTileStyle` as inline CSS, add overlays.
+  This should produce output identical to what dungeon-map currently renders.
+- `renderOverlays()`: Conditionally render `<img class="overlay">` elements
+  for each non-undefined sprite in the render data.
+- `renderSubgridTile()`: Render the 2×2 grid of sub-cells using
+  `getSubCellStyle()`, then add overlays on top.
 
-Start with Approach A. Open the diagonal road sprites in an image viewer and
-inspect what the current renderer actually produces in the browser. The answer
-might be simpler than you expect — the sprites may already be correct and just
-need proper layering/sizing in `getTileStyle()`. If that's the case, you won't
-need Canvas or sub-grids at all.
+*Step 8: Wire `<tile-cell>` into dungeon-map.ts*
 
-If Approach A can't solve it (because you need different terrain in different
-quadrants of a single tile), then choose between B and C based on whether you
-want to learn Canvas (more transferable game-dev skill) or stay in CSS-land
-(faster to implement, less risk of breaking things).
+Modify `renderTileGrid()` to:
+1. Import and use `<tile-cell>` (add `import '../components/tile-cell.ts'`)
+2. For each tile in the viewport, assemble a `TileRenderData` object
+3. Emit `<tile-cell .renderData=${data}></tile-cell>` instead of a raw div
 
-**Important constraint:** Whatever you build, dungeon tiles must still render
-correctly. Dungeons don't use diagonal sprites — they're all axis-aligned walls
-and floors. Your solution needs to handle both cases through the same rendering
-path, or cleanly branch between "simple tile" and "composite tile" rendering.
+Start by doing this WITHOUT calling `resolveSubGrid()` (pass `subGrid: null`
+for all tiles). Verify the game looks identical to before. Then add subgrid
+resolution and watch the diagonals improve.
 
-**Approach (suggested, not required):**
-1. Understand how the current renderer works: each tile gets one `<div>` with
-   CSS background layers. Read `getTileStyle()` end-to-end.
-2. Open the diagonal road PNGs and inspect what they actually look like.
-3. In browser DevTools, manually experiment with a tile's CSS to see if you
-   can make a diagonal road look correct with just background properties.
-4. Based on what you learn, pick an approach and prototype ONE tile.
-5. Generalize: Once one tile works, extend the pattern.
-6. Verify dungeons still look correct.
+*Step 9: Verify and polish*
 
-**Learning outcomes:**
-- CSS Grid and Canvas APIs
-- Sprite rendering techniques
-- Refactoring a rendering pipeline without breaking existing functionality
-- Performance considerations (hundreds of tiles on screen at once)
+- Farm-map: diagonal roads should look diagonal, not like staircases.
+- Dungeons: should look identical to before (resolveSubGrid returns null for
+  uniform floor tiles and walls).
+- Performance: scroll around. No jank = success.
+
+**Concepts you'll practice:**
+- TypeScript interfaces and type narrowing (`SubGrid | null`)
+- Implementing functions from type signatures and algorithm descriptions
+- Reading neighbouring array cells (2D grid traversal)
+- Conditional rendering in a Lit web component
+- CSS Grid (nested grids, absolute positioning for overlays)
+- Working within an existing architecture (data / engine / component split)
+
+**Testing tips:**
+- `pnpm run typecheck` — run after every change. No output = all good.
+- Use `console.log` liberally while developing. Remove before committing.
+- The farm-map has guaranteed diagonal roads. Navigate there first.
+- If dungeons break, your fast-path (subGrid === null) has a bug.
 
 **Definition of done:**
-- Diagonal road tiles on the farm-map and castle-road binary maps render
-  visually as diagonal lines rather than solid-fill squares
-- No regression in dungeon rendering (dungeons don't use diagonals)
-- Frame rate stays smooth (no visible jank when scrolling)
+- `resolveSubGrid()` correctly identifies tiles with diagonal terrain
+  transitions and returns an appropriate SubGrid.
+- `<tile-cell>` renders both fast-path (uniform) and subgrid (diagonal)
+  tiles correctly.
+- Diagonal road tiles on the farm-map render as visual diagonals instead
+  of solid-fill squares.
+- No regression in dungeon rendering (dungeons don't use diagonals, so
+  resolveSubGrid should return null for all dungeon tiles).
+- Frame rate stays smooth (no visible jank when scrolling).
 
 **Stretch goals:**
-- Mountain edge tiles also render with proper orientation
-- Implement a mini-benchmark that measures render time for a full viewport
+- Mountain edge tiles also render with subgrid orientation.
+- Handle the case where a diagonal corridor in a dungeon (from the rot.js
+  Irregular generator with `diagonalChance: 0.3`) shows smooth floor-to-wall
+  transitions at corridor edges instead of staircase steps.
+- Implement `resolveViewportSubGrids()` with shared-neighbour caching for
+  better performance on large maps.
 
 ---
 
