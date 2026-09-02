@@ -1,0 +1,161 @@
+{
+  "character": {
+    "name": "p",
+    "gender": "male",
+    "difficulty": "hard",
+    "stats": {
+      "strength": 50,
+      "intelligence": 50,
+      "constitution": 50,
+      "dexterity": 50
+    },
+    "derived": {
+      "wisdom": 50,
+      "speed": 50,
+      "charisma": 50
+    },
+    "level": 1,
+    "experience": 0,
+    "hitPoints": 17,
+    "maxHitPoints": 17,
+    "mana": 10,
+    "maxMana": 10,
+    "spells": [
+      "magic_arrow"
+    ],
+    "weapon": {
+      "id": "7tvimr8mtk1o",
+      "kind": "weapon",
+      "name": "Normal Dagger",
+      "weight": 250,
+      "bulk": 3,
+      "quantity": 1,
+      "identified": true,
+      "cursed": false,
+      "broken": false,
+      "enchantment": 0,
+      "icon": "/assets/sprites/icons/Weapons/icon_111.png",
+      "weaponClass": 2
+    },
+    "freeHand": null,
+    "armor": null,
+    "helm": null,
+    "shield": null,
+    "boots": null,
+    "cloak": null,
+    "bracers": null,
+    "gauntlets": null,
+    "ringLeft": null,
+    "ringRight": null,
+    "amulet": null,
+    "belt": null,
+    "purse": {
+      "id": "axvb6d7orc33",
+      "kind": "container",
+      "name": "Purse",
+      "weight": 50,
+      "bulk": 1,
+      "quantity": 1,
+      "identified": true,
+      "cursed": false,
+      "broken": false,
+      "enchantment": 0,
+      "icon": "/assets/sprites/icons/Containers/icon_157.png",
+      "slots": [
+        {
+          "accepts": [
+            "coin"
+          ],
+          "coinKind": "copper",
+          "items": [
+            {
+              "id": "8idq4f8ysx29",
+              "kind": "coin",
+              "coinKind": "copper",
+              "name": "Copper Coins",
+              "icon": "/assets/sprites/icons/Items/icon_149.png",
+              "weight": 5,
+              "bulk": 0,
+              "quantity": 1500,
+              "identified": true,
+              "cursed": false,
+              "broken": false,
+              "enchantment": 0
+            }
+          ]
+        },
+        {
+          "accepts": [
+            "coin"
+          ],
+          "coinKind": "silver",
+          "items": []
+        },
+        {
+          "accepts": [
+            "coin"
+          ],
+          "coinKind": "gold",
+          "items": []
+        },
+        {
+          "accepts": [
+            "coin"
+          ],
+          "coinKind": "platinum",
+          "items": []
+        }
+      ]
+    },
+    "pack": {
+      "id": "k6epvx1oqbq0",
+      "kind": "container",
+      "name": "Small Pack",
+      "weight": 1000,
+      "bulk": 1000,
+      "quantity": 1,
+      "identified": true,
+      "cursed": false,
+      "broken": false,
+      "enchantment": 0,
+      "icon": "/assets/sprites/icons/Containers/icon_143.png",
+      "slots": [
+        {
+          "accepts": [],
+          "maxWeight": 12000,
+          "maxBulk": 50000,
+          "items": []
+        }
+      ]
+    },
+    "shopReputations": {},
+    "linesOfCredit": {}
+  },
+  "mapId": "village",
+  "pos": {
+    "x": 11,
+    "y": 18
+  },
+  "currentStage": "mine",
+  "currentDungeonLevel": 0,
+  "playerStatus": {},
+  "monsters": [],
+  "dungeonFloors": [],
+  "farmNarrativeShown": false,
+  "parchmentRead": false,
+  "hamletDestroyed": false,
+  "storyLog": [],
+  "quickSpells": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "savedAt": "2026-08-11T03:12:48.463Z"
+}
