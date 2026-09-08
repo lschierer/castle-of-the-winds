@@ -38,7 +38,18 @@ interface Neighbourhood {
  */
 function getNeighbourhood(map: TileMap, x: number, y: number): Neighbourhood {
   // TODO: implement — call getTileAt for each of the 9 positions
-  throw new Error('Not implemented');
+   let neighbourhood[] : Neighbourhood;
+  neighbourhood.push(pgetTileAt(map,x,y-1));
+  neighbourhood.push(getTileAt(map,x,y+1));
+  neighbourhood.push(getTileAt(map,x+1,y));
+  neighbourhood.push(getTileAt(map,x-1,y));
+  neighbourhood.push(getTileAt(map,x+1,y-1));
+  neighbourhood.push(getTileAt(map,x-1,y-1));
+  neighbourhood.push(getTileAt(map,x+1,y+1));
+  neighbourhood.push(getTileAt(map,x-1,y+1));
+  return neighbourhood;
+
+  //throw new Error('Not working');
 }
 
 // ── Diagonal detection ────────────────────────────────────────────────────────
@@ -56,7 +67,19 @@ function getNeighbourhood(map: TileMap, x: number, y: number): Neighbourhood {
 function isDiagonalTransition(centerTerrain: Terrain, neighbourTerrain: Terrain): boolean {
   // TODO: implement — return true when the pair represents a visual
   // diagonal transition worth rendering at sub-cell level
-  throw new Error('Not implemented');
+  if (centerTerrain === 'floor' && neighbourTerrain ==='floor'){
+    return True;
+  }else if( centerTerrain === 'grass' && neighbourTerrain === 'road');
+  return True;{
+
+  }else if(centerTerrain === 'grass' && neighbourTerrain === 'floor'){
+    return True
+  }else if (centerTerrain === 'farmland' && neighbourTerrain === 'farmland'){
+    return True;
+  }else{
+    return False;
+  }
+  throw new Error('Not working');
 }
 
 /**
@@ -83,7 +106,7 @@ function shouldBleedCorner(
   cardinalB: Terrain,
 ): boolean {
   // TODO: implement the bleed logic
-  throw new Error('Not implemented');
+  throw new Error('Not doing this yet');
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
@@ -117,8 +140,13 @@ export function resolveSubGrid(map: TileMap, x: number, y: number): SubGrid | nu
   // 4. If all 4 corners end up with the same terrain → return null
   // 5. Otherwise, build and return the SubGrid
   //
+  let hood : Neighbourhood = getNeighbourhood(map,x,y);
+  
+  
+
+  }
   throw new Error('Not implemented');
-}
+
 
 /**
  * Batch-resolve sub-grids for a viewport of tiles.
