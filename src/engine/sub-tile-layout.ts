@@ -38,17 +38,29 @@ interface Neighbourhood {
  */
 function getNeighbourhood(map: TileMap, x: number, y: number): Neighbourhood {
   // TODO: implement — call getTileAt for each of the 9 positions
-   let neighbourhood[] : Neighbourhood;
-  neighbourhood.push(pgetTileAt(map,x,y-1));
-  neighbourhood.push(getTileAt(map,x,y+1));
-  neighbourhood.push(getTileAt(map,x+1,y));
-  neighbourhood.push(getTileAt(map,x-1,y));
-  neighbourhood.push(getTileAt(map,x+1,y-1));
-  neighbourhood.push(getTileAt(map,x-1,y-1));
-  neighbourhood.push(getTileAt(map,x+1,y+1));
-  neighbourhood.push(getTileAt(map,x-1,y+1));
-  return neighbourhood;
-
+  let center: Tile = getTileAt(map,x,y);
+  let n: Tile = getTileAt(map,x,y-1);
+  let s: Tile = getTileAt(map,x,y+1);
+  let e: Tile = getTileAt(map,x+1,y);
+  let w: Tile = getTileAt(map,x-1,y);
+  let ne: Tile = getTileAt(map,x+1,y-1);
+  let nw: Tile = getTileAt(map,x-1,y-1);
+  let se: Tile = getTileAt(map,x+1,y+1);
+  let sw: Tile = getTileAt(map,x-1,y+1);
+  return{
+    center,
+    n, 
+    s, 
+    e, 
+    w,  
+    ne, 
+    nw,
+    se, 
+    sw 
+    
+  } as Neighbourhood;
+ 
+  
   //throw new Error('Not working');
 }
 
@@ -68,16 +80,16 @@ function isDiagonalTransition(centerTerrain: Terrain, neighbourTerrain: Terrain)
   // TODO: implement — return true when the pair represents a visual
   // diagonal transition worth rendering at sub-cell level
   if (centerTerrain === 'floor' && neighbourTerrain ==='floor'){
-    return True;
-  }else if( centerTerrain === 'grass' && neighbourTerrain === 'road');
-  return True;{
+    return true;
+  }else if( centerTerrain === 'grass' && neighbourTerrain === 'road'){
+  return true;
 
   }else if(centerTerrain === 'grass' && neighbourTerrain === 'floor'){
-    return True
+    return true
   }else if (centerTerrain === 'farmland' && neighbourTerrain === 'farmland'){
-    return True;
+    return true;
   }else{
-    return False;
+    return false;
   }
   throw new Error('Not working');
 }
@@ -106,7 +118,7 @@ function shouldBleedCorner(
   cardinalB: Terrain,
 ): boolean {
   // TODO: implement the bleed logic
-  throw new Error('Not doing this yet');
+  throw new Error('Not working');
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
@@ -140,12 +152,58 @@ export function resolveSubGrid(map: TileMap, x: number, y: number): SubGrid | nu
   // 4. If all 4 corners end up with the same terrain → return null
   // 5. Otherwise, build and return the SubGrid
   //
-  let hood : Neighbourhood = getNeighbourhood(map,x,y);
-  
-  
+  let areAllFourTheSame: boolean [] = [];
+  let neighbourhood : Neighbourhood = getNeighbourhood(map,x,y);
 
+  if (neighbourhood.center.terrain === 'void' || 'wall' || 'mountain'){
+    return null;
   }
-  throw new Error('Not implemented');
+  if (neighbourhood.center.building === undefined){
+    return null;
+  }
+if (isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.ne.terrain)){
+  areAllFourTheSame.push(true);
+}else{
+  areAllFourTheSame.push(false);
+}
+
+
+if (isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.nw.terrain)){
+  areAllFourTheSame.push(true);
+}else{
+  areAllFourTheSame.push(false);
+}
+
+
+if (isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.se.terrain)){
+  areAllFourTheSame.push(true);
+}else{
+  areAllFourTheSame.push(false);
+}
+
+
+
+if (isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.sw.terrain)){
+  areAllFourTheSame.push(true);
+}else{
+  areAllFourTheSame.push(false);
+}
+
+if (areAllFourTheSame.every(val => val === true)){
+  return null;
+}
+
+if (areAllFourTheSame[0] === true){
+
+}
+
+
+
+  
+  
+    throw new Error('Not implemented');
+  }
+  
 
 
 /**
