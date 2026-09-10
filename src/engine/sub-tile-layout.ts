@@ -86,7 +86,7 @@ function isDiagonalTransition(centerTerrain: Terrain, neighbourTerrain: Terrain)
 
   }else if(centerTerrain === 'grass' && neighbourTerrain === 'floor'){
     return true
-  }else if (centerTerrain === 'farmland' && neighbourTerrain === 'farmland'){
+  }else if (centerTerrain === 'road' && neighbourTerrain === 'farmland'){
     return true;
   }else{
     return false;
@@ -115,8 +115,8 @@ function shouldBleedCorner(
   centerTerrain: Terrain,
   diagonalTerrain: Terrain,
   cardinalA: Terrain,
-  cardinalB: Terrain,
-): boolean {
+  cardinalB: Terrain
+  ): boolean {
   // TODO: implement the bleed logic
   throw new Error('Not working');
 }
