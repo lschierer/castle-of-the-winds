@@ -91,7 +91,7 @@ function isDiagonalTransition(centerTerrain: Terrain, neighbourTerrain: Terrain)
   }else{
     return false;
   }
-  throw new Error('Not working');
+  //throw new Error('Not working');
 }
 
 /**
@@ -113,12 +113,30 @@ function isDiagonalTransition(centerTerrain: Terrain, neighbourTerrain: Terrain)
  */
 function shouldBleedCorner(
   centerTerrain: Terrain,
-  diagonalTerrain: Terrain,
-  cardinalA: Terrain,
-  cardinalB: Terrain
+  diagonalTerrainNE: Terrain,
+  diagonalTerrainNW: Terrain,
+  cardinalN: Terrain,
+  cardinalE: Terrain,
+  cardinalW: Terrain
   ): boolean {
+  if (centerTerrain === diagonalTerrainNE && cardinalN === 'grass' && cardinalE === 'grass'){
+    return true;
+  }
+
+  if (centerTerrain === diagonalTerrainNW && cardinalN === 'grass' && cardinalW === 'grass'){
+    return true;
+  
+  }
+
+  /*if (centerTerrain === centerN && cardinalE === 'grass' || cardinalW === 'grass'){
+    return true;
+  
+  }*/else{
+    return false;
+  }
+
   // TODO: implement the bleed logic
-  throw new Error('Not working');
+  //throw new Error('Not working');
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
@@ -152,7 +170,7 @@ export function resolveSubGrid(map: TileMap, x: number, y: number): SubGrid | nu
   // 4. If all 4 corners end up with the same terrain → return null
   // 5. Otherwise, build and return the SubGrid
   //
-  let areAllFourTheSame: boolean [] = [];
+  
   let neighbourhood : Neighbourhood = getNeighbourhood(map,x,y);
 
   if (neighbourhood.center.terrain === 'void' || 'wall' || 'mountain'){
@@ -161,47 +179,48 @@ export function resolveSubGrid(map: TileMap, x: number, y: number): SubGrid | nu
   if (neighbourhood.center.building === undefined){
     return null;
   }
-if (isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.ne.terrain)){
-  areAllFourTheSame.push(true);
-}else{
-  areAllFourTheSame.push(false);
-}
-
-
-if (isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.nw.terrain)){
-  areAllFourTheSame.push(true);
-}else{
-  areAllFourTheSame.push(false);
-}
-
-
-if (isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.se.terrain)){
-  areAllFourTheSame.push(true);
-}else{
-  areAllFourTheSame.push(false);
-}
 
 
 
-if (isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.sw.terrain)){
-  areAllFourTheSame.push(true);
-}else{
-  areAllFourTheSame.push(false);
-}
+  if (neighbourhood.ne.terrain === neighbourhood.nw.terrain && neighbourhood.sw.terrain && neighbourhood.se.terrain){
+    return null;
+  }
 
-if (areAllFourTheSame.every(val => val === true)){
-  return null;
-}
+// I need to call isDiagonalTransition for each diagonal seporatly so that i know which 1/4 of the tile needs to change terrain
+  /*if (isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.nw.terrain || isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.ne.terrain)){
 
-if (areAllFourTheSame[0] === true){
-
-}
+    if (shouldBleedCorner(neighbourhood.center.terrain,neighbourhood.ne.terrain,neighbourhood.nw.terrain,neighbourhood.n.terrain,neighbourhood.e.terrain,neighbourhood.w.terrain)){
 
 
 
+    }
+
+  }*/
+
+  /**
+ * A 2×2 grid of sub-cells representing the terrain decomposition of one
+ * logical tile.
+ *
+ * Layout: subGrid[row][col]
+ *   [0][0] = top-left      [0][1] = top-right
+ *   [1][0] = bottom-left   [1][1] = bottom-right
+ */
   
+  if(isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.nw.terrain)){
+
+    if(shouldBleedCorner(neighbourhood.center.terrain, neighbourhood.ne.terrain, neighbourhood.nw.terrain, neighbourhood.n.terrain, neighbourhood.e.terrain, neighbourhood.w.terrain)){
+      neighbourhood.n.terrain = [['grass', 'grass'], ['grass', 'road']];
+    }
+  }
+
+  if(isDiagonalTransition(neighbourhood.center.terrain,neighbourhood.ne.terrain)){
+
+    if(shouldBleedCorner(neighbourhood.center.terrain, neighbourhood.ne.terrain, neighbourhood.nw.terrain, neighbourhood.n.terrain, neighbourhood.e.terrain, neighbourhood.w.terrain)){
+      neighbourhood.e.terrain.SubGrid = [['road', 'grass'], ['grass', 'grass']];
+    }
+  }
   
-    throw new Error('Not implemented');
+    //throw new Error('Not implemented');
   }
   
 
